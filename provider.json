@@ -1,24 +1,5 @@
 {
   "providers": [
-    "dist/providers/justhd.js",
-    "dist/providers/qhexawatch.js",
-    "dist/providers/oneoneone.js",
-    "dist/providers/kfmovies.js",
-    "dist/providers/avideasy.js",
-    "dist/providers/vixsrc.js",
-    "dist/providers/xvidsrcvip.js",
-    "dist/providers/duniquestream.js",
-    "dist/providers/caoneroom.js",
-    "dist/providers/ptowembedcc.js",
-    "dist/providers/jidflix.js",
-    "dist/providers/ovidsrc.js",
-    "dist/providers/mvidlink.js",
-    "dist/providers/rvidsrc.js",
-    "dist/providers/tomautoembed.js",
-    "dist/providers/ymovies.js",
-    "dist/providers/iyesmovies.js",
-    "dist/providers/lridomovie.js",
-    "dist/providers/zprimewire.js",
-    "dist/providers/avidsrcpro.js"
+    "dist/providers/vixsrc.js"
   ]
 }
