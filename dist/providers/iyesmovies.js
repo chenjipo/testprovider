@@ -87,71 +87,96 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         }
         return cryptoS.enc.Utf8.stringify(cryptoS.lib.WordArray.create(Array.prototype.slice.call(bytes)));
     }
+    function normalizeResponseBody(data) {
+        if (typeof data === 'string') {
+            return data;
+        }
+        if (!data) {
+            return '';
+        }
+        if (typeof data.data === 'string') {
+            return data.data;
+        }
+        if (typeof data.body === 'string') {
+            return data.body;
+        }
+        return '';
+    }
+    function fetchWithTimeout(url, reqHeaders, timeoutMs) {
+        return new Promise(function (resolve) {
+            var timer = setTimeout(function () {
+                resolve('');
+            }, timeoutMs);
+            fetch(url, { headers: reqHeaders }).then(function (resp) {
+                return resp.text();
+            }).then(function (text) {
+                clearTimeout(timer);
+                resolve(text || '');
+            }).catch(function () {
+                clearTimeout(timer);
+                resolve('');
+            });
+        });
+    }
     function fetchText(url, reqHeaders) {
         return __awaiter(this, void 0, void 0, function () {
-            var resp, text, fallback;
+            var text, fetchText_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
                         console.log('[RN-Fetch][PLOYAN-TRACE] GET ' + url);
-                        return [4, fetch(url, { headers: reqHeaders })];
+                        return [4, libs.request_get(url, reqHeaders)];
                     case 1:
-                        resp = _a.sent();
-                        return [4, resp.text()];
-                    case 2:
-                        text = _a.sent();
-                        if (typeof text !== 'string') {
-                            text = text ? String(text) : '';
-                        }
+                        text = normalizeResponseBody(_a.sent());
                         if (text && text.indexOf('loc=') >= 0) {
+                            console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(text)['loc'] || 'MISSING'));
                             return [2, text];
                         }
-                        debugLog('FETCH_EMPTY', 'fetch returned ' + (text ? text.length : 0) + ' bytes, trying request_get');
-                        return [4, libs.request_get(url, reqHeaders)];
-                    case 3:
-                        fallback = _a.sent();
-                        if (typeof fallback === 'string') {
-                            return [2, fallback];
+                        debugLog('TRACE_REQGET_MISS', 'bytes=' + (text ? text.length : 0));
+                        console.log('[RN-Fetch][PLOYAN-TRACE] fetch fallback bytes=' + (text ? text.length : 0));
+                        return [4, fetchWithTimeout(url, reqHeaders, 8000)];
+                    case 2:
+                        fetchText_1 = _a.sent();
+                        if (fetchText_1 && fetchText_1.indexOf('loc=') >= 0) {
+                            console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(fetchText_1)['loc'] || 'MISSING'));
+                            return [2, fetchText_1];
                         }
-                        if (fallback && fallback.data && typeof fallback.data === 'string') {
-                            return [2, fallback.data];
-                        }
-                        if (fallback && typeof fallback === 'object') {
-                            return [2, JSON.stringify(fallback)];
-                        }
-                        return [2, text || ''];
+                        console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING');
+                        return [2, fetchText_1 || text || ''];
                 }
             });
         });
     }
     function fetchJson(url, reqHeaders) {
         return __awaiter(this, void 0, void 0, function () {
-            var resp, text, fallback;
+            var text, fallback;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
                         console.log('[RN-Fetch][PLOYAN-GET] GET ' + url.substring(0, 160));
-                        return [4, fetch(url, { headers: reqHeaders })];
+                        return [4, fetchWithTimeout(url, reqHeaders, 10000)];
                     case 1:
-                        resp = _a.sent();
-                        return [4, resp.text()];
-                    case 2:
                         text = _a.sent();
-                        debugLog('FETCH_JSON', text.substring(0, 160));
+                        debugLog('FETCH_JSON', text ? text.substring(0, 160) : 'EMPTY');
                         if (text && text.charAt(0) === '{') {
                             return [2, JSON.parse(text)];
                         }
-                        debugLog('GET_FAIL', 'status=' + resp.status + ' body=' + text.substring(0, 80));
-                        if (resp.status === 404 || text.indexOf('Not Found') >= 0) {
-                            return [2, { code: 404, info: '' }];
-                        }
+                        debugLog('GET_FETCH_MISS', 'bytes=' + (text ? text.length : 0));
                         return [4, libs.request_get(url, reqHeaders)];
-                    case 3:
+                    case 2:
                         fallback = _a.sent();
                         if (typeof fallback === 'string') {
-                            return [2, JSON.parse(fallback)];
+                            if (fallback.charAt(0) === '{') {
+                                return [2, JSON.parse(fallback)];
+                            }
+                            if (fallback.indexOf('Not Found') >= 0) {
+                                return [2, { code: 404, info: '' }];
+                            }
                         }
-                        return [2, fallback];
+                        if (fallback && typeof fallback === 'object') {
+                            return [2, fallback];
+                        }
+                        return [2, { code: 404, info: '' }];
                 }
             });
         });
@@ -712,7 +737,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                                 if (typeof traceData !== 'string') {
                                     traceData = traceData ? String(traceData) : '';
                                 }
-                                debugLog('TRACE_RAW', traceData.substring(0, 120).replace(/\n/g, '\\n'));
+                                debugLog('TRACE_RAW', (traceData || '').substring(0, 120).replace(/\n/g, '\\n'));
                                 libs.log({ traceData: traceData }, PROVIDER, 'TRACE DATA');
                                 arr = parseTrace(traceData);
                                 debugLog('TRACE_LOC', arr['loc'] || 'MISSING');
@@ -819,9 +844,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 sv = 1;
                 eid = movieInfo.type == 'movie' ? 1 : movieInfo.episode;
                 mid = id;
+                console.log('[RN-Fetch][PLOYAN-HASH] generating hash...');
                 return [4, generateGetHash(loc, mid, eid, sv)];
             case 6:
                 deHash = _b.sent();
+                console.log('[RN-Fetch][PLOYAN-HASH] done len=' + (deHash ? deHash.length : 0));
                 libs.log({ deHash: deHash, loc: loc, sv: sv, mid: mid, eid: eid }, PROVIDER, 'GET HASH');
                 if (!deHash) {
                     debugLog('ABORT', 'generateGetHash returned empty');
