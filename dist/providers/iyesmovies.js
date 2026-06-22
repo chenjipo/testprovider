@@ -120,7 +120,56 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
-    var PROVIDER, DOMAIN, headers, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, htmlDetail, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, u, genHash, deHash, hashURL, hashID, directURL, e_1;
+    function bytesToHex(bytes) {
+        return Array.from(bytes).map(function (b) {
+            return ('0' + b.toString(16)).slice(-2);
+        }).join('');
+    }
+    function deriveAesKey(loc, saltWordArray) {
+        return cryptoS.PBKDF2(cryptoS.enc.Utf8.parse(loc), saltWordArray, {
+            keySize: 8,
+            iterations: 1000,
+            hasher: cryptoS.algo.SHA256
+        });
+    }
+    function generateGetHash(loc, mid, ei, sv) {
+        return __awaiter(this, void 0, void 0, function () {
+            var ts, plain, saltWordArray, saltHex, iv, key, encrypted, ivHex, ctHex;
+            return __generator(this, function (_a) {
+                ts = Math.floor((new Date()).getTime() / 1000);
+                plain = mid + "+" + ei + "+" + sv + "+" + ts;
+                saltWordArray = cryptoS.enc.Utf8.parse(plain);
+                saltHex = saltWordArray.toString(cryptoS.enc.Hex);
+                iv = getRandomValues(12);
+                key = deriveAesKey(loc, saltWordArray);
+                encrypted = cryptoS.AES.encrypt(saltWordArray, key, {
+                    iv: cryptoS.enc.Hex.parse(cryptoS.enc.Hex.stringify(iv)),
+                    mode: cryptoS.mode.GCM
+                });
+                ivHex = bytesToHex(iv);
+                ctHex = encrypted.ciphertext.toString(cryptoS.enc.Hex);
+                return [2, saltHex + "-" + ivHex + "-" + ctHex];
+            });
+        });
+    }
+    function decryptInfo(loc, infoToken) {
+        return __awaiter(this, void 0, void 0, function () {
+            var parts, saltWordArray, iv, ciphertext, key, decrypted;
+            return __generator(this, function (_a) {
+                parts = infoToken.split('-');
+                saltWordArray = cryptoS.enc.Hex.parse(parts[0]);
+                iv = cryptoS.enc.Hex.parse(parts[1]);
+                ciphertext = cryptoS.enc.Hex.parse(parts[2]);
+                key = deriveAesKey(loc, saltWordArray);
+                decrypted = cryptoS.AES.decrypt(cryptoS.lib.CipherParams.create({ ciphertext: ciphertext }), key, {
+                    iv: iv,
+                    mode: cryptoS.mode.GCM
+                });
+                return [2, decrypted.toString(cryptoS.enc.Utf8)];
+            });
+        });
+    }
+    var PROVIDER, DOMAIN, headers, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, htmlDetail, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, deHash, hashURL, hashID, hlsPath, directURL, e_1;
     var _this = this;
     return __generator(this, function (_b) {
         switch (_b.label) {
@@ -133,7 +182,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 };
                 _b.label = 1;
             case 1:
-                _b.trys.push([1, 9, , 10]);
+                _b.trys.push([1, 10, , 11]);
                 urlDoc_1 = "https://doc.vidcloud9.org";
                 getIP_1 = function (urlDoc) { return __awaiter(_this, void 0, void 0, function () {
                     var urlDocTrace, traceData, arr;
@@ -240,30 +289,29 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 sv = 1;
                 eid = movieInfo.type == 'movie' ? 1 : movieInfo.episode;
                 mid = id;
-                u = Math.floor(new Date().getTime() / 1000);
-                return [4, libs.request_get("https://aquariumtv.app/yesgenhash?loc=".concat(loc, "&sv=").concat(sv, "&mid=").concat(mid, "&eid=").concat(eid, "&tsx=").concat(u))];
+                return [4, generateGetHash(loc, mid, eid, sv)];
             case 6:
-                genHash = _b.sent();
-                libs.log({ genHash: genHash, u: u, loc: loc, sv: sv, mid: mid, eid: eid }, PROVIDER, 'GEN HASH');
-                if (!genHash) {
-                    return [2];
-                }
-                return [4, libs.request_get("https://aquariumtv.app/yesdehash?loc=".concat(loc, "&hash=").concat(genHash, "&tsx=").concat(u))];
-            case 7:
                 deHash = _b.sent();
-                libs.log({ deHash: deHash }, PROVIDER, 'DEHASH');
+                libs.log({ deHash: deHash, loc: loc, sv: sv, mid: mid, eid: eid }, PROVIDER, 'GET HASH');
                 if (!deHash) {
                     return [2];
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
                 return [4, libs.request_get(hashURL, headers)];
-            case 8:
+            case 7:
                 hashID = _b.sent();
                 libs.log({ hashID: hashID, hashURL: hashURL }, PROVIDER, 'HASH ID');
-                if (!hashID.info) {
+                if (!hashID || !hashID.info) {
                     return [2];
                 }
-                directURL = "".concat(parseURL, "/hls/").concat(hashID.info, "/master.m3u8");
+                return [4, decryptInfo(loc, hashID.info)];
+            case 8:
+                hlsPath = _b.sent();
+                libs.log({ hlsPath: hlsPath }, PROVIDER, 'HLS PATH');
+                if (!hlsPath) {
+                    return [2];
+                }
+                directURL = "".concat(parseURL, "/hls/").concat(hlsPath, "/master.m3u8");
                 libs.log({ directURL: directURL }, PROVIDER, 'DIRECT QUALITY');
                 libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], headers);
                 return [2];
