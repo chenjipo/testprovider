@@ -165,6 +165,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         });
         return wordArrayToUint8Array(encrypted.ciphertext);
     }
+    function hasBigIntSupport() {
+        try {
+            return typeof BigInt !== 'undefined' && BigInt(1) === BigInt(1);
+        }
+        catch (e) {
+            return false;
+        }
+    }
     function bytesToBigInt128(bytes) {
         var result = BigInt(0);
         var i = void 0;
@@ -215,6 +223,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         return xBig;
     }
     function gcmGhash(h, a, c) {
+        if (!hasBigIntSupport()) {
+            throw new Error('BigInt is not available for GHASH');
+        }
         var xBig = BigInt(0);
         xBig = ghashBlocks(h, xBig, gcmPad16(a));
         xBig = ghashBlocks(h, xBig, gcmPad16(c));
@@ -305,11 +316,24 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         ej0 = aesBlockEncrypt(key, j0);
         expectedTag = new Uint8Array(16);
         for (i = 0; i < 16; i++) {
+            expectedTag[i] = s[i] ^ ej0[i];
+        }
+        for (i = 0; i < 16; i++) {
             if (tag[i] !== expectedTag[i]) {
                 throw new Error('GCM tag mismatch');
             }
         }
         return gcmGctr(key, j0, c);
+    }
+    function generateGetHashPureSafe(loc, mid, ei, sv) {
+        try {
+            return generateGetHashPure(loc, mid, ei, sv);
+        }
+        catch (err) {
+            debugLog('HASH_PURE_FAIL', String(err && err.message ? err.message : err));
+            console.log('[RN-Fetch][PLOYAN-ERR] HASH_PURE_FAIL ' + String(err && err.message ? err.message : err));
+            return '';
+        }
     }
     function generateGetHashPure(loc, mid, ei, sv) {
         var ts = Math.floor((new Date()).getTime() / 1000);
@@ -389,7 +413,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     }
     function encrypt(algorithm, key, plaintext, iv) {
         return __awaiter(this, void 0, void 0, function () {
-            var ptWordArray, encryptedData, ciphertext;
+            var ptWordArray, encryptedData, ciphertext, tagBytes, out, i;
             return __generator(this, function (_a) {
                 ptWordArray = plaintext instanceof Uint8Array
                     ? cryptoS.lib.WordArray.create(Array.prototype.slice.call(plaintext))
@@ -398,8 +422,15 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     iv: cryptoS.enc.Hex.parse(cryptoS.enc.Hex.stringify(iv)),
                     mode: cryptoS.mode.GCM,
                 });
-                ciphertext = encryptedData.ciphertext;
-                return [2, wordArrayToUint8Array(ciphertext)];
+                ciphertext = wordArrayToUint8Array(encryptedData.ciphertext);
+                if (encryptedData.tag) {
+                    tagBytes = wordArrayToUint8Array(encryptedData.tag);
+                    out = new Uint8Array(ciphertext.length + tagBytes.length);
+                    out.set(ciphertext);
+                    out.set(tagBytes, ciphertext.length);
+                    return [2, out];
+                }
+                return [2, ciphertext];
             });
         });
     }
@@ -565,13 +596,17 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         debugLog('HASH_SUBTLE_FAIL', String(err_1 && err_1.message ? err_1.message : err_1));
                         _a.label = 4;
                     case 4:
-                        if (!cryptoS.mode || !cryptoS.mode.ECB) {
-                            debugLog('HASH_PURE', 'using pure GCM');
-                            return [2, generateGetHashPure(loc, mid, ei, sv)];
+                        if (cryptoS.mode && cryptoS.mode.GCM) {
+                            _a.label = 5;
                         }
-                        if (!cryptoS.mode || !cryptoS.mode.GCM) {
-                            debugLog('HASH_PURE', 'GCM mode missing');
-                            return [2, generateGetHashPure(loc, mid, ei, sv)];
+                        else if (hasBigIntSupport() && cryptoS.mode && cryptoS.mode.ECB) {
+                            debugLog('HASH_PURE', 'GCM mode missing, using pure GCM');
+                            return [2, generateGetHashPureSafe(loc, mid, ei, sv)];
+                        }
+                        else {
+                            debugLog('HASH_ABORT', 'no GCM and no pure fallback');
+                            console.log('[RN-Fetch][PLOYAN-ERR] no GCM crypto available');
+                            return [2, ''];
                         }
                         _a.label = 5;
                     case 5:
@@ -599,7 +634,12 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     case 8:
                         err_1 = _a.sent();
                         debugLog('HASH_FAIL', String(err_1 && err_1.message ? err_1.message : err_1));
-                        return [2, generateGetHashPure(loc, mid, ei, sv)];
+                        if (hasBigIntSupport() && cryptoS.mode && cryptoS.mode.ECB) {
+                            debugLog('HASH_PURE', 'cryptoJS failed, using pure GCM');
+                            return [2, generateGetHashPureSafe(loc, mid, ei, sv)];
+                        }
+                        console.log('[RN-Fetch][PLOYAN-ERR] HASH_FAIL ' + String(err_1 && err_1.message ? err_1.message : err_1));
+                        return [2, ''];
                     case 9: return [2];
                 }
             });
@@ -676,6 +716,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                                 libs.log({ traceData: traceData }, PROVIDER, 'TRACE DATA');
                                 arr = parseTrace(traceData);
                                 debugLog('TRACE_LOC', arr['loc'] || 'MISSING');
+                                console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (arr['loc'] || 'MISSING'));
                                 return [2, arr];
                         }
                     });
@@ -770,8 +811,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ parseURL: parseURL, loc: loc }, PROVIDER, "PARSE URL");
                 if (!parseURL || !loc) {
                     debugLog('ABORT', 'missing parseURL or loc');
+                    console.log('[RN-Fetch][PLOYAN-ERR] ABORT missing parseURL or loc');
                     return [2];
                 }
+                console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' loc=' + loc + ' mid=' + id + ' eid=' + (movieInfo.type == 'movie' ? 1 : movieInfo.episode));
                 streamHeaders = Object.assign({}, headers, { referer: "".concat(parseURL, "/") });
                 sv = 1;
                 eid = movieInfo.type == 'movie' ? 1 : movieInfo.episode;
@@ -810,6 +853,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             case 9:
                 e_1 = _b.sent();
                 debugLog('ERROR', String(e_1 && e_1.message ? e_1.message : e_1));
+                console.log('[RN-Fetch][PLOYAN-ERR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 libs.log({ e: e_1, message: e_1 && e_1.message ? e_1.message : e_1 }, PROVIDER, 'ERROR CATCH');
                 return [3, 10];
             case 10: return [2, true];
