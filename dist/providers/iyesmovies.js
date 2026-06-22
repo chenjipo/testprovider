@@ -141,7 +141,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         if (text && text.charAt(0) === '{') {
                             return [2, JSON.parse(text)];
                         }
-                        debugLog('GET_EMPTY', 'fetch returned ' + (text ? text.length : 0) + ' bytes, trying request_get');
+                        debugLog('GET_FAIL', 'status=' + resp.status + ' body=' + text.substring(0, 80));
+                        if (resp.status === 404 || text.indexOf('Not Found') >= 0) {
+                            return [2, { code: 404, info: '' }];
+                        }
                         return [4, libs.request_get(url, reqHeaders)];
                     case 3:
                         fallback = _a.sent();
@@ -162,28 +165,61 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         });
         return wordArrayToUint8Array(encrypted.ciphertext);
     }
-    function gf128RightShift(v) {
-        var lsb = v[15] & 1;
-        for (var i = 15; i > 0; i--) {
-            v[i] = (v[i] >>> 1) | ((v[i - 1] & 1) << 7);
+    function bytesToBigInt128(bytes) {
+        var result = BigInt(0);
+        var i = void 0;
+        for (i = 0; i < bytes.length; i++) {
+            result = (result << BigInt(8)) | BigInt(bytes[i]);
         }
-        v[0] >>>= 1;
-        return lsb;
+        return result;
     }
-    function gf128Mul(x, y) {
-        var z = new Uint8Array(16);
-        var v = new Uint8Array(y);
-        for (var i = 0; i < 128; i++) {
-            if ((x[(i / 8) | 0] >>> (7 - (i % 8))) & 1) {
-                for (var j = 0; j < 16; j++) {
-                    z[j] ^= v[j];
-                }
+    function bigInt128ToBytes(value) {
+        var out = new Uint8Array(16);
+        var n = value;
+        var i = void 0;
+        for (i = 15; i >= 0; i--) {
+            out[i] = Number(n & BigInt(255));
+            n >>= BigInt(8);
+        }
+        return out;
+    }
+    function ghashMul128(x, y) {
+        var z = BigInt(0);
+        var v = y;
+        var r = BigInt(225) << BigInt(120);
+        var i = void 0;
+        for (i = 0; i < 128; i++) {
+            if ((x >> BigInt(127 - i)) & BigInt(1)) {
+                z ^= v;
             }
-            if (gf128RightShift(v)) {
-                v[0] ^= 0xe1;
+            if (v & BigInt(1)) {
+                v = (v >> BigInt(1)) ^ r;
+            }
+            else {
+                v >>= BigInt(1);
             }
         }
         return z;
+    }
+    function ghashBlocks(hBytes, xBig, data) {
+        var hBig = bytesToBigInt128(hBytes);
+        var offset = void 0;
+        var block = void 0;
+        var i = void 0;
+        for (offset = 0; offset < data.length; offset += 16) {
+            block = new Uint8Array(16);
+            block.set(data.subarray(offset, offset + 16));
+            xBig ^= bytesToBigInt128(block);
+            xBig = ghashMul128(xBig, hBig);
+        }
+        return xBig;
+    }
+    function gcmGhash(h, a, c) {
+        var xBig = BigInt(0);
+        xBig = ghashBlocks(h, xBig, gcmPad16(a));
+        xBig = ghashBlocks(h, xBig, gcmPad16(c));
+        xBig = ghashBlocks(h, xBig, gcmLengthBlock(a.length * 8, c.length * 8));
+        return bigInt128ToBytes(xBig);
     }
     function gcmPad16(data) {
         var rem = data.length % 16;
@@ -205,26 +241,6 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         }
         return b;
     }
-    function gcmGhash(h, a, c) {
-        var x = new Uint8Array(16);
-        var process = function (data) {
-            var i = void 0;
-            var j = void 0;
-            var block = void 0;
-            for (i = 0; i < data.length; i += 16) {
-                block = new Uint8Array(16);
-                block.set(data.subarray(i, i + 16));
-                for (j = 0; j < 16; j++) {
-                    x[j] ^= block[j];
-                }
-                x = gf128Mul(x, h);
-            }
-        };
-        process(gcmPad16(a));
-        process(gcmPad16(c));
-        process(gcmLengthBlock(a.length * 8, c.length * 8));
-        return x;
-    }
     function gcmInc32(block) {
         var out = block.slice();
         var i = void 0;
@@ -236,15 +252,15 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         }
         return out;
     }
-    function gcmGctr(key, j0, input) {
+    function gcmGctr(key, icb, input) {
         var output = new Uint8Array(input.length);
-        var counter = j0.slice();
+        var counter = icb.slice();
         var off = void 0;
         var i = void 0;
         var e = void 0;
         for (off = 0; off < input.length; off += 16) {
-            e = aesBlockEncrypt(key, counter);
             counter = gcmInc32(counter);
+            e = aesBlockEncrypt(key, counter);
             for (i = 0; i < 16 && off + i < input.length; i++) {
                 output[off + i] = input[off + i] ^ e[i];
             }
@@ -258,11 +274,17 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var c = void 0;
         var tag = void 0;
         var out = void 0;
+        var ej0 = void 0;
+        var i = void 0;
         j0.set(iv);
         j0[15] = 1;
         c = gcmGctr(key, j0, plaintext);
         s = gcmGhash(h, new Uint8Array(0), c);
-        tag = gcmGctr(key, j0, s).slice(0, 16);
+        ej0 = aesBlockEncrypt(key, j0);
+        tag = new Uint8Array(16);
+        for (i = 0; i < 16; i++) {
+            tag[i] = s[i] ^ ej0[i];
+        }
         out = new Uint8Array(c.length + 16);
         out.set(c);
         out.set(tag, c.length);
@@ -275,11 +297,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var j0 = new Uint8Array(16);
         var s = void 0;
         var expectedTag = void 0;
+        var ej0 = void 0;
+        var i = void 0;
         j0.set(iv);
         j0[15] = 1;
         s = gcmGhash(h, new Uint8Array(0), c);
-        expectedTag = gcmGctr(key, j0, s).slice(0, 16);
-        for (var i = 0; i < 16; i++) {
+        ej0 = aesBlockEncrypt(key, j0);
+        expectedTag = new Uint8Array(16);
+        for (i = 0; i < 16; i++) {
             if (tag[i] !== expectedTag[i]) {
                 throw new Error('GCM tag mismatch');
             }
