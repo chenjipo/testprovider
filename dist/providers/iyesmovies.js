@@ -54,17 +54,33 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
+    function wordArrayToUint8Array(wordArray) {
+        var words = wordArray.words;
+        var sigBytes = wordArray.sigBytes;
+        var result = new Uint8Array(sigBytes);
+        for (var i = 0; i < sigBytes; i++) {
+            result[i] = (words[i >>> 2] >>> (24 - (i % 4) * 8)) & 0xff;
+        }
+        return result;
+    }
     function getRandomValues(length) {
-        var randomBytes = cryptoS.lib.WordArray.random(length);
-        var randomBytesHex = randomBytes.toString(cryptoS.enc.Hex);
-        var randomBytesArray = cryptoS.enc.Hex.parse(randomBytesHex);
-        return new Uint8Array(randomBytesArray.words);
+        return wordArrayToUint8Array(cryptoS.lib.WordArray.random(length));
+    }
+    function bytesToHex(bytes) {
+        return Array.from(bytes).map(function (b) {
+            return ('0' + b.toString(16)).slice(-2);
+        }).join('');
     }
     function importKey(format, keyData, algorithm, extractable, keyUsages) {
         return __awaiter(this, void 0, void 0, function () {
             var encodedKeyData, key;
             return __generator(this, function (_a) {
-                encodedKeyData = cryptoS.enc.Hex.parse(cryptoS.enc.Hex.stringify(keyData));
+                if (keyData instanceof Uint8Array) {
+                    encodedKeyData = cryptoS.lib.WordArray.create(Array.prototype.slice.call(keyData));
+                }
+                else {
+                    encodedKeyData = cryptoS.enc.Hex.parse(cryptoS.enc.Hex.stringify(keyData));
+                }
                 key = {
                     format: format,
                     encoded: encodedKeyData,
@@ -78,15 +94,30 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     }
     function encrypt(algorithm, key, plaintext, iv) {
         return __awaiter(this, void 0, void 0, function () {
-            var encryptedData, ciphertext, ciphertextBytes;
+            var ptWordArray, encryptedData, ciphertext;
             return __generator(this, function (_a) {
-                encryptedData = cryptoS[algorithm].encrypt(plaintext, key, {
+                ptWordArray = plaintext instanceof Uint8Array
+                    ? cryptoS.lib.WordArray.create(Array.prototype.slice.call(plaintext))
+                    : plaintext;
+                encryptedData = cryptoS[algorithm].encrypt(ptWordArray, key, {
                     iv: cryptoS.enc.Hex.parse(cryptoS.enc.Hex.stringify(iv)),
                     mode: cryptoS.mode.GCM,
                 });
                 ciphertext = encryptedData.ciphertext;
-                ciphertextBytes = cryptoS.enc.Hex.parse(ciphertext.toString());
-                return [2, new Uint8Array(ciphertextBytes.words)];
+                return [2, wordArrayToUint8Array(ciphertext)];
+            });
+        });
+    }
+    function decrypt(algorithm, key, ciphertext, iv) {
+        return __awaiter(this, void 0, void 0, function () {
+            var ctWordArray, decryptedData;
+            return __generator(this, function (_a) {
+                ctWordArray = cryptoS.enc.Hex.parse(bytesToHex(ciphertext));
+                decryptedData = cryptoS[algorithm].decrypt(cryptoS.lib.CipherParams.create({ ciphertext: ctWordArray }), key, {
+                    iv: cryptoS.enc.Hex.parse(cryptoS.enc.Hex.stringify(iv)),
+                    mode: cryptoS.mode.GCM,
+                });
+                return [2, decryptedData.toString(cryptoS.enc.Utf8)];
             });
         });
     }
@@ -120,56 +151,85 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
-    function bytesToHex(bytes) {
-        return Array.from(bytes).map(function (b) {
-            return ('0' + b.toString(16)).slice(-2);
-        }).join('');
-    }
-    function deriveAesKey(loc, saltWordArray) {
-        return cryptoS.PBKDF2(cryptoS.enc.Utf8.parse(loc), saltWordArray, {
+    function deriveAesKeyBytes(loc, saltWordArray) {
+        var pbkdf2Opts = {
             keySize: 8,
-            iterations: 1000,
-            hasher: cryptoS.algo.SHA256
-        });
+            iterations: 1000
+        };
+        if (cryptoS.algo && cryptoS.algo.SHA256) {
+            pbkdf2Opts.hasher = cryptoS.algo.SHA256;
+        }
+        else if (cryptoS.HmacSHA256) {
+            var password = cryptoS.enc.Utf8.parse(loc);
+            var dk = cryptoS.lib.WordArray.create();
+            var blockIndex = cryptoS.lib.WordArray.create([0x00000001], 4);
+            var u = cryptoS.HmacSHA256(saltWordArray.clone().concat(blockIndex), password);
+            var t = u.clone();
+            for (var i = 1; i < 1000; i++) {
+                u = cryptoS.HmacSHA256(u, password);
+                t = t.xor(u);
+            }
+            return wordArrayToUint8Array(t);
+        }
+        var keyWordArray = cryptoS.PBKDF2(cryptoS.enc.Utf8.parse(loc), saltWordArray, pbkdf2Opts);
+        return wordArrayToUint8Array(keyWordArray);
     }
     function generateGetHash(loc, mid, ei, sv) {
         return __awaiter(this, void 0, void 0, function () {
-            var ts, plain, saltWordArray, saltHex, iv, key, encrypted, ivHex, ctHex;
+            var ts, plain, saltWordArray, saltHex, iv, alg, keyBytes, key, ptUint8, ctBuffer, ivHex, ctHex;
             return __generator(this, function (_a) {
-                ts = Math.floor((new Date()).getTime() / 1000);
-                plain = mid + "+" + ei + "+" + sv + "+" + ts;
-                saltWordArray = cryptoS.enc.Utf8.parse(plain);
-                saltHex = saltWordArray.toString(cryptoS.enc.Hex);
-                iv = getRandomValues(12);
-                key = deriveAesKey(loc, saltWordArray);
-                encrypted = cryptoS.AES.encrypt(saltWordArray, key, {
-                    iv: cryptoS.enc.Hex.parse(cryptoS.enc.Hex.stringify(iv)),
-                    mode: cryptoS.mode.GCM
-                });
-                ivHex = bytesToHex(iv);
-                ctHex = encrypted.ciphertext.toString(cryptoS.enc.Hex);
-                return [2, saltHex + "-" + ivHex + "-" + ctHex];
+                switch (_a.label) {
+                    case 0:
+                        if (!cryptoS.mode || !cryptoS.mode.GCM) {
+                            throw new Error('AES-GCM is not available in cryptoS');
+                        }
+                        ts = Math.floor((new Date()).getTime() / 1000);
+                        plain = mid + "+" + ei + "+" + sv + "+" + ts;
+                        saltWordArray = cryptoS.enc.Utf8.parse(plain);
+                        saltHex = saltWordArray.toString(cryptoS.enc.Hex);
+                        iv = getRandomValues(12);
+                        keyBytes = deriveAesKeyBytes(loc, saltWordArray);
+                        alg = { name: 'AES', iv: iv };
+                        return [4, importKey('raw', keyBytes, alg, false, ['encrypt'])];
+                    case 1:
+                        key = _a.sent();
+                        ptUint8 = wordArrayToUint8Array(saltWordArray);
+                        return [4, encrypt('AES', key, ptUint8, iv)];
+                    case 2:
+                        ctBuffer = _a.sent();
+                        ivHex = bytesToHex(iv);
+                        ctHex = bytesToHex(ctBuffer);
+                        return [2, saltHex + "-" + ivHex + "-" + ctHex];
+                }
             });
         });
     }
     function decryptInfo(loc, infoToken) {
         return __awaiter(this, void 0, void 0, function () {
-            var parts, saltWordArray, iv, ciphertext, key, decrypted;
+            var parts, saltWordArray, iv, ctBytes, keyBytes, alg, key;
             return __generator(this, function (_a) {
-                parts = infoToken.split('-');
-                saltWordArray = cryptoS.enc.Hex.parse(parts[0]);
-                iv = cryptoS.enc.Hex.parse(parts[1]);
-                ciphertext = cryptoS.enc.Hex.parse(parts[2]);
-                key = deriveAesKey(loc, saltWordArray);
-                decrypted = cryptoS.AES.decrypt(cryptoS.lib.CipherParams.create({ ciphertext: ciphertext }), key, {
-                    iv: iv,
-                    mode: cryptoS.mode.GCM
-                });
-                return [2, decrypted.toString(cryptoS.enc.Utf8)];
+                switch (_a.label) {
+                    case 0:
+                        if (!cryptoS.mode || !cryptoS.mode.GCM) {
+                            throw new Error('AES-GCM is not available in cryptoS');
+                        }
+                        parts = infoToken.split('-');
+                        saltWordArray = cryptoS.enc.Hex.parse(parts[0]);
+                        iv = wordArrayToUint8Array(cryptoS.enc.Hex.parse(parts[1]));
+                        ctBytes = wordArrayToUint8Array(cryptoS.enc.Hex.parse(parts[2]));
+                        keyBytes = deriveAesKeyBytes(loc, saltWordArray);
+                        alg = { name: 'AES', iv: iv };
+                        return [4, importKey('raw', keyBytes, alg, false, ['decrypt'])];
+                    case 1:
+                        key = _a.sent();
+                        return [4, decrypt('AES', key, ctBytes, iv)];
+                    case 2:
+                        return [2, _a.sent()];
+                }
             });
         });
     }
-    var PROVIDER, DOMAIN, headers, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, htmlDetail, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, deHash, hashURL, hashID, hlsPath, directURL, e_1;
+    var PROVIDER, DOMAIN, headers, streamHeaders, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, htmlDetail, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, deHash, hashURL, hashID, hlsPath, directURL, e_1;
     var _this = this;
     return __generator(this, function (_b) {
         switch (_b.label) {
@@ -193,6 +253,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                                 return [4, libs.request_get(urlDocTrace, headers)];
                             case 1:
                                 traceData = _a.sent();
+                                if (typeof traceData !== 'string') {
+                                    traceData = traceData ? String(traceData) : '';
+                                }
                                 libs.log({ traceData: traceData }, PROVIDER, 'TRACE DATA');
                                 arr = traceData.trim().split('\n').map(function (e) { return e.split('='); });
                                 return [2, Object.fromEntries(arr)];
@@ -286,6 +349,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!parseURL || !loc) {
                     return [2];
                 }
+                streamHeaders = Object.assign({}, headers, { referer: "".concat(parseURL, "/") });
                 sv = 1;
                 eid = movieInfo.type == 'movie' ? 1 : movieInfo.episode;
                 mid = id;
@@ -297,7 +361,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [2];
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
-                return [4, libs.request_get(hashURL, headers)];
+                return [4, libs.request_get(hashURL, streamHeaders)];
             case 7:
                 hashID = _b.sent();
                 libs.log({ hashID: hashID, hashURL: hashURL }, PROVIDER, 'HASH ID');
@@ -313,11 +377,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 directURL = "".concat(parseURL, "/hls/").concat(hlsPath, "/master.m3u8");
                 libs.log({ directURL: directURL }, PROVIDER, 'DIRECT QUALITY');
-                libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], headers);
+                libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], streamHeaders);
                 return [2];
             case 9:
                 e_1 = _b.sent();
-                libs.log({ e: e_1 }, PROVIDER, 'ERROR CATCH');
+                libs.log({ e: e_1, message: e_1 && e_1.message ? e_1.message : e_1 }, PROVIDER, 'ERROR CATCH');
                 return [3, 10];
             case 10: return [2, true];
         }
