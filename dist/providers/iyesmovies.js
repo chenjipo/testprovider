@@ -87,6 +87,224 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         }
         return cryptoS.enc.Utf8.stringify(cryptoS.lib.WordArray.create(Array.prototype.slice.call(bytes)));
     }
+    function fetchText(url, reqHeaders) {
+        return __awaiter(this, void 0, void 0, function () {
+            var resp, text, fallback;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        console.log('[RN-Fetch][PLOYAN-TRACE] GET ' + url);
+                        return [4, fetch(url, { headers: reqHeaders })];
+                    case 1:
+                        resp = _a.sent();
+                        return [4, resp.text()];
+                    case 2:
+                        text = _a.sent();
+                        if (typeof text !== 'string') {
+                            text = text ? String(text) : '';
+                        }
+                        if (text && text.indexOf('loc=') >= 0) {
+                            return [2, text];
+                        }
+                        debugLog('FETCH_EMPTY', 'fetch returned ' + (text ? text.length : 0) + ' bytes, trying request_get');
+                        return [4, libs.request_get(url, reqHeaders)];
+                    case 3:
+                        fallback = _a.sent();
+                        if (typeof fallback === 'string') {
+                            return [2, fallback];
+                        }
+                        if (fallback && fallback.data && typeof fallback.data === 'string') {
+                            return [2, fallback.data];
+                        }
+                        if (fallback && typeof fallback === 'object') {
+                            return [2, JSON.stringify(fallback)];
+                        }
+                        return [2, text || ''];
+                }
+            });
+        });
+    }
+    function fetchJson(url, reqHeaders) {
+        return __awaiter(this, void 0, void 0, function () {
+            var resp, text, fallback;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        console.log('[RN-Fetch][PLOYAN-GET] GET ' + url.substring(0, 160));
+                        return [4, fetch(url, { headers: reqHeaders })];
+                    case 1:
+                        resp = _a.sent();
+                        return [4, resp.text()];
+                    case 2:
+                        text = _a.sent();
+                        debugLog('FETCH_JSON', text.substring(0, 160));
+                        if (text && text.charAt(0) === '{') {
+                            return [2, JSON.parse(text)];
+                        }
+                        debugLog('GET_EMPTY', 'fetch returned ' + (text ? text.length : 0) + ' bytes, trying request_get');
+                        return [4, libs.request_get(url, reqHeaders)];
+                    case 3:
+                        fallback = _a.sent();
+                        if (typeof fallback === 'string') {
+                            return [2, JSON.parse(fallback)];
+                        }
+                        return [2, fallback];
+                }
+            });
+        });
+    }
+    function aesBlockEncrypt(key32, block16) {
+        var keyWa = cryptoS.lib.WordArray.create(Array.prototype.slice.call(key32));
+        var blockWa = cryptoS.lib.WordArray.create(Array.prototype.slice.call(block16));
+        var encrypted = cryptoS.AES.encrypt(blockWa, keyWa, {
+            mode: cryptoS.mode.ECB,
+            padding: cryptoS.pad.NoPadding
+        });
+        return wordArrayToUint8Array(encrypted.ciphertext);
+    }
+    function gf128RightShift(v) {
+        var lsb = v[15] & 1;
+        for (var i = 15; i > 0; i--) {
+            v[i] = (v[i] >>> 1) | ((v[i - 1] & 1) << 7);
+        }
+        v[0] >>>= 1;
+        return lsb;
+    }
+    function gf128Mul(x, y) {
+        var z = new Uint8Array(16);
+        var v = new Uint8Array(y);
+        for (var i = 0; i < 128; i++) {
+            if ((x[(i / 8) | 0] >>> (7 - (i % 8))) & 1) {
+                for (var j = 0; j < 16; j++) {
+                    z[j] ^= v[j];
+                }
+            }
+            if (gf128RightShift(v)) {
+                v[0] ^= 0xe1;
+            }
+        }
+        return z;
+    }
+    function gcmPad16(data) {
+        var rem = data.length % 16;
+        if (rem === 0) {
+            return data;
+        }
+        var out = new Uint8Array(data.length + (16 - rem));
+        out.set(data);
+        return out;
+    }
+    function gcmLengthBlock(aBits, cBits) {
+        var b = new Uint8Array(16);
+        var i = void 0;
+        for (i = 0; i < 8; i++) {
+            b[7 - i] = (aBits >>> (i * 8)) & 0xff;
+        }
+        for (i = 0; i < 8; i++) {
+            b[15 - i] = (cBits >>> (i * 8)) & 0xff;
+        }
+        return b;
+    }
+    function gcmGhash(h, a, c) {
+        var x = new Uint8Array(16);
+        var process = function (data) {
+            var i = void 0;
+            var j = void 0;
+            var block = void 0;
+            for (i = 0; i < data.length; i += 16) {
+                block = new Uint8Array(16);
+                block.set(data.subarray(i, i + 16));
+                for (j = 0; j < 16; j++) {
+                    x[j] ^= block[j];
+                }
+                x = gf128Mul(x, h);
+            }
+        };
+        process(gcmPad16(a));
+        process(gcmPad16(c));
+        process(gcmLengthBlock(a.length * 8, c.length * 8));
+        return x;
+    }
+    function gcmInc32(block) {
+        var out = block.slice();
+        var i = void 0;
+        for (i = 15; i >= 12; i--) {
+            out[i] = (out[i] + 1) & 0xff;
+            if (out[i] !== 0) {
+                break;
+            }
+        }
+        return out;
+    }
+    function gcmGctr(key, j0, input) {
+        var output = new Uint8Array(input.length);
+        var counter = j0.slice();
+        var off = void 0;
+        var i = void 0;
+        var e = void 0;
+        for (off = 0; off < input.length; off += 16) {
+            e = aesBlockEncrypt(key, counter);
+            counter = gcmInc32(counter);
+            for (i = 0; i < 16 && off + i < input.length; i++) {
+                output[off + i] = input[off + i] ^ e[i];
+            }
+        }
+        return output;
+    }
+    function gcmEncrypt(key, iv, plaintext) {
+        var h = aesBlockEncrypt(key, new Uint8Array(16));
+        var j0 = new Uint8Array(16);
+        var s = void 0;
+        var c = void 0;
+        var tag = void 0;
+        var out = void 0;
+        j0.set(iv);
+        j0[15] = 1;
+        c = gcmGctr(key, j0, plaintext);
+        s = gcmGhash(h, new Uint8Array(0), c);
+        tag = gcmGctr(key, j0, s).slice(0, 16);
+        out = new Uint8Array(c.length + 16);
+        out.set(c);
+        out.set(tag, c.length);
+        return out;
+    }
+    function gcmDecrypt(key, iv, ciphertextWithTag) {
+        var tag = ciphertextWithTag.slice(-16);
+        var c = ciphertextWithTag.slice(0, -16);
+        var h = aesBlockEncrypt(key, new Uint8Array(16));
+        var j0 = new Uint8Array(16);
+        var s = void 0;
+        var expectedTag = void 0;
+        j0.set(iv);
+        j0[15] = 1;
+        s = gcmGhash(h, new Uint8Array(0), c);
+        expectedTag = gcmGctr(key, j0, s).slice(0, 16);
+        for (var i = 0; i < 16; i++) {
+            if (tag[i] !== expectedTag[i]) {
+                throw new Error('GCM tag mismatch');
+            }
+        }
+        return gcmGctr(key, j0, c);
+    }
+    function generateGetHashPure(loc, mid, ei, sv) {
+        var ts = Math.floor((new Date()).getTime() / 1000);
+        var plain = mid + "+" + ei + "+" + sv + "+" + ts;
+        var saltWordArray = cryptoS.enc.Utf8.parse(plain);
+        var saltBytes = wordArrayToUint8Array(saltWordArray);
+        var keyBytes = deriveAesKeyBytes(loc, saltWordArray);
+        var iv = getRandomBytes(12);
+        var ctWithTag = gcmEncrypt(keyBytes, iv, saltBytes);
+        return bytesToHex(saltBytes) + "-" + bytesToHex(iv) + "-" + bytesToHex(ctWithTag);
+    }
+    function decryptInfoPure(loc, infoToken) {
+        var parts = infoToken.split('-');
+        var saltWordArray = cryptoS.enc.Hex.parse(parts[0]);
+        var iv = wordArrayToUint8Array(cryptoS.enc.Hex.parse(parts[1]));
+        var ctWithTag = wordArrayToUint8Array(cryptoS.enc.Hex.parse(parts[2]));
+        var keyBytes = deriveAesKeyBytes(loc, saltWordArray);
+        var plain = gcmDecrypt(keyBytes, iv, ctWithTag);
+        return utf8Decode(plain);
+    }
     function encode(text, encoding) {
         if (encoding === void 0) { encoding = 'utf-8'; }
         var codePoints = Array.from(text, function (char) { return char.charCodeAt(0); });
@@ -303,23 +521,34 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 switch (_a.label) {
                     case 0:
                         debugLog('HASH_START', 'loc=' + loc + ' mid=' + mid + ' ei=' + ei + ' sv=' + sv);
-                        if (!getSubtleCrypto()) return [3, 2];
-                        return [4, generateGetHashSubtle(loc, mid, ei, sv)];
+                        if (!getSubtleCrypto()) return [3, 4];
+                        _a.label = 1;
                     case 1:
+                        _a.trys.push([1, 3, , 4]);
+                        return [4, generateGetHashSubtle(loc, mid, ei, sv)];
+                    case 2:
                         subtleHash = _a.sent();
                         if (subtleHash) {
                             debugLog('HASH_SUBTLE_OK', subtleHash.substring(0, 80));
                             return [2, subtleHash];
                         }
-                        _a.label = 2;
-                    case 2:
-                        if (!cryptoS.mode || !cryptoS.mode.GCM) {
-                            debugLog('HASH_FAIL', 'AES-GCM not in cryptoS and no subtle crypto');
-                            throw new Error('AES-GCM is not available');
-                        }
-                        _a.label = 3;
+                        _a.label = 4;
                     case 3:
-                        _a.trys.push([3, 6, , 7]);
+                        err_1 = _a.sent();
+                        debugLog('HASH_SUBTLE_FAIL', String(err_1 && err_1.message ? err_1.message : err_1));
+                        _a.label = 4;
+                    case 4:
+                        if (!cryptoS.mode || !cryptoS.mode.ECB) {
+                            debugLog('HASH_PURE', 'using pure GCM');
+                            return [2, generateGetHashPure(loc, mid, ei, sv)];
+                        }
+                        if (!cryptoS.mode || !cryptoS.mode.GCM) {
+                            debugLog('HASH_PURE', 'GCM mode missing');
+                            return [2, generateGetHashPure(loc, mid, ei, sv)];
+                        }
+                        _a.label = 5;
+                    case 5:
+                        _a.trys.push([5, 8, , 9]);
                         ts = Math.floor((new Date()).getTime() / 1000);
                         plain = mid + "+" + ei + "+" + sv + "+" + ts;
                         saltWordArray = cryptoS.enc.Utf8.parse(plain);
@@ -328,21 +557,21 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         keyBytes = deriveAesKeyBytes(loc, saltWordArray);
                         alg = { name: 'AES', iv: iv };
                         return [4, importKey('raw', keyBytes, alg, false, ['encrypt'])];
-                    case 4:
+                    case 6:
                         key = _a.sent();
                         ptUint8 = wordArrayToUint8Array(saltWordArray);
                         return [4, encrypt('AES', key, ptUint8, iv)];
-                    case 5:
+                    case 7:
                         ctBuffer = _a.sent();
                         ivHex = bytesToHex(iv);
                         ctHex = bytesToHex(ctBuffer);
                         debugLog('HASH_CRYPTOJS_OK', saltHex.substring(0, 40));
                         return [2, saltHex + "-" + ivHex + "-" + ctHex];
-                    case 6:
+                    case 8:
                         err_1 = _a.sent();
                         debugLog('HASH_FAIL', String(err_1 && err_1.message ? err_1.message : err_1));
-                        throw err_1;
-                    case 7: return [2];
+                        return [2, generateGetHashPure(loc, mid, ei, sv)];
+                    case 9: return [2];
                 }
             });
         });
@@ -353,17 +582,24 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        if (!getSubtleCrypto()) return [3, 2];
-                        return [4, decryptInfoSubtle(loc, infoToken)];
+                        if (!getSubtleCrypto()) return [3, 4];
+                        _a.label = 1;
                     case 1:
+                        _a.trys.push([1, 3, , 2]);
+                        return [4, decryptInfoSubtle(loc, infoToken)];
+                    case 2:
                         subtlePath = _a.sent();
                         if (subtlePath) {
                             return [2, subtlePath];
                         }
-                        _a.label = 2;
-                    case 2:
+                        _a.label = 4;
+                    case 3:
+                        err_2 = _a.sent();
+                        debugLog('DECRYPT_SUBTLE_FAIL', String(err_2 && err_2.message ? err_2.message : err_2));
+                        _a.label = 4;
+                    case 4:
                         if (!cryptoS.mode || !cryptoS.mode.GCM) {
-                            throw new Error('AES-GCM is not available');
+                            return [2, decryptInfoPure(loc, infoToken)];
                         }
                         parts = infoToken.split('-');
                         saltWordArray = cryptoS.enc.Hex.parse(parts[0]);
@@ -372,10 +608,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         keyBytes = deriveAesKeyBytes(loc, saltWordArray);
                         alg = { name: 'AES', iv: iv };
                         return [4, importKey('raw', keyBytes, alg, false, ['decrypt'])];
-                    case 3:
+                    case 5:
                         key = _a.sent();
                         return [4, decrypt('AES', key, ctBytes, iv)];
-                    case 4: return [2, _a.sent()];
+                    case 6: return [2, _a.sent()];
                 }
             });
         });
@@ -401,7 +637,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         switch (_a.label) {
                             case 0:
                                 urlDocTrace = "".concat(urlDoc, "/cdn-cgi/trace");
-                                return [4, libs.request_get(urlDocTrace, headers)];
+                                return [4, fetchText(urlDocTrace, headers)];
                             case 1:
                                 traceData = _a.sent();
                                 if (typeof traceData !== 'string') {
@@ -471,12 +707,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     LINK_DETAIL: LINK_DETAIL
                 }, PROVIDER, 'LINK DETAIL');
                 if (!LINK_DETAIL) {
+                    debugLog('ABORT', 'no LINK_DETAIL match');
                     return [2];
                 }
                 id = LINK_DETAIL.match(/([0-9]+)\.html$/i);
                 id = id ? id[1] : '';
                 libs.log({ id: id }, PROVIDER, 'ID');
                 if (!id) {
+                    debugLog('ABORT', 'no id from detail URL');
                     return [2];
                 }
                 return [4, fetch(LINK_DETAIL, {
@@ -491,6 +729,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 playURL = playURL ? playURL[1] : "";
                 libs.log({ playURL: playURL }, PROVIDER, "PLAY URL");
                 if (!playURL) {
+                    debugLog('ABORT', 'no plyURL in detail HTML');
                     return [2];
                 }
                 parseURL = libs.string_atob(playURL);
@@ -513,15 +752,17 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 deHash = _b.sent();
                 libs.log({ deHash: deHash, loc: loc, sv: sv, mid: mid, eid: eid }, PROVIDER, 'GET HASH');
                 if (!deHash) {
+                    debugLog('ABORT', 'generateGetHash returned empty');
                     return [2];
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
                 debugLog('GET_REQ', hashURL.substring(0, 120));
-                return [4, libs.request_get(hashURL, streamHeaders)];
+                return [4, fetchJson(hashURL, streamHeaders)];
             case 7:
                 hashID = _b.sent();
                 libs.log({ hashID: hashID, hashURL: hashURL }, PROVIDER, 'HASH ID');
                 if (!hashID || !hashID.info) {
+                    debugLog('ABORT', 'get response missing info: ' + JSON.stringify(hashID).substring(0, 120));
                     return [2];
                 }
                 return [4, decryptInfo(loc, hashID.info)];
@@ -529,9 +770,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 hlsPath = _b.sent();
                 libs.log({ hlsPath: hlsPath }, PROVIDER, 'HLS PATH');
                 if (!hlsPath) {
+                    debugLog('ABORT', 'decryptInfo returned empty');
                     return [2];
                 }
                 directURL = "".concat(parseURL, "/hls/").concat(hlsPath, "/master.m3u8");
+                console.log('[RN-Fetch][PLOYAN-HLS] GET ' + directURL);
                 libs.log({ directURL: directURL }, PROVIDER, 'DIRECT QUALITY');
                 libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], streamHeaders);
                 return [2];
