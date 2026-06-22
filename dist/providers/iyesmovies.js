@@ -36,6 +36,57 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
+    function debugLog(step, detail) {
+        var msg = 'IYESDBG:' + step + (detail ? '|' + detail : '');
+        console.log(msg);
+        try {
+            libs.log({ step: step, detail: detail || '' }, PROVIDER, 'DEBUG');
+        }
+        catch (e) { }
+    }
+    function parseTrace(text) {
+        var result = {};
+        if (!text) {
+            return result;
+        }
+        text.trim().split('\n').forEach(function (line) {
+            var idx = line.indexOf('=');
+            if (idx > 0) {
+                result[line.substring(0, idx).trim()] = line.substring(idx + 1).trim();
+            }
+        });
+        return result;
+    }
+    function getSubtleCrypto() {
+        try {
+            if (typeof crypto !== 'undefined' && crypto.subtle) {
+                return crypto.subtle;
+            }
+            if (typeof global !== 'undefined' && global.crypto && global.crypto.subtle) {
+                return global.crypto.subtle;
+            }
+        }
+        catch (e) { }
+        return null;
+    }
+    function getRandomBytes(length) {
+        if (typeof crypto !== 'undefined' && crypto.getRandomValues) {
+            return crypto.getRandomValues(new Uint8Array(length));
+        }
+        return getRandomValues(length);
+    }
+    function utf8Encode(str) {
+        if (typeof TextEncoder !== 'undefined') {
+            return new TextEncoder().encode(str);
+        }
+        return wordArrayToUint8Array(cryptoS.enc.Utf8.parse(str));
+    }
+    function utf8Decode(bytes) {
+        if (typeof TextDecoder !== 'undefined') {
+            return new TextDecoder().decode(bytes);
+        }
+        return cryptoS.enc.Utf8.stringify(cryptoS.lib.WordArray.create(Array.prototype.slice.call(bytes)));
+    }
     function encode(text, encoding) {
         if (encoding === void 0) { encoding = 'utf-8'; }
         var codePoints = Array.from(text, function (char) { return char.charCodeAt(0); });
@@ -174,15 +225,101 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var keyWordArray = cryptoS.PBKDF2(cryptoS.enc.Utf8.parse(loc), saltWordArray, pbkdf2Opts);
         return wordArrayToUint8Array(keyWordArray);
     }
-    function generateGetHash(loc, mid, ei, sv) {
+    function generateGetHashSubtle(loc, mid, ei, sv) {
         return __awaiter(this, void 0, void 0, function () {
-            var ts, plain, saltWordArray, saltHex, iv, alg, keyBytes, key, ptUint8, ctBuffer, ivHex, ctHex;
+            var subtle, ts, plain, saltBytes, passwordBytes, baseKey, aesKey, iv, ct, ctHex, ivHex, saltHex;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
-                        if (!cryptoS.mode || !cryptoS.mode.GCM) {
-                            throw new Error('AES-GCM is not available in cryptoS');
+                        subtle = getSubtleCrypto();
+                        if (!subtle) {
+                            return [2, ''];
                         }
+                        ts = Math.floor((new Date()).getTime() / 1000);
+                        plain = mid + "+" + ei + "+" + sv + "+" + ts;
+                        saltBytes = utf8Encode(plain);
+                        passwordBytes = utf8Encode(loc);
+                        return [4, subtle.importKey('raw', passwordBytes, 'PBKDF2', false, ['deriveKey'])];
+                    case 1:
+                        baseKey = _a.sent();
+                        return [4, subtle.deriveKey({
+                                name: 'PBKDF2',
+                                salt: saltBytes,
+                                iterations: 1000,
+                                hash: 'SHA-256'
+                            }, baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt'])];
+                    case 2:
+                        aesKey = _a.sent();
+                        iv = getRandomBytes(12);
+                        return [4, subtle.encrypt({ name: 'AES-GCM', iv: iv }, aesKey, saltBytes)];
+                    case 3:
+                        ct = _a.sent();
+                        saltHex = bytesToHex(saltBytes);
+                        ivHex = bytesToHex(iv);
+                        ctHex = bytesToHex(new Uint8Array(ct));
+                        return [2, saltHex + "-" + ivHex + "-" + ctHex];
+                }
+            });
+        });
+    }
+    function decryptInfoSubtle(loc, infoToken) {
+        return __awaiter(this, void 0, void 0, function () {
+            var subtle, parts, saltBytes, iv, ctBytes, passwordBytes, baseKey, aesKey, pt;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        subtle = getSubtleCrypto();
+                        if (!subtle) {
+                            return [2, ''];
+                        }
+                        parts = infoToken.split('-');
+                        saltBytes = wordArrayToUint8Array(cryptoS.enc.Hex.parse(parts[0]));
+                        iv = wordArrayToUint8Array(cryptoS.enc.Hex.parse(parts[1]));
+                        ctBytes = wordArrayToUint8Array(cryptoS.enc.Hex.parse(parts[2]));
+                        passwordBytes = utf8Encode(loc);
+                        return [4, subtle.importKey('raw', passwordBytes, 'PBKDF2', false, ['deriveKey'])];
+                    case 1:
+                        baseKey = _a.sent();
+                        return [4, subtle.deriveKey({
+                                name: 'PBKDF2',
+                                salt: saltBytes,
+                                iterations: 1000,
+                                hash: 'SHA-256'
+                            }, baseKey, { name: 'AES-GCM', length: 256 }, false, ['decrypt'])];
+                    case 2:
+                        aesKey = _a.sent();
+                        return [4, subtle.decrypt({ name: 'AES-GCM', iv: iv }, aesKey, ctBytes)];
+                    case 3:
+                        pt = _a.sent();
+                        return [2, utf8Decode(new Uint8Array(pt))];
+                }
+            });
+        });
+    }
+    function generateGetHash(loc, mid, ei, sv) {
+        return __awaiter(this, void 0, void 0, function () {
+            var subtleHash, ts, plain, saltWordArray, saltHex, iv, alg, keyBytes, key, ptUint8, ctBuffer, ivHex, ctHex, err_1;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        debugLog('HASH_START', 'loc=' + loc + ' mid=' + mid + ' ei=' + ei + ' sv=' + sv);
+                        if (!getSubtleCrypto()) return [3, 2];
+                        return [4, generateGetHashSubtle(loc, mid, ei, sv)];
+                    case 1:
+                        subtleHash = _a.sent();
+                        if (subtleHash) {
+                            debugLog('HASH_SUBTLE_OK', subtleHash.substring(0, 80));
+                            return [2, subtleHash];
+                        }
+                        _a.label = 2;
+                    case 2:
+                        if (!cryptoS.mode || !cryptoS.mode.GCM) {
+                            debugLog('HASH_FAIL', 'AES-GCM not in cryptoS and no subtle crypto');
+                            throw new Error('AES-GCM is not available');
+                        }
+                        _a.label = 3;
+                    case 3:
+                        _a.trys.push([3, 6, , 7]);
                         ts = Math.floor((new Date()).getTime() / 1000);
                         plain = mid + "+" + ei + "+" + sv + "+" + ts;
                         saltWordArray = cryptoS.enc.Utf8.parse(plain);
@@ -191,27 +328,42 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         keyBytes = deriveAesKeyBytes(loc, saltWordArray);
                         alg = { name: 'AES', iv: iv };
                         return [4, importKey('raw', keyBytes, alg, false, ['encrypt'])];
-                    case 1:
+                    case 4:
                         key = _a.sent();
                         ptUint8 = wordArrayToUint8Array(saltWordArray);
                         return [4, encrypt('AES', key, ptUint8, iv)];
-                    case 2:
+                    case 5:
                         ctBuffer = _a.sent();
                         ivHex = bytesToHex(iv);
                         ctHex = bytesToHex(ctBuffer);
+                        debugLog('HASH_CRYPTOJS_OK', saltHex.substring(0, 40));
                         return [2, saltHex + "-" + ivHex + "-" + ctHex];
+                    case 6:
+                        err_1 = _a.sent();
+                        debugLog('HASH_FAIL', String(err_1 && err_1.message ? err_1.message : err_1));
+                        throw err_1;
+                    case 7: return [2];
                 }
             });
         });
     }
     function decryptInfo(loc, infoToken) {
         return __awaiter(this, void 0, void 0, function () {
-            var parts, saltWordArray, iv, ctBytes, keyBytes, alg, key;
+            var subtlePath, parts, saltWordArray, iv, ctBytes, keyBytes, alg, key, err_2;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
+                        if (!getSubtleCrypto()) return [3, 2];
+                        return [4, decryptInfoSubtle(loc, infoToken)];
+                    case 1:
+                        subtlePath = _a.sent();
+                        if (subtlePath) {
+                            return [2, subtlePath];
+                        }
+                        _a.label = 2;
+                    case 2:
                         if (!cryptoS.mode || !cryptoS.mode.GCM) {
-                            throw new Error('AES-GCM is not available in cryptoS');
+                            throw new Error('AES-GCM is not available');
                         }
                         parts = infoToken.split('-');
                         saltWordArray = cryptoS.enc.Hex.parse(parts[0]);
@@ -220,11 +372,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         keyBytes = deriveAesKeyBytes(loc, saltWordArray);
                         alg = { name: 'AES', iv: iv };
                         return [4, importKey('raw', keyBytes, alg, false, ['decrypt'])];
-                    case 1:
+                    case 3:
                         key = _a.sent();
                         return [4, decrypt('AES', key, ctBytes, iv)];
-                    case 2:
-                        return [2, _a.sent()];
+                    case 4: return [2, _a.sent()];
                 }
             });
         });
@@ -256,9 +407,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                                 if (typeof traceData !== 'string') {
                                     traceData = traceData ? String(traceData) : '';
                                 }
+                                debugLog('TRACE_RAW', traceData.substring(0, 120).replace(/\n/g, '\\n'));
                                 libs.log({ traceData: traceData }, PROVIDER, 'TRACE DATA');
-                                arr = traceData.trim().split('\n').map(function (e) { return e.split('='); });
-                                return [2, Object.fromEntries(arr)];
+                                arr = parseTrace(traceData);
+                                debugLog('TRACE_LOC', arr['loc'] || 'MISSING');
+                                return [2, arr];
                         }
                     });
                 }); };
@@ -345,8 +498,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             case 5:
                 ipData = _b.sent();
                 loc = ipData['loc'];
+                debugLog('PARSE_URL', 'parseURL=' + parseURL + ' loc=' + (loc || 'EMPTY'));
                 libs.log({ parseURL: parseURL, loc: loc }, PROVIDER, "PARSE URL");
                 if (!parseURL || !loc) {
+                    debugLog('ABORT', 'missing parseURL or loc');
                     return [2];
                 }
                 streamHeaders = Object.assign({}, headers, { referer: "".concat(parseURL, "/") });
@@ -361,6 +516,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [2];
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
+                debugLog('GET_REQ', hashURL.substring(0, 120));
                 return [4, libs.request_get(hashURL, streamHeaders)];
             case 7:
                 hashID = _b.sent();
@@ -381,6 +537,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 return [2];
             case 9:
                 e_1 = _b.sent();
+                debugLog('ERROR', String(e_1 && e_1.message ? e_1.message : e_1));
                 libs.log({ e: e_1, message: e_1 && e_1.message ? e_1.message : e_1 }, PROVIDER, 'ERROR CATCH');
                 return [3, 10];
             case 10: return [2, true];
