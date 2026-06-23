@@ -200,9 +200,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             xhr.send(body);
         });
     }
-    function base64EncodeUri(str) {
-        var b64 = libs.string_base64_encode(str);
-        return b64.replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+    function base64EncodeUri(b64) {
+        return String(b64 || '').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
     }
     function fetchDatasToken(mid, eid, sv, reqHeaders) {
         var datasUrl = "".concat(DOMAIN, "/datas");
@@ -245,9 +244,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         return encox(encPlain, yesLoc).then(function (enc) {
             var urix = base64EncodeUri(enc);
             var watchUrl = "".concat(parseURL, "/watch/?v").concat(sv).concat(eid, "#").concat(urix);
+            debugLog('ENCOX_OK', urix.substring(0, 32));
             debugLog('WATCH_URL', watchUrl.substring(0, 120));
             console.log('[RN-Fetch][PLOYAN-EMBED-URL] ' + watchUrl.substring(0, 140));
             return watchUrl;
+        }).catch(function (err) {
+            debugLog('ENCOX_ERR', String(err && err.message ? err.message : err));
+            console.log('[RN-Fetch][PLOYAN-ENCOX-ERR] ' + String(err && err.message ? err.message : err));
+            throw err;
         });
     }
     function xhrGetText(url, reqHeaders, timeoutMs) {
@@ -342,7 +346,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v19');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v20');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -763,34 +767,18 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
+    function encoxPure(plaintext, pwd) {
+        var pwHash = wordArrayToUint8Array(cryptoS.SHA256(cryptoS.enc.Utf8.parse(pwd)));
+        var iv = getRandomBytes(12);
+        var ivStr = Array.from(iv).map(function (b) { return String.fromCharCode(b); }).join('');
+        var ptBytes = utf8Encode(plaintext);
+        var ctWithTag = gcmEncrypt(pwHash, iv, ptBytes);
+        var ctStr = Array.from(ctWithTag).map(function (byte) { return String.fromCharCode(byte); }).join('');
+        return libs.string_btoa(ivStr + ctStr);
+    }
     function encox(plaintext, pwd) {
-        return __awaiter(this, void 0, void 0, function () {
-            var pwUtf8, pwHash, iv, ivStr, alg, key, ptUint8, ctBuffer, ctArray, ctStr;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        pwUtf8 = encode(pwd);
-                        return [4, digestSHA256('SHA-256', pwUtf8)];
-                    case 1:
-                        pwHash = _a.sent();
-                        iv = getRandomValues(12);
-                        ivStr = Array.from(iv).map(function (b) { return String.fromCharCode(b); }).join('');
-                        alg = {
-                            name: 'AES',
-                            iv: iv
-                        };
-                        return [4, importKey('raw', pwHash, alg, false, ['encrypt'])];
-                    case 2:
-                        key = _a.sent();
-                        ptUint8 = encode(plaintext);
-                        return [4, encrypt(alg.name, key, ptUint8, alg.iv)];
-                    case 3:
-                        ctBuffer = _a.sent();
-                        ctArray = Array.from(new Uint8Array(ctBuffer));
-                        ctStr = ctArray.map(function (byte) { return String.fromCharCode(byte); }).join('');
-                        return [2, libs.string_btoa(ivStr + ctStr)];
-                }
-            });
+        return Promise.resolve().then(function () {
+            return encoxPure(plaintext, pwd);
         });
     }
     function deriveAesKeyBytes(loc, saltWordArray) {
@@ -1042,20 +1030,18 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         }
                     });
                 }); };
-                getEmbed = function (sv, mi, ei) { return __awaiter(_this, void 0, void 0, function () {
-                    var ipData, pwd, tsx, _a, _b;
+                getEmbed = function (parseUrl, sv, mi, ei, yesLoc) { return __awaiter(_this, void 0, void 0, function () {
+                    var pwd, tsx, enc, urixLocal;
                     return __generator(this, function (_c) {
                         switch (_c.label) {
-                            case 0: return [4, getIP_1()];
-                            case 1:
-                                ipData = _c.sent();
-                                pwd = ipData['loc'];
+                            case 0:
+                                pwd = yesLoc || 'US';
                                 tsx = Math.floor((new Date()).getTime() / 1000);
-                                _b = (_a = libs).string_base64_encode;
                                 return [4, encox(mi + "+" + ei + "+" + sv + "+" + pwd + "+" + tsx, pwd)];
-                            case 2:
-                                urix = _b.apply(_a, [_c.sent()]);
-                                return [2, "".concat(urlDoc_1, "/watch/?v").concat(sv).concat(ei, "#").concat(urix)];
+                            case 1:
+                                enc = _c.sent();
+                                urixLocal = base64EncodeUri(enc);
+                                return [2, "".concat(parseUrl, "/watch/?v").concat(sv).concat(ei, "#").concat(urixLocal)];
                         }
                     });
                 }); };
