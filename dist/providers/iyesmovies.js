@@ -193,6 +193,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 resolve('');
             };
             xhr.open('POST', url, true);
+            xhr.withCredentials = true;
             xhr.setRequestHeader('Content-Type', 'application/json');
             Object.keys(reqHeaders || {}).forEach(function (key) {
                 xhr.setRequestHeader(key, reqHeaders[key]);
@@ -304,6 +305,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 resolve('');
             };
             xhr.open('GET', url, true);
+            xhr.withCredentials = true;
             Object.keys(reqHeaders || {}).forEach(function (key) {
                 xhr.setRequestHeader(key, reqHeaders[key]);
             });
@@ -369,7 +371,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v27');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v28');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1030,7 +1032,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 ployanHeaders = buildPloyanHeaders(headers['user-agent']);
                 _b.label = 1;
             case 1:
-                _b.trys.push([1, 12, , 11]);
+                _b.trys.push([1, 11, , 12]);
                 urlDoc_1 = "https://doc.vidcloud9.org";
                 getIP_1 = function (urlDoc) { return __awaiter(_this, void 0, void 0, function () {
                     var urlDocTrace, traceData, arr;
@@ -1156,9 +1158,15 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 embedPack = _b.sent();
                 watchEmbedUrl = embedPack && embedPack.url ? embedPack.url : embedPack;
                 watchUrix = embedPack && embedPack.urix ? embedPack.urix : '';
+                streamHeaders['Referer'] = String(watchEmbedUrl || '').split('#')[0];
+                streamHeaders['Origin'] = parseURL;
+                debugLog('GET_HDR', 'referer=' + streamHeaders['Referer']);
+                console.log('[RN-Fetch][PLOYAN-WARM] GET ' + streamHeaders['Referer']);
+                return [4, xhrGetText(streamHeaders['Referer'], streamHeaders, 8000)];
+            case 7:
                 console.log('[RN-Fetch][PLOYAN-DIRECT] try /get/ with ployan trace');
                 return [4, getIP_1(parseURL)];
-            case 7:
+            case 8:
                 ipData = _b.sent();
                 loc = ipData['loc'];
                 debugLog('PARSE_URL', 'parseURL=' + parseURL + ' loc=' + (loc || 'EMPTY'));
@@ -1173,7 +1181,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('HASH_TS', String(hashTs));
                 console.log('[RN-Fetch][PLOYAN-HASH] generating hash...');
                 return [4, generateGetHash(loc, mid, eid, sv, hashTs)];
-            case 8:
+            case 9:
                 if (!loc) {
                     return [2];
                 }
@@ -1189,7 +1197,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
                 debugLog('GET_REQ', hashURL.substring(0, 120));
                 return [4, fetchJson(hashURL, streamHeaders)];
-            case 9:
+            case 10:
                 if (!hashURL) {
                     return [2];
                 }
@@ -1205,8 +1213,6 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('GET_FALLBACK', 'embed watch url');
                 console.log('[RN-Fetch][PLOYAN-EMBED] fallback ' + watchEmbedUrl.substring(0, 140));
                 openPloyanWebView(watchEmbedUrl, watchUrix, mid, eid, sv, movieInfo, callback, streamHeaders, LINK_DETAIL, yesLoc);
-                return [2];
-            case 10:
                 return [2];
             case 11:
                 e_1 = _b.sent();
