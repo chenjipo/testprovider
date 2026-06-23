@@ -177,28 +177,29 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         });
     }
     function fetchTraceText(url, reqHeaders) {
-        console.log('[RN-Fetch][PLOYAN-VERSION] v5');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v6');
         console.log('[RN-Fetch][PLOYAN-TRACE] GET ' + url);
-        return fetchWithTimeout(url, reqHeaders, 8000).then(function (text) {
-            if (text && text.indexOf('loc=') >= 0) {
-                console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(text)['loc'] || 'MISSING') + ' via=fetch');
-                return text;
+        return requestGetWithTimeout(url, reqHeaders, 6000).then(function (axiosText) {
+            if (axiosText && axiosText.indexOf('loc=') >= 0) {
+                console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(axiosText)['loc'] || 'MISSING') + ' via=axios');
+                return axiosText;
             }
-            console.log('[RN-Fetch][PLOYAN-TRACE] xhr fallback bytes=' + (text ? text.length : 0));
-            return xhrGetText(url, reqHeaders, 5000).then(function (xhrText) {
-                if (xhrText && xhrText.indexOf('loc=') >= 0) {
-                    console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(xhrText)['loc'] || 'MISSING') + ' via=xhr');
-                    return xhrText;
+            console.log('[RN-Fetch][PLOYAN-TRACE] axios miss bytes=' + (axiosText ? axiosText.length : 0) + ' try fetch');
+            return fetchWithTimeout(url, reqHeaders, 5000).then(function (text) {
+                if (text && text.indexOf('loc=') >= 0) {
+                    console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(text)['loc'] || 'MISSING') + ' via=fetch');
+                    return text;
                 }
-                console.log('[RN-Fetch][PLOYAN-TRACE] axios fallback');
-                return requestGetWithTimeout(url, reqHeaders, 5000).then(function (axiosText) {
-                    if (axiosText && axiosText.indexOf('loc=') >= 0) {
-                        console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(axiosText)['loc'] || 'MISSING') + ' via=axios');
+                console.log('[RN-Fetch][PLOYAN-TRACE] xhr fallback bytes=' + (text ? text.length : 0));
+                return xhrGetText(url, reqHeaders, 4000).then(function (xhrText) {
+                    var finalText = xhrText || text || axiosText || '';
+                    if (finalText && finalText.indexOf('loc=') >= 0) {
+                        console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(finalText)['loc'] || 'MISSING') + ' via=xhr');
                     }
                     else {
-                        console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING bytes=' + (axiosText ? axiosText.length : 0));
+                        console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING bytes=' + (finalText ? finalText.length : 0));
                     }
-                    return axiosText || xhrText || text || '';
+                    return finalText;
                 });
             });
         });
