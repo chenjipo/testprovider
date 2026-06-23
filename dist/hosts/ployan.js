@@ -35,25 +35,31 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-function buildPloyanInjectScript(urix) {
-    var safeUrix = String(urix || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-    return "(function(){var u='" + safeUrix + "';function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}if(u){try{if(!location.hash||location.hash.length<3){history.replaceState(null,'',location.pathname+location.search+'#'+u);}}catch(e){}}var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(s.indexOf('/get/')>=0||s.indexOf('.m3u8')>=0||s.indexOf('/hls/')>=0){r.clone().text().then(function(t){pm({status:r.status,responseURL:s,responseText:t});}).catch(function(){});}return r;});};var xo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(){this.addEventListener('load',function(){pm({status:this.status,responseURL:this.responseURL,responseText:this.responseText||''});});return xo.apply(this,arguments);};})();";
+function escJs(value) {
+    return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+function buildPloyanInjectScript(urix, mid, eid, sv) {
+    var sMid = escJs(mid);
+    var sEid = escJs(eid);
+    var sSv = escJs(sv);
+    var sUrix = escJs(urix);
+    return "(function(){var mid='" + sMid + "',ei='" + sEid + "',sv='" + sSv + "',u='" + sUrix + "';function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function hx(b){return Array.from(new Uint8Array(b)).map(function(x){return('0'+x.toString(16)).slice(-2)}).join('')}async function ne(loc,plain){var enc=new TextEncoder(),pw=enc.encode(loc),pb=await crypto.subtle.importKey('raw',pw,'PBKDF2',false,['deriveKey']),salt=crypto.getRandomValues(new Uint8Array(8)),ak=await crypto.subtle.deriveKey({name:'PBKDF2',salt:salt,iterations:1000,hash:'SHA-256'},pb,{name:'AES-GCM',length:256},false,['encrypt']),iv=crypto.getRandomValues(new Uint8Array(12)),ct=await crypto.subtle.encrypt({name:'AES-GCM',iv:iv},ak,enc.encode(plain));return hx(salt)+'-'+hx(iv)+'-'+hx(new Uint8Array(ct))}async function runGet(){try{var tr=await fetch('/cdn-cgi/trace').then(function(r){return r.text()}),loc=(tr.match(/loc=([A-Z]+)/)||[, 'US'])[1],ts=Math.floor(Date.now()/1000),plain=mid+'+'+ei+'+'+sv+'+'+ts,hash=await ne(loc,plain),getUrl='/get/'+hash,r=await fetch(getUrl),t=await r.text();pm({status:r.status,responseURL:location.origin+getUrl,responseText:t,source:'inject'})}catch(e){pm({error:String(e),source:'inject'})}}if(u){try{if(!location.hash||location.hash.length<3){history.replaceState(null,'',location.pathname+location.search+'#'+u)}}catch(e){}}var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(s.indexOf('/get/')>=0||s.indexOf('.m3u8')>=0||s.indexOf('/hls/')>=0){r.clone().text().then(function(t){pm({status:r.status,responseURL:s,responseText:t,source:'hook'})}).catch(function(){})}return r})};runGet()})();";
 }
 hosts["ployan"] = function (url, movieInfo, provider, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var HOST, urix, loadUrl, headers, beforeLoadScript;
+    var HOST, urix, mid, eid, sv, loadUrl, headers, beforeLoadScript;
     return __generator(this, function (_a) {
         HOST = 'ployan';
-        urix = (config && config.urix) ? config.urix : ((config && config.options && config.options.urix) ? config.options.urix : '');
-        loadUrl = url;
-        if (urix && loadUrl.indexOf('#') < 0) {
-            loadUrl = loadUrl + '#' + urix;
-        }
+        urix = (config && config.urix) ? config.urix : '';
+        mid = (config && config.mid) ? config.mid : '';
+        eid = (config && config.eid) ? config.eid : '';
+        sv = (config && config.sv) ? config.sv : '1';
+        loadUrl = String(url || '').split('#')[0];
         headers = {
             'Referer': 'https://ployan.me/',
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
         };
-        beforeLoadScript = buildPloyanInjectScript(urix);
-        console.log('[RN-Fetch][PLOYAN-HOST] ' + loadUrl.substring(0, 120));
+        beforeLoadScript = buildPloyanInjectScript(urix, mid, eid, sv);
+        console.log('[RN-Fetch][PLOYAN-HOST] ' + loadUrl + ' mid=' + mid + ' ei=' + eid);
         try {
             callback({
                 callback: {
@@ -66,6 +72,9 @@ hosts["ployan"] = function (url, movieInfo, provider, config, callback) { return
                     beforeLoadScript: beforeLoadScript,
                     metadata: {
                         urix: urix,
+                        mid: mid,
+                        eid: eid,
+                        sv: sv,
                         url_webview: loadUrl,
                         movieInfo: movieInfo
                     }

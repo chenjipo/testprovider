@@ -43,6 +43,13 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                 return [2];
             }
             data = JSON.parse(dataCallback);
+            if (data.responseURL && data.responseURL.indexOf('cdn-cgi/rum') != -1) {
+                return [2];
+            }
+            if (data.error) {
+                console.log('[RN-Fetch][PLOYAN-INJECT-ERR] ' + data.error);
+                return [2];
+            }
             libs.log({ data: data }, provider, 'PLOYAN WEBVIEW');
             if (data.responseURL && (data.responseURL.indexOf('.m3u8') != -1 || data.responseURL.indexOf('/hls/') != -1)) {
                 directUrl = data.responseURL;
@@ -53,7 +60,7 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                 });
                 return [2];
             }
-            if (data.responseText && data.responseURL && data.responseURL.indexOf('/get/') != -1) {
+            if (data.responseText && data.responseText.charAt(0) === '{' && (data.source === 'inject' || data.source === 'hook' || (data.responseURL && data.responseURL.indexOf('/get/') != -1))) {
                 json = JSON.parse(data.responseText);
                 if (json && json.code === 200 && json.info) {
                     info = json.info;
