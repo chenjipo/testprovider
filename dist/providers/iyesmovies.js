@@ -251,7 +251,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v14');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v15');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -315,16 +315,25 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function parseEpisodeDataId(html, episodeNum, serverId) {
         var episodePattern = String(episodeNum);
         var serverPattern = String(serverId || 1);
-        var patterns = [
-            new RegExp('id=ep-' + episodePattern + '(?:[^>]*data-server=' + serverPattern + '[^>]*data-id=([0-9]+)|data-server=' + serverPattern + '[^>]*data-id=([0-9]+))', 'i'),
-            new RegExp('data-server=' + serverPattern + '[^>]*data-id=([0-9]+)[^>]*id=ep-' + episodePattern, 'i')
-        ];
-        var i = void 0;
-        var match = void 0;
-        for (i = 0; i < patterns.length; i++) {
-            match = html.match(patterns[i]);
-            if (match) {
-                return match[1] || match[2] || episodePattern;
+        var epTagRe = /<li class=ep-item([^>]*)>/gi;
+        var tagMatch = void 0;
+        var attrs = void 0;
+        var epId = void 0;
+        var dataServer = void 0;
+        var dataId = void 0;
+        while ((tagMatch = epTagRe.exec(html)) !== null) {
+            attrs = tagMatch[1];
+            epId = (attrs.match(/\bid=ep-([0-9]+)/i) || [])[1];
+            if (!epId || epId !== episodePattern) {
+                continue;
+            }
+            dataServer = (attrs.match(/\bdata-server=([0-9]+)/i) || [])[1];
+            if (dataServer && dataServer !== serverPattern) {
+                continue;
+            }
+            dataId = (attrs.match(/\bdata-id=([0-9]+)/i) || [])[1];
+            if (dataId) {
+                return dataId;
             }
         }
         return episodePattern;
