@@ -46,6 +46,10 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
             if (data.responseURL && data.responseURL.indexOf('cdn-cgi/rum') != -1) {
                 return [2];
             }
+            if (data.step) {
+                console.log('[RN-Fetch][PLOYAN-STEP] ' + data.step);
+                return [2];
+            }
             if (data.error) {
                 console.log('[RN-Fetch][PLOYAN-INJECT-ERR] ' + data.error);
                 return [2];
