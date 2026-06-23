@@ -236,7 +236,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             var tokenUrl = "".concat(parseURL, "/watch?v=").concat(datasToken);
             debugLog('WATCH_URL', tokenUrl);
             console.log('[RN-Fetch][PLOYAN-EMBED-URL] ' + tokenUrl);
-            return Promise.resolve(tokenUrl);
+            return Promise.resolve({ url: tokenUrl, urix: '' });
         }
         var tsx = Math.floor((new Date()).getTime() / 1000);
         var encPlain = mid + "+" + eid + "+" + sv + "+" + yesLoc + "+" + tsx;
@@ -247,12 +247,22 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             debugLog('ENCOX_OK', urix.substring(0, 32));
             debugLog('WATCH_URL', watchUrl.substring(0, 120));
             console.log('[RN-Fetch][PLOYAN-EMBED-URL] ' + watchUrl.substring(0, 140));
-            return watchUrl;
+            return { url: watchUrl, urix: urix };
         }).catch(function (err) {
             debugLog('ENCOX_ERR', String(err && err.message ? err.message : err));
             console.log('[RN-Fetch][PLOYAN-ENCOX-ERR] ' + String(err && err.message ? err.message : err));
             throw err;
         });
+    }
+    function openPloyanWebView(watchEmbedUrl, urix, callback, streamHeaders) {
+        var baseUrl = watchEmbedUrl.indexOf('#') >= 0 ? watchEmbedUrl.split('#')[0] : watchEmbedUrl;
+        var opts = {};
+        if (urix) {
+            var safeUrix = urix.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+            opts.beforeLoadScript = "(function(){try{var u='" + safeUrix + "';if(u&&(!location.hash||location.hash.length<3)){history.replaceState(null,'',location.pathname+location.search+'#'+u);}}catch(e){}})();";
+        }
+        console.log('[RN-Fetch][PLOYAN-WEBVIEW] ' + baseUrl + (urix ? ' urix=' + urix.substring(0, 24) : ''));
+        libs.embed_callback(baseUrl, PROVIDER, PROVIDER, '', callback, 1, [], [], streamHeaders, opts);
     }
     function xhrGetText(url, reqHeaders, timeoutMs) {
         return new Promise(function (resolve) {
@@ -346,7 +356,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v20');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v21');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -993,7 +1003,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
-    var PROVIDER, DOMAIN, headers, ployanHeaders, streamHeaders, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, hashTs, datasResp, datasToken, yesTraceData, yesLoc, watchEmbedUrl, deHash, hashURL, hashID, directURL, e_1;
+    var PROVIDER, DOMAIN, headers, ployanHeaders, streamHeaders, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, hashTs, datasResp, datasToken, yesTraceData, yesLoc, watchEmbedUrl, watchUrix, embedPack, deHash, hashURL, hashID, directURL, e_1;
     var _this = this;
     return __generator(this, function (_b) {
         switch (_b.label) {
@@ -1127,7 +1137,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 console.log('[RN-Fetch][YESMOVIES-LOC] loc=' + yesLoc);
                 return [4, buildWatchEmbedUrl(parseURL, sv, eid, mid, yesLoc, datasToken)];
             case 6:
-                watchEmbedUrl = _b.sent();
+                embedPack = _b.sent();
+                watchEmbedUrl = embedPack && embedPack.url ? embedPack.url : embedPack;
+                watchUrix = embedPack && embedPack.urix ? embedPack.urix : '';
                 return [4, getIP_1(parseURL)];
             case 7:
                 ipData = _b.sent();
@@ -1137,7 +1149,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!parseURL || !loc) {
                     debugLog('LOC_EMPTY', 'embed fallback');
                     console.log('[RN-Fetch][PLOYAN-EMBED] no loc fallback');
-                    return [4, libs.embed_redirect(watchEmbedUrl, 'embed', movieInfo, PROVIDER, callback, PROVIDER, [], streamHeaders)];
+                    openPloyanWebView(watchEmbedUrl, watchUrix, callback, streamHeaders);
+                    return [2];
                 }
                 hashTs = Math.floor((new Date()).getTime() / 1000);
                 debugLog('HASH_TS', String(hashTs));
@@ -1145,7 +1158,6 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 return [4, generateGetHash(loc, mid, eid, sv, hashTs)];
             case 8:
                 if (!loc) {
-                    _b.sent();
                     return [2];
                 }
                 deHash = _b.sent();
@@ -1154,14 +1166,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!deHash) {
                     debugLog('HASH_EMPTY', 'embed fallback');
                     console.log('[RN-Fetch][PLOYAN-EMBED] hash empty fallback');
-                    return [4, libs.embed_redirect(watchEmbedUrl, 'embed', movieInfo, PROVIDER, callback, PROVIDER, [], streamHeaders)];
+                    openPloyanWebView(watchEmbedUrl, watchUrix, callback, streamHeaders);
+                    return [2];
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
                 debugLog('GET_REQ', hashURL.substring(0, 120));
                 return [4, fetchJson(hashURL, streamHeaders)];
             case 9:
                 if (!hashURL) {
-                    _b.sent();
                     return [2];
                 }
                 hashID = _b.sent();
@@ -1175,9 +1187,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 debugLog('GET_FALLBACK', 'embed watch url');
                 console.log('[RN-Fetch][PLOYAN-EMBED] fallback ' + watchEmbedUrl.substring(0, 140));
-                return [4, libs.embed_redirect(watchEmbedUrl, 'embed', movieInfo, PROVIDER, callback, PROVIDER, [], streamHeaders)];
+                openPloyanWebView(watchEmbedUrl, watchUrix, callback, streamHeaders);
+                return [2];
             case 10:
-                _b.sent();
                 return [2];
             case 11:
                 e_1 = _b.sent();
@@ -1186,11 +1198,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ e: e_1, message: e_1 && e_1.message ? e_1.message : e_1 }, PROVIDER, 'ERROR CATCH');
                 if (watchEmbedUrl) {
                     console.log('[RN-Fetch][PLOYAN-EMBED] error fallback');
-                    return [4, libs.embed_redirect(watchEmbedUrl, 'embed', movieInfo, PROVIDER, callback, PROVIDER, [], streamHeaders)];
+                    openPloyanWebView(watchEmbedUrl, watchUrix, callback, streamHeaders);
                 }
                 return [2, true];
             case 12:
-                _b.sent();
                 return [2, true];
         }
     });
