@@ -118,67 +118,124 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
-    function fetchText(url, reqHeaders) {
-        return __awaiter(this, void 0, void 0, function () {
-            var text, fetchText_1;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        console.log('[RN-Fetch][PLOYAN-TRACE] GET ' + url);
-                        return [4, libs.request_get(url, reqHeaders)];
-                    case 1:
-                        text = normalizeResponseBody(_a.sent());
-                        if (text && text.indexOf('loc=') >= 0) {
-                            console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(text)['loc'] || 'MISSING'));
-                            return [2, text];
-                        }
-                        debugLog('TRACE_REQGET_MISS', 'bytes=' + (text ? text.length : 0));
-                        console.log('[RN-Fetch][PLOYAN-TRACE] fetch fallback bytes=' + (text ? text.length : 0));
-                        return [4, fetchWithTimeout(url, reqHeaders, 8000)];
-                    case 2:
-                        fetchText_1 = _a.sent();
-                        if (fetchText_1 && fetchText_1.indexOf('loc=') >= 0) {
-                            console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(fetchText_1)['loc'] || 'MISSING'));
-                            return [2, fetchText_1];
-                        }
-                        console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING');
-                        return [2, fetchText_1 || text || ''];
+    function fetchTraceText(url, reqHeaders) {
+        return new Promise(function (resolve) {
+            var done = false;
+            var bestText = '';
+            var finished = 0;
+            function pickText(text) {
+                if (text && (!bestText || text.indexOf('loc=') >= 0)) {
+                    bestText = text;
                 }
+            }
+            function finishWith(text, via) {
+                if (done) {
+                    return;
+                }
+                pickText(text);
+                if (text && text.indexOf('loc=') >= 0) {
+                    done = true;
+                    console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(text)['loc'] || 'MISSING') + ' via=' + via);
+                    resolve(text);
+                }
+            }
+            function allDone() {
+                finished++;
+                if (finished >= 2 && !done) {
+                    done = true;
+                    if (bestText.indexOf('loc=') >= 0) {
+                        console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(bestText)['loc'] || 'MISSING') + ' via=wait');
+                    }
+                    else {
+                        console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING');
+                    }
+                    resolve(bestText);
+                }
+            }
+            console.log('[RN-Fetch][PLOYAN-TRACE] GET ' + url);
+            fetchWithTimeout(url, reqHeaders, 6000).then(function (text) {
+                finishWith(text || '', 'fetch');
+                allDone();
             });
+            libs.request_get(url, reqHeaders).then(function (data) {
+                finishWith(normalizeResponseBody(data), 'axios');
+                allDone();
+            }).catch(function () {
+                allDone();
+            });
+            setTimeout(function () {
+                if (done) {
+                    return;
+                }
+                done = true;
+                if (bestText.indexOf('loc=') >= 0) {
+                    console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(bestText)['loc'] || 'MISSING') + ' via=timeout');
+                }
+                else {
+                    console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING timeout');
+                }
+                resolve(bestText);
+            }, 7000);
         });
     }
+    function fetchText(url, reqHeaders) {
+        return fetchTraceText(url, reqHeaders);
+    }
     function fetchJson(url, reqHeaders) {
-        return __awaiter(this, void 0, void 0, function () {
-            var text, fallback;
-            return __generator(this, function (_a) {
-                switch (_a.label) {
-                    case 0:
-                        console.log('[RN-Fetch][PLOYAN-GET] GET ' + url.substring(0, 160));
-                        return [4, fetchWithTimeout(url, reqHeaders, 10000)];
-                    case 1:
-                        text = _a.sent();
-                        debugLog('FETCH_JSON', text ? text.substring(0, 160) : 'EMPTY');
-                        if (text && text.charAt(0) === '{') {
-                            return [2, JSON.parse(text)];
-                        }
-                        debugLog('GET_FETCH_MISS', 'bytes=' + (text ? text.length : 0));
-                        return [4, libs.request_get(url, reqHeaders)];
-                    case 2:
-                        fallback = _a.sent();
-                        if (typeof fallback === 'string') {
-                            if (fallback.charAt(0) === '{') {
-                                return [2, JSON.parse(fallback)];
-                            }
-                            if (fallback.indexOf('Not Found') >= 0) {
-                                return [2, { code: 404, info: '' }];
-                            }
-                        }
-                        if (fallback && typeof fallback === 'object') {
-                            return [2, fallback];
-                        }
-                        return [2, { code: 404, info: '' }];
+        return new Promise(function (resolve) {
+            var done = false;
+            var finished = 0;
+            function finishJson(data, via) {
+                if (done) {
+                    return true;
+                }
+                if (data && typeof data === 'object' && data.info) {
+                    done = true;
+                    debugLog('FETCH_JSON', JSON.stringify(data).substring(0, 160));
+                    resolve(data);
+                    return true;
+                }
+                if (typeof data === 'string') {
+                    if (data.charAt(0) === '{') {
+                        done = true;
+                        debugLog('FETCH_JSON', data.substring(0, 160));
+                        resolve(JSON.parse(data));
+                        return true;
+                    }
+                    if (data.indexOf('Not Found') >= 0) {
+                        done = true;
+                        resolve({ code: 404, info: '' });
+                        return true;
+                    }
+                }
+                return false;
+            }
+            function allDone() {
+                finished++;
+                if (finished >= 2 && !done) {
+                    done = true;
+                    resolve({ code: 404, info: '' });
+                }
+            }
+            console.log('[RN-Fetch][PLOYAN-GET] GET ' + url.substring(0, 160));
+            fetchWithTimeout(url, reqHeaders, 10000).then(function (text) {
+                if (!finishJson(text || '', 'fetch')) {
+                    allDone();
                 }
             });
+            libs.request_get(url, reqHeaders).then(function (data) {
+                if (!finishJson(data, 'axios') && !finishJson(normalizeResponseBody(data), 'axios')) {
+                    allDone();
+                }
+            }).catch(function () {
+                allDone();
+            });
+            setTimeout(function () {
+                if (!done) {
+                    done = true;
+                    resolve({ code: 404, info: '' });
+                }
+            }, 12000);
         });
     }
     function aesBlockEncrypt(key32, block16) {
