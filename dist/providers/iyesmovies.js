@@ -122,24 +122,40 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function requestGetWithTimeout(url, reqHeaders, timeoutMs) {
         return new Promise(function (resolve) {
             var settled = false;
+            function done(text) {
+                if (!settled) {
+                    settled = true;
+                    resolve(text || '');
+                }
+            }
             var timer = setTimeout(function () {
-                if (!settled) {
-                    settled = true;
-                    resolve('');
-                }
+                done('');
             }, timeoutMs);
+            try {
+                if (typeof axiosS !== 'undefined' && axiosS.get) {
+                    axiosS.get(url, {
+                        headers: reqHeaders || {},
+                        timeout: timeoutMs,
+                        transformResponse: [function (data) {
+                                return data;
+                            }]
+                    }).then(function (resp) {
+                        clearTimeout(timer);
+                        done(normalizeResponseBody(resp.data));
+                    }).catch(function () {
+                        clearTimeout(timer);
+                        done('');
+                    });
+                    return;
+                }
+            }
+            catch (e) { }
             libs.request_get(url, reqHeaders).then(function (data) {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timer);
-                    resolve(normalizeResponseBody(data));
-                }
+                clearTimeout(timer);
+                done(normalizeResponseBody(data));
             }).catch(function () {
-                if (!settled) {
-                    settled = true;
-                    clearTimeout(timer);
-                    resolve('');
-                }
+                clearTimeout(timer);
+                done('');
             });
         });
     }
@@ -176,55 +192,84 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             xhr.send();
         });
     }
-    function fetchTraceText(url, reqHeaders) {
-        console.log('[RN-Fetch][PLOYAN-VERSION] v6');
-        console.log('[RN-Fetch][PLOYAN-TRACE] GET ' + url);
-        return requestGetWithTimeout(url, reqHeaders, 6000).then(function (axiosText) {
-            if (axiosText && axiosText.indexOf('loc=') >= 0) {
-                console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(axiosText)['loc'] || 'MISSING') + ' via=axios');
-                return axiosText;
+    function hasTraceLoc(text) {
+        return !!(text && text.indexOf('loc=') >= 0);
+    }
+    function tryTraceOnce(url, reqHeaders, timeoutMs) {
+        return xhrGetText(url, reqHeaders, timeoutMs).then(function (xhrText) {
+            if (hasTraceLoc(xhrText)) {
+                console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(xhrText)['loc'] || 'MISSING') + ' via=xhr');
+                return xhrText;
             }
-            console.log('[RN-Fetch][PLOYAN-TRACE] axios miss bytes=' + (axiosText ? axiosText.length : 0) + ' try fetch');
-            return fetchWithTimeout(url, reqHeaders, 5000).then(function (text) {
-                if (text && text.indexOf('loc=') >= 0) {
-                    console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(text)['loc'] || 'MISSING') + ' via=fetch');
-                    return text;
+            console.log('[RN-Fetch][PLOYAN-TRACE] xhr miss bytes=' + (xhrText ? xhrText.length : 0));
+            return requestGetWithTimeout(url, reqHeaders, timeoutMs).then(function (axiosText) {
+                if (hasTraceLoc(axiosText)) {
+                    console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(axiosText)['loc'] || 'MISSING') + ' via=axios');
+                    return axiosText;
                 }
-                console.log('[RN-Fetch][PLOYAN-TRACE] xhr fallback bytes=' + (text ? text.length : 0));
-                return xhrGetText(url, reqHeaders, 4000).then(function (xhrText) {
-                    var finalText = xhrText || text || axiosText || '';
-                    if (finalText && finalText.indexOf('loc=') >= 0) {
-                        console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(finalText)['loc'] || 'MISSING') + ' via=xhr');
+                console.log('[RN-Fetch][PLOYAN-TRACE] axios miss bytes=' + (axiosText ? axiosText.length : 0));
+                return fetchWithTimeout(url, reqHeaders, timeoutMs).then(function (fetchText) {
+                    if (hasTraceLoc(fetchText)) {
+                        console.log('[RN-Fetch][PLOYAN-LOC] loc=' + (parseTrace(fetchText)['loc'] || 'MISSING') + ' via=fetch');
+                        return fetchText;
                     }
-                    else {
-                        console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING bytes=' + (finalText ? finalText.length : 0));
-                    }
-                    return finalText;
+                    console.log('[RN-Fetch][PLOYAN-TRACE] fetch miss bytes=' + (fetchText ? fetchText.length : 0));
+                    return xhrText || axiosText || fetchText || '';
                 });
             });
         });
+    }
+    function fetchTraceText(url, reqHeaders) {
+        var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
+        var timeoutMs = 4000;
+        console.log('[RN-Fetch][PLOYAN-VERSION] v7');
+        function tryNext(index) {
+            if (index >= traceUrls.length) {
+                console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
+                return Promise.resolve('');
+            }
+            var traceUrl = traceUrls[index];
+            console.log('[RN-Fetch][PLOYAN-TRACE] GET ' + traceUrl);
+            return tryTraceOnce(traceUrl, reqHeaders, timeoutMs).then(function (text) {
+                if (hasTraceLoc(text)) {
+                    debugLog('TRACE_RAW', text.substring(0, 120).replace(/\n/g, '\\n'));
+                    return text;
+                }
+                return tryNext(index + 1);
+            });
+        }
+        return tryNext(0);
     }
     function fetchText(url, reqHeaders) {
         return fetchTraceText(url, reqHeaders);
     }
     function fetchJson(url, reqHeaders) {
         console.log('[RN-Fetch][PLOYAN-GET] GET ' + url.substring(0, 160));
-        return fetchWithTimeout(url, reqHeaders, 10000).then(function (text) {
-            if (text && text.charAt(0) === '{') {
-                debugLog('FETCH_JSON', text.substring(0, 160));
-                return JSON.parse(text);
+        return requestGetWithTimeout(url, reqHeaders, 8000).then(function (axiosText) {
+            if (axiosText && axiosText.charAt(0) === '{') {
+                debugLog('FETCH_JSON', axiosText.substring(0, 160));
+                return JSON.parse(axiosText);
             }
-            if (text && text.indexOf('Not Found') >= 0) {
+            if (axiosText && axiosText.indexOf('Not Found') >= 0) {
                 return { code: 404, info: '' };
             }
-            return requestGetWithTimeout(url, reqHeaders, 8000).then(function (data) {
-                if (typeof data === 'string' && data.charAt(0) === '{') {
-                    return JSON.parse(data);
+            return xhrGetText(url, reqHeaders, 8000).then(function (xhrText) {
+                if (xhrText && xhrText.charAt(0) === '{') {
+                    return JSON.parse(xhrText);
                 }
-                if (data && typeof data === 'object') {
-                    return data;
+                if (xhrText && xhrText.indexOf('Not Found') >= 0) {
+                    return { code: 404, info: '' };
                 }
-                return { code: 404, info: '' };
+                return fetchWithTimeout(url, reqHeaders, 8000).then(function (text) {
+                    if (text && text.charAt(0) === '{') {
+                        debugLog('FETCH_JSON', text.substring(0, 160));
+                        return JSON.parse(text);
+                    }
+                    if (text && text.indexOf('Not Found') >= 0) {
+                        return { code: 404, info: '' };
+                    }
+                    return { code: 404, info: '' };
+                });
             });
         });
     }
