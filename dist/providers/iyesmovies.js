@@ -251,7 +251,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v11');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v12');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -409,13 +409,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     }
     function gcmLengthBlock(aBits, cBits) {
         var b = new Uint8Array(16);
-        var i = void 0;
-        for (i = 0; i < 8; i++) {
-            b[7 - i] = (aBits >>> (i * 8)) & 0xff;
-        }
-        for (i = 0; i < 8; i++) {
-            b[15 - i] = (cBits >>> (i * 8)) & 0xff;
-        }
+        b[7] = aBits & 0xff;
+        b[6] = (aBits >>> 8) & 0xff;
+        b[5] = (aBits >>> 16) & 0xff;
+        b[4] = (aBits >>> 24) & 0xff;
+        b[15] = cBits & 0xff;
+        b[14] = (cBits >>> 8) & 0xff;
+        b[13] = (cBits >>> 16) & 0xff;
+        b[12] = (cBits >>> 24) & 0xff;
         return b;
     }
     function gcmInc32(block) {
@@ -507,7 +508,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var plainBytes = utf8Encode(plain);
         debugLog('HASH_PLAIN', plain);
         var salt = getRandomBytes(8);
-        var saltWordArray = cryptoS.lib.WordArray.create(Array.prototype.slice.call(salt));
+        var saltWordArray = bytesToSaltWordArray(salt);
         var iv = getRandomBytes(12);
         var keyBytes = deriveAesKeyBytes(loc, saltWordArray);
         var ctWithTag = gcmEncrypt(keyBytes, iv, plainBytes);
@@ -556,6 +557,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         return Array.from(bytes).map(function (b) {
             return ('0' + b.toString(16)).slice(-2);
         }).join('');
+    }
+    function bytesToSaltWordArray(bytes) {
+        return cryptoS.enc.Hex.parse(bytesToHex(bytes));
     }
     function importKey(format, keyData, algorithm, extractable, keyUsages) {
         return __awaiter(this, void 0, void 0, function () {
@@ -763,6 +767,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         debugLog('HASH_SUBTLE_FAIL', String(err_1 && err_1.message ? err_1.message : err_1));
                         _a.label = 4;
                     case 4:
+                        if (cryptoS.mode && cryptoS.mode.GCM) {
+                            return [3, 5];
+                        }
                         if (cryptoS && cryptoS.AES) {
                             pureHash = generateGetHashPureSafe(loc, mid, ei, sv);
                             if (pureHash) {
@@ -770,22 +777,16 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                                 return [2, pureHash];
                             }
                         }
-                        if (cryptoS.mode && cryptoS.mode.GCM) {
-                            _a.label = 5;
-                        }
-                        else {
-                            debugLog('HASH_ABORT', 'no GCM crypto available');
-                            console.log('[RN-Fetch][PLOYAN-ERR] no GCM crypto available');
-                            return [2, ''];
-                        }
-                        _a.label = 5;
+                        debugLog('HASH_ABORT', 'no GCM crypto available');
+                        console.log('[RN-Fetch][PLOYAN-ERR] no GCM crypto available');
+                        return [2, ''];
                     case 5:
                         _a.trys.push([5, 8, , 9]);
                         ts = Math.floor((new Date()).getTime() / 1000);
                         plain = mid + "+" + ei + "+" + sv + "+" + ts;
                         plainWordArray = cryptoS.enc.Utf8.parse(plain);
                         saltBytes = getRandomValues(8);
-                        saltWordArray = cryptoS.lib.WordArray.create(Array.prototype.slice.call(saltBytes));
+                        saltWordArray = bytesToSaltWordArray(saltBytes);
                         saltHex = bytesToHex(saltBytes);
                         iv = getRandomValues(12);
                         keyBytes = deriveAesKeyBytes(loc, saltWordArray);
@@ -806,7 +807,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         debugLog('HASH_FAIL', String(err_1 && err_1.message ? err_1.message : err_1));
                         if (cryptoS && cryptoS.AES) {
                             debugLog('HASH_PURE', 'cryptoJS GCM failed, retry pure GCM');
-                            return [2, generateGetHashPureSafe(loc, mid, ei, sv)];
+                            pureHash = generateGetHashPureSafe(loc, mid, ei, sv);
+                            if (pureHash) {
+                                debugLog('HASH_PURE_OK', pureHash.substring(0, 80));
+                                return [2, pureHash];
+                            }
                         }
                         console.log('[RN-Fetch][PLOYAN-ERR] HASH_FAIL ' + String(err_1 && err_1.message ? err_1.message : err_1));
                         return [2, ''];
