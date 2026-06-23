@@ -222,7 +222,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v8');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v9');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -248,26 +248,38 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         return requestGetWithTimeout(url, reqHeaders, 8000).then(function (axiosText) {
             if (axiosText && axiosText.charAt(0) === '{') {
                 debugLog('FETCH_JSON', axiosText.substring(0, 160));
+                console.log('[RN-Fetch][PLOYAN-GET-RESP] ' + axiosText.substring(0, 200));
                 return JSON.parse(axiosText);
             }
             if (axiosText && axiosText.indexOf('Not Found') >= 0) {
+                debugLog('FETCH_JSON_404', axiosText.substring(0, 80));
+                console.log('[RN-Fetch][PLOYAN-GET-404] Not Found');
                 return { code: 404, info: '' };
             }
             return xhrGetText(url, reqHeaders, 8000).then(function (xhrText) {
                 if (xhrText && xhrText.charAt(0) === '{') {
+                    debugLog('FETCH_JSON', xhrText.substring(0, 160));
+                    console.log('[RN-Fetch][PLOYAN-GET-RESP] ' + xhrText.substring(0, 200));
                     return JSON.parse(xhrText);
                 }
                 if (xhrText && xhrText.indexOf('Not Found') >= 0) {
+                    debugLog('FETCH_JSON_404', xhrText.substring(0, 80));
+                    console.log('[RN-Fetch][PLOYAN-GET-404] Not Found');
                     return { code: 404, info: '' };
                 }
                 return fetchWithTimeout(url, reqHeaders, 8000).then(function (text) {
                     if (text && text.charAt(0) === '{') {
                         debugLog('FETCH_JSON', text.substring(0, 160));
+                        console.log('[RN-Fetch][PLOYAN-GET-RESP] ' + text.substring(0, 200));
                         return JSON.parse(text);
                     }
                     if (text && text.indexOf('Not Found') >= 0) {
+                        debugLog('FETCH_JSON_404', text.substring(0, 80));
+                        console.log('[RN-Fetch][PLOYAN-GET-404] Not Found');
                         return { code: 404, info: '' };
                     }
+                    debugLog('FETCH_JSON_EMPTY', String(text).substring(0, 80));
+                    console.log('[RN-Fetch][PLOYAN-GET-EMPTY] ' + String(text).substring(0, 80));
                     return { code: 404, info: '' };
                 });
             });
@@ -464,12 +476,12 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var ts = Math.floor((new Date()).getTime() / 1000);
         var plain = mid + "+" + ei + "+" + sv + "+" + ts;
         var plainBytes = utf8Encode(plain);
-        var saltBytes = getRandomBytes(8);
-        var saltWordArray = cryptoS.lib.WordArray.create(Array.prototype.slice.call(saltBytes));
-        var keyBytes = deriveAesKeyBytes(loc, saltWordArray);
+        debugLog('HASH_PLAIN', plain);
+        var plainWordArray = cryptoS.lib.WordArray.create(Array.prototype.slice.call(plainBytes));
+        var keyBytes = deriveAesKeyBytes(loc, plainWordArray);
         var iv = getRandomBytes(12);
         var ctWithTag = gcmEncrypt(keyBytes, iv, plainBytes);
-        return bytesToHex(saltBytes) + "-" + bytesToHex(iv) + "-" + bytesToHex(ctWithTag);
+        return bytesToHex(plainBytes) + "-" + bytesToHex(iv) + "-" + bytesToHex(ctWithTag);
     }
     function decryptInfoPure(loc, infoToken) {
         var parts = infoToken.split('-');
@@ -637,7 +649,6 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         }
                         ts = Math.floor((new Date()).getTime() / 1000);
                         plain = mid + "+" + ei + "+" + sv + "+" + ts;
-                        saltBytes = getRandomBytes(8);
                         plainBytes = utf8Encode(plain);
                         passwordBytes = utf8Encode(loc);
                         return [4, subtle.importKey('raw', passwordBytes, 'PBKDF2', false, ['deriveKey'])];
@@ -645,7 +656,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         baseKey = _a.sent();
                         return [4, subtle.deriveKey({
                                 name: 'PBKDF2',
-                                salt: saltBytes,
+                                salt: plainBytes,
                                 iterations: 1000,
                                 hash: 'SHA-256'
                             }, baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt'])];
@@ -655,7 +666,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         return [4, subtle.encrypt({ name: 'AES-GCM', iv: iv }, aesKey, plainBytes)];
                     case 3:
                         ct = _a.sent();
-                        saltHex = bytesToHex(saltBytes);
+                        saltHex = bytesToHex(plainBytes);
                         ivHex = bytesToHex(iv);
                         ctHex = bytesToHex(new Uint8Array(ct));
                         return [2, saltHex + "-" + ivHex + "-" + ctHex];
@@ -741,12 +752,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         _a.trys.push([5, 8, , 9]);
                         ts = Math.floor((new Date()).getTime() / 1000);
                         plain = mid + "+" + ei + "+" + sv + "+" + ts;
-                        saltBytes = getRandomBytes(8);
-                        saltWordArray = cryptoS.lib.WordArray.create(Array.prototype.slice.call(saltBytes));
                         plainWordArray = cryptoS.enc.Utf8.parse(plain);
-                        saltHex = bytesToHex(saltBytes);
+                        saltHex = bytesToHex(wordArrayToUint8Array(plainWordArray));
                         iv = getRandomValues(12);
-                        keyBytes = deriveAesKeyBytes(loc, saltWordArray);
+                        keyBytes = deriveAesKeyBytes(loc, plainWordArray);
                         alg = { name: 'AES', iv: iv };
                         return [4, importKey('raw', keyBytes, alg, false, ['encrypt'])];
                     case 6:
