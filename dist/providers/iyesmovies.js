@@ -257,15 +257,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function openPloyanWebView(watchEmbedUrl, urix, mid, eid, sv, movieInfo, callback, streamHeaders, yesDetailUrl) {
         var watchBase = String(watchEmbedUrl || '').split('#')[0];
         var yesReferer = yesDetailUrl || 'https://ww.yesmovies.ag/';
-        console.log('[RN-Fetch][PLOYAN-WEBVIEW] yes=' + yesReferer.substring(0, 80) + ' watch=' + watchBase);
+        console.log('[RN-Fetch][PLOYAN-WEBVIEW] watch=' + watchBase + ' ref=' + yesReferer.substring(0, 80));
         if (hosts && hosts['ployan']) {
-            hosts['ployan'](yesDetailUrl || watchBase, movieInfo || {}, PROVIDER, {
+            hosts['ployan'](watchBase, movieInfo || {}, PROVIDER, {
                 urix: urix,
                 mid: mid,
                 eid: eid,
                 sv: sv,
                 yesReferer: yesReferer,
-                yesDetailUrl: yesDetailUrl || '',
                 watchUrl: watchBase
             }, callback);
             return;
@@ -364,7 +363,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v24');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v25');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
