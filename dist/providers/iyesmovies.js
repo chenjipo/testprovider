@@ -222,7 +222,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v7');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v8');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -273,81 +273,89 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
+    function getEcbMode() {
+        if (cryptoS.mode && cryptoS.mode.ECB) {
+            return cryptoS.mode.ECB;
+        }
+        if (!cryptoS._iyesEcbMode) {
+            cryptoS._iyesEcbMode = {
+                encryptBlock: function (words, offset) {
+                    this._cipher.encryptBlock(words, offset);
+                },
+                decryptBlock: function (words, offset) {
+                    this._cipher.decryptBlock(words, offset);
+                }
+            };
+        }
+        return cryptoS._iyesEcbMode;
+    }
     function aesBlockEncrypt(key32, block16) {
         var keyWa = cryptoS.lib.WordArray.create(Array.prototype.slice.call(key32));
         var blockWa = cryptoS.lib.WordArray.create(Array.prototype.slice.call(block16));
         var encrypted = cryptoS.AES.encrypt(blockWa, keyWa, {
-            mode: cryptoS.mode.ECB,
+            mode: getEcbMode(),
             padding: cryptoS.pad.NoPadding
         });
         return wordArrayToUint8Array(encrypted.ciphertext);
     }
-    function hasBigIntSupport() {
-        try {
-            return typeof BigInt !== 'undefined' && BigInt(1) === BigInt(1);
-        }
-        catch (e) {
-            return false;
-        }
-    }
-    function bytesToBigInt128(bytes) {
-        var result = BigInt(0);
-        var i = void 0;
-        for (i = 0; i < bytes.length; i++) {
-            result = (result << BigInt(8)) | BigInt(bytes[i]);
-        }
-        return result;
-    }
-    function bigInt128ToBytes(value) {
+    function xorBytes16(a, b) {
         var out = new Uint8Array(16);
-        var n = value;
         var i = void 0;
-        for (i = 15; i >= 0; i--) {
-            out[i] = Number(n & BigInt(255));
-            n >>= BigInt(8);
+        for (i = 0; i < 16; i++) {
+            out[i] = a[i] ^ b[i];
         }
         return out;
     }
-    function ghashMul128(x, y) {
-        var z = BigInt(0);
-        var v = y;
-        var r = BigInt(225) << BigInt(120);
+    function shiftRightGf128(v) {
+        var lsb = v[15] & 1;
+        var j = void 0;
+        for (j = 15; j > 0; j--) {
+            v[j] = (v[j] >>> 1) | ((v[j - 1] & 1) << 7);
+        }
+        v[0] >>>= 1;
+        return lsb;
+    }
+    function ghashMul128Bytes(x, y) {
+        var z = new Uint8Array(16);
+        var v = y.slice();
+        var r = new Uint8Array(16);
         var i = void 0;
+        var j = void 0;
+        var lsb = void 0;
+        r[0] = 0xe1;
         for (i = 0; i < 128; i++) {
-            if ((x >> BigInt(127 - i)) & BigInt(1)) {
-                z ^= v;
+            if ((x[i >>> 3] >>> (7 - (i & 7))) & 1) {
+                for (j = 0; j < 16; j++) {
+                    z[j] ^= v[j];
+                }
             }
-            if (v & BigInt(1)) {
-                v = (v >> BigInt(1)) ^ r;
-            }
-            else {
-                v >>= BigInt(1);
+            lsb = shiftRightGf128(v);
+            if (lsb) {
+                for (j = 0; j < 16; j++) {
+                    v[j] ^= r[j];
+                }
             }
         }
         return z;
     }
-    function ghashBlocks(hBytes, xBig, data) {
-        var hBig = bytesToBigInt128(hBytes);
+    function ghashBlocksBytes(hBytes, xBytes, data) {
+        var x = xBytes.slice();
         var offset = void 0;
         var block = void 0;
-        var i = void 0;
         for (offset = 0; offset < data.length; offset += 16) {
             block = new Uint8Array(16);
             block.set(data.subarray(offset, offset + 16));
-            xBig ^= bytesToBigInt128(block);
-            xBig = ghashMul128(xBig, hBig);
+            x = xorBytes16(x, block);
+            x = ghashMul128Bytes(x, hBytes);
         }
-        return xBig;
+        return x;
     }
     function gcmGhash(h, a, c) {
-        if (!hasBigIntSupport()) {
-            throw new Error('BigInt is not available for GHASH');
-        }
-        var xBig = BigInt(0);
-        xBig = ghashBlocks(h, xBig, gcmPad16(a));
-        xBig = ghashBlocks(h, xBig, gcmPad16(c));
-        xBig = ghashBlocks(h, xBig, gcmLengthBlock(a.length * 8, c.length * 8));
-        return bigInt128ToBytes(xBig);
+        var x = new Uint8Array(16);
+        x = ghashBlocksBytes(h, x, gcmPad16(a));
+        x = ghashBlocksBytes(h, x, gcmPad16(c));
+        x = ghashBlocksBytes(h, x, gcmLengthBlock(a.length * 8, c.length * 8));
+        return x;
     }
     function gcmPad16(data) {
         var rem = data.length % 16;
@@ -691,7 +699,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     }
     function generateGetHash(loc, mid, ei, sv) {
         return __awaiter(this, void 0, void 0, function () {
-            var subtleHash, ts, plain, saltBytes, saltWordArray, saltHex, plainWordArray, iv, alg, keyBytes, key, ptUint8, ctBuffer, ivHex, ctHex, err_1;
+            var subtleHash, pureHash, ts, plain, saltBytes, saltWordArray, saltHex, plainWordArray, iv, alg, keyBytes, key, ptUint8, ctBuffer, ivHex, ctHex, err_1;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -713,15 +721,18 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         debugLog('HASH_SUBTLE_FAIL', String(err_1 && err_1.message ? err_1.message : err_1));
                         _a.label = 4;
                     case 4:
+                        if (cryptoS && cryptoS.AES) {
+                            pureHash = generateGetHashPureSafe(loc, mid, ei, sv);
+                            if (pureHash) {
+                                debugLog('HASH_PURE_OK', pureHash.substring(0, 80));
+                                return [2, pureHash];
+                            }
+                        }
                         if (cryptoS.mode && cryptoS.mode.GCM) {
                             _a.label = 5;
                         }
-                        else if (hasBigIntSupport() && cryptoS.mode && cryptoS.mode.ECB) {
-                            debugLog('HASH_PURE', 'GCM mode missing, using pure GCM');
-                            return [2, generateGetHashPureSafe(loc, mid, ei, sv)];
-                        }
                         else {
-                            debugLog('HASH_ABORT', 'no GCM and no pure fallback');
+                            debugLog('HASH_ABORT', 'no GCM crypto available');
                             console.log('[RN-Fetch][PLOYAN-ERR] no GCM crypto available');
                             return [2, ''];
                         }
@@ -751,8 +762,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     case 8:
                         err_1 = _a.sent();
                         debugLog('HASH_FAIL', String(err_1 && err_1.message ? err_1.message : err_1));
-                        if (hasBigIntSupport() && cryptoS.mode && cryptoS.mode.ECB) {
-                            debugLog('HASH_PURE', 'cryptoJS failed, using pure GCM');
+                        if (cryptoS && cryptoS.AES) {
+                            debugLog('HASH_PURE', 'cryptoJS GCM failed, retry pure GCM');
                             return [2, generateGetHashPureSafe(loc, mid, ei, sv)];
                         }
                         console.log('[RN-Fetch][PLOYAN-ERR] HASH_FAIL ' + String(err_1 && err_1.message ? err_1.message : err_1));
