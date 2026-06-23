@@ -47,7 +47,7 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                 return [2];
             }
             if (data.step) {
-                console.log('[RN-Fetch][PLOYAN-STEP] ' + data.step + (data.loc ? ' loc=' + data.loc : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.error ? ' err=' + data.error : ''));
+                console.log('[RN-Fetch][PLOYAN-STEP] ' + data.step + (data.loc ? ' loc=' + data.loc : '') + (data.plain ? ' plain=' + data.plain : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.error ? ' err=' + data.error : ''));
                 return [2];
             }
             if (data.error) {
