@@ -251,7 +251,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v13');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v14');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -272,47 +272,62 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchText(url, reqHeaders) {
         return fetchTraceText(url, reqHeaders);
     }
+    function parseJsonResponse(text, via) {
+        if (text && text.charAt(0) === '{') {
+            debugLog('FETCH_JSON', via + '|' + text.substring(0, 160));
+            console.log('[RN-Fetch][PLOYAN-GET-RESP] via=' + via + ' ' + text.substring(0, 200));
+            return JSON.parse(text);
+        }
+        return null;
+    }
     function fetchJson(url, reqHeaders) {
         console.log('[RN-Fetch][PLOYAN-GET] GET ' + url.substring(0, 160));
-        return requestGetWithTimeout(url, reqHeaders, 8000).then(function (axiosText) {
-            if (axiosText && axiosText.charAt(0) === '{') {
-                debugLog('FETCH_JSON', axiosText.substring(0, 160));
-                console.log('[RN-Fetch][PLOYAN-GET-RESP] ' + axiosText.substring(0, 200));
-                return JSON.parse(axiosText);
+        return xhrGetText(url, reqHeaders, 8000).then(function (xhrText) {
+            var parsed = parseJsonResponse(xhrText, 'xhr');
+            if (parsed) {
+                return parsed;
             }
-            if (axiosText && axiosText.indexOf('Not Found') >= 0) {
-                debugLog('FETCH_JSON_404', axiosText.substring(0, 80));
-                console.log('[RN-Fetch][PLOYAN-GET-404] Not Found');
-                return { code: 404, info: '' };
-            }
-            return xhrGetText(url, reqHeaders, 8000).then(function (xhrText) {
-                if (xhrText && xhrText.charAt(0) === '{') {
-                    debugLog('FETCH_JSON', xhrText.substring(0, 160));
-                    console.log('[RN-Fetch][PLOYAN-GET-RESP] ' + xhrText.substring(0, 200));
-                    return JSON.parse(xhrText);
+            console.log('[RN-Fetch][PLOYAN-GET] xhr miss bytes=' + (xhrText ? xhrText.length : 0));
+            return requestGetWithTimeout(url, reqHeaders, 8000).then(function (axiosText) {
+                parsed = parseJsonResponse(axiosText, 'axios');
+                if (parsed) {
+                    return parsed;
                 }
-                if (xhrText && xhrText.indexOf('Not Found') >= 0) {
-                    debugLog('FETCH_JSON_404', xhrText.substring(0, 80));
-                    console.log('[RN-Fetch][PLOYAN-GET-404] Not Found');
-                    return { code: 404, info: '' };
-                }
-                return fetchWithTimeout(url, reqHeaders, 8000).then(function (text) {
-                    if (text && text.charAt(0) === '{') {
-                        debugLog('FETCH_JSON', text.substring(0, 160));
-                        console.log('[RN-Fetch][PLOYAN-GET-RESP] ' + text.substring(0, 200));
-                        return JSON.parse(text);
+                console.log('[RN-Fetch][PLOYAN-GET] axios miss bytes=' + (axiosText ? axiosText.length : 0));
+                return fetchWithTimeout(url, reqHeaders, 8000).then(function (fetchText) {
+                    parsed = parseJsonResponse(fetchText, 'fetch');
+                    if (parsed) {
+                        return parsed;
                     }
-                    if (text && text.indexOf('Not Found') >= 0) {
-                        debugLog('FETCH_JSON_404', text.substring(0, 80));
+                    var lastText = xhrText || axiosText || fetchText || '';
+                    if (lastText && lastText.indexOf('Not Found') >= 0) {
+                        debugLog('FETCH_JSON_404', 'Not Found');
                         console.log('[RN-Fetch][PLOYAN-GET-404] Not Found');
                         return { code: 404, info: '' };
                     }
-                    debugLog('FETCH_JSON_EMPTY', String(text).substring(0, 80));
-                    console.log('[RN-Fetch][PLOYAN-GET-EMPTY] ' + String(text).substring(0, 80));
+                    debugLog('FETCH_JSON_EMPTY', String(lastText).substring(0, 80));
+                    console.log('[RN-Fetch][PLOYAN-GET-EMPTY] ' + String(lastText).substring(0, 80));
                     return { code: 404, info: '' };
                 });
             });
         });
+    }
+    function parseEpisodeDataId(html, episodeNum, serverId) {
+        var episodePattern = String(episodeNum);
+        var serverPattern = String(serverId || 1);
+        var patterns = [
+            new RegExp('id=ep-' + episodePattern + '(?:[^>]*data-server=' + serverPattern + '[^>]*data-id=([0-9]+)|data-server=' + serverPattern + '[^>]*data-id=([0-9]+))', 'i'),
+            new RegExp('data-server=' + serverPattern + '[^>]*data-id=([0-9]+)[^>]*id=ep-' + episodePattern, 'i')
+        ];
+        var i = void 0;
+        var match = void 0;
+        for (i = 0; i < patterns.length; i++) {
+            match = html.match(patterns[i]);
+            if (match) {
+                return match[1] || match[2] || episodePattern;
+            }
+        }
+        return episodePattern;
     }
     function getEcbMode() {
         if (cryptoS.mode && cryptoS.mode.ECB) {
@@ -987,11 +1002,18 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     console.log('[RN-Fetch][PLOYAN-ERR] ABORT missing parseURL or loc');
                     return [2];
                 }
-                console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' loc=' + loc + ' mid=' + id + ' eid=' + (movieInfo.type == 'movie' ? 1 : movieInfo.episode));
-                streamHeaders = Object.assign({}, headers, { referer: "".concat(parseURL, "/") });
                 sv = 1;
                 eid = movieInfo.type == 'movie' ? 1 : movieInfo.episode;
+                if (movieInfo.type == 'tv') {
+                    eid = parseEpisodeDataId(textHtml, movieInfo.episode, sv);
+                }
                 mid = id;
+                streamHeaders = Object.assign({}, headers, {
+                    referer: "".concat(parseURL, "/watch/?v").concat(sv).concat(eid),
+                    origin: parseURL
+                });
+                debugLog('EP_PARAMS', 'mid=' + mid + ' eid=' + eid + ' sv=' + sv);
+                console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' loc=' + loc + ' mid=' + mid + ' eid=' + eid + ' sv=' + sv);
                 console.log('[RN-Fetch][PLOYAN-HASH] generating hash...');
                 return [4, generateGetHash(loc, mid, eid, sv)];
             case 5:
