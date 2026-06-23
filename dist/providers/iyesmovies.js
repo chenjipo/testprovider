@@ -254,15 +254,17 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             throw err;
         });
     }
-    function openPloyanWebView(watchEmbedUrl, urix, callback, streamHeaders) {
-        var baseUrl = watchEmbedUrl.indexOf('#') >= 0 ? watchEmbedUrl.split('#')[0] : watchEmbedUrl;
-        var opts = {};
-        if (urix) {
-            var safeUrix = urix.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
-            opts.beforeLoadScript = "(function(){try{var u='" + safeUrix + "';if(u&&(!location.hash||location.hash.length<3)){history.replaceState(null,'',location.pathname+location.search+'#'+u);}}catch(e){}})();";
+    function openPloyanWebView(watchEmbedUrl, urix, movieInfo, callback, streamHeaders) {
+        var loadUrl = watchEmbedUrl;
+        if (urix && loadUrl.indexOf('#') < 0) {
+            loadUrl = loadUrl + '#' + urix;
         }
-        console.log('[RN-Fetch][PLOYAN-WEBVIEW] ' + baseUrl + (urix ? ' urix=' + urix.substring(0, 24) : ''));
-        libs.embed_callback(baseUrl, PROVIDER, PROVIDER, '', callback, 1, [], [], streamHeaders, opts);
+        console.log('[RN-Fetch][PLOYAN-WEBVIEW] ' + loadUrl.substring(0, 120));
+        if (hosts && hosts['ployan']) {
+            hosts['ployan'](loadUrl, movieInfo || {}, PROVIDER, { urix: urix }, callback);
+            return;
+        }
+        libs.embed_redirect(loadUrl, '', movieInfo, PROVIDER, callback, PROVIDER, [], streamHeaders, { urix: urix });
     }
     function xhrGetText(url, reqHeaders, timeoutMs) {
         return new Promise(function (resolve) {
@@ -356,7 +358,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v21');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v22');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1149,7 +1151,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!parseURL || !loc) {
                     debugLog('LOC_EMPTY', 'embed fallback');
                     console.log('[RN-Fetch][PLOYAN-EMBED] no loc fallback');
-                    openPloyanWebView(watchEmbedUrl, watchUrix, callback, streamHeaders);
+                    openPloyanWebView(watchEmbedUrl, watchUrix, movieInfo, callback, streamHeaders);
                     return [2];
                 }
                 hashTs = Math.floor((new Date()).getTime() / 1000);
@@ -1166,7 +1168,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!deHash) {
                     debugLog('HASH_EMPTY', 'embed fallback');
                     console.log('[RN-Fetch][PLOYAN-EMBED] hash empty fallback');
-                    openPloyanWebView(watchEmbedUrl, watchUrix, callback, streamHeaders);
+                    openPloyanWebView(watchEmbedUrl, watchUrix, movieInfo, callback, streamHeaders);
                     return [2];
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
@@ -1187,7 +1189,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 debugLog('GET_FALLBACK', 'embed watch url');
                 console.log('[RN-Fetch][PLOYAN-EMBED] fallback ' + watchEmbedUrl.substring(0, 140));
-                openPloyanWebView(watchEmbedUrl, watchUrix, callback, streamHeaders);
+                openPloyanWebView(watchEmbedUrl, watchUrix, movieInfo, callback, streamHeaders);
                 return [2];
             case 10:
                 return [2];
@@ -1198,7 +1200,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ e: e_1, message: e_1 && e_1.message ? e_1.message : e_1 }, PROVIDER, 'ERROR CATCH');
                 if (watchEmbedUrl) {
                     console.log('[RN-Fetch][PLOYAN-EMBED] error fallback');
-                    openPloyanWebView(watchEmbedUrl, watchUrix, callback, streamHeaders);
+                    openPloyanWebView(watchEmbedUrl, watchUrix, movieInfo, callback, streamHeaders);
                 }
                 return [2, true];
             case 12:

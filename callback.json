@@ -9,6 +9,7 @@
     "dist/callbacks/playm4u.js",
     "dist/callbacks/wsoap2day.js",
     "dist/callbacks/vidplay.js",
-    "dist/callbacks/smashystream.js"
+    "dist/callbacks/smashystream.js",
+    "dist/callbacks/ployan.js"
   ]
 }

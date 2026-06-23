@@ -28,6 +28,7 @@
     "dist/hosts/turbovid.js",
     "dist/hosts/e.moviplus.js",
     "dist/hosts/player.smashy.js",
-    "dist/hosts/streamwish.js"
+    "dist/hosts/streamwish.js",
+    "dist/hosts/ployan.js"
   ]
 }
