@@ -251,7 +251,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v10');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v11');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -506,11 +506,12 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var plain = mid + "+" + ei + "+" + sv + "+" + ts;
         var plainBytes = utf8Encode(plain);
         debugLog('HASH_PLAIN', plain);
-        var plainWordArray = cryptoS.lib.WordArray.create(Array.prototype.slice.call(plainBytes));
-        var keyBytes = deriveAesKeyBytes(loc, plainWordArray);
+        var salt = getRandomBytes(8);
+        var saltWordArray = cryptoS.lib.WordArray.create(Array.prototype.slice.call(salt));
         var iv = getRandomBytes(12);
+        var keyBytes = deriveAesKeyBytes(loc, saltWordArray);
         var ctWithTag = gcmEncrypt(keyBytes, iv, plainBytes);
-        return bytesToHex(plainBytes) + "-" + bytesToHex(iv) + "-" + bytesToHex(ctWithTag);
+        return bytesToHex(salt) + "-" + bytesToHex(iv) + "-" + bytesToHex(ctWithTag);
     }
     function decryptInfoPure(loc, infoToken) {
         var parts = infoToken.split('-');
@@ -668,7 +669,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     }
     function generateGetHashSubtle(loc, mid, ei, sv) {
         return __awaiter(this, void 0, void 0, function () {
-            var subtle, ts, plain, saltBytes, plainBytes, passwordBytes, baseKey, aesKey, iv, ct, ctHex, ivHex, saltHex;
+            var subtle, ts, plain, plainBytes, passwordBytes, saltBytes, baseKey, aesKey, iv, ct, ctHex, ivHex, saltHex;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -680,12 +681,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         plain = mid + "+" + ei + "+" + sv + "+" + ts;
                         plainBytes = utf8Encode(plain);
                         passwordBytes = utf8Encode(loc);
+                        saltBytes = getRandomBytes(8);
                         return [4, subtle.importKey('raw', passwordBytes, 'PBKDF2', false, ['deriveKey'])];
                     case 1:
                         baseKey = _a.sent();
                         return [4, subtle.deriveKey({
                                 name: 'PBKDF2',
-                                salt: plainBytes,
+                                salt: saltBytes,
                                 iterations: 1000,
                                 hash: 'SHA-256'
                             }, baseKey, { name: 'AES-GCM', length: 256 }, false, ['encrypt'])];
@@ -695,7 +697,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         return [4, subtle.encrypt({ name: 'AES-GCM', iv: iv }, aesKey, plainBytes)];
                     case 3:
                         ct = _a.sent();
-                        saltHex = bytesToHex(plainBytes);
+                        saltHex = bytesToHex(saltBytes);
                         ivHex = bytesToHex(iv);
                         ctHex = bytesToHex(new Uint8Array(ct));
                         return [2, saltHex + "-" + ivHex + "-" + ctHex];
@@ -782,9 +784,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         ts = Math.floor((new Date()).getTime() / 1000);
                         plain = mid + "+" + ei + "+" + sv + "+" + ts;
                         plainWordArray = cryptoS.enc.Utf8.parse(plain);
-                        saltHex = bytesToHex(wordArrayToUint8Array(plainWordArray));
+                        saltBytes = getRandomValues(8);
+                        saltWordArray = cryptoS.lib.WordArray.create(Array.prototype.slice.call(saltBytes));
+                        saltHex = bytesToHex(saltBytes);
                         iv = getRandomValues(12);
-                        keyBytes = deriveAesKeyBytes(loc, plainWordArray);
+                        keyBytes = deriveAesKeyBytes(loc, saltWordArray);
                         alg = { name: 'AES', iv: iv };
                         return [4, importKey('raw', keyBytes, alg, false, ['encrypt'])];
                     case 6:
