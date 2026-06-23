@@ -44,6 +44,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         }
         catch (e) { }
     }
+    function buildPloyanHeaders(userAgent) {
+        return {
+            'user-agent': userAgent,
+            'accept': '*/*',
+            'accept-encoding': 'gzip, deflate',
+        };
+    }
     function parseTrace(text) {
         var result = {};
         if (!text) {
@@ -159,6 +166,69 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
+    function xhrPostText(url, body, reqHeaders, timeoutMs) {
+        return new Promise(function (resolve) {
+            var xhr = void 0;
+            var timer = void 0;
+            if (typeof XMLHttpRequest === 'undefined') {
+                resolve('');
+                return;
+            }
+            xhr = new XMLHttpRequest();
+            timer = setTimeout(function () {
+                try {
+                    xhr.abort();
+                }
+                catch (e) { }
+                resolve('');
+            }, timeoutMs);
+            xhr.onreadystatechange = function () {
+                if (xhr.readyState === 4) {
+                    clearTimeout(timer);
+                    resolve(xhr.responseText || '');
+                }
+            };
+            xhr.onerror = function () {
+                clearTimeout(timer);
+                resolve('');
+            };
+            xhr.open('POST', url, true);
+            xhr.setRequestHeader('Content-Type', 'application/json');
+            Object.keys(reqHeaders || {}).forEach(function (key) {
+                xhr.setRequestHeader(key, reqHeaders[key]);
+            });
+            xhr.send(body);
+        });
+    }
+    function fetchDatasToken(mid, eid, sv, reqHeaders) {
+        var datasUrl = 'https://ww2.yesmovies.ag/datas';
+        var body = JSON.stringify({ m: mid, e: String(eid), s: String(sv) });
+        console.log('[RN-Fetch][YESMOVIES-DATAS] POST ' + datasUrl + ' body=' + body);
+        return xhrPostText(datasUrl, body, reqHeaders, 8000).then(function (text) {
+            if (text && text.charAt(0) === '{') {
+                try {
+                    var obj = JSON.parse(text);
+                    debugLog('DATAS_RESP', (text || '').substring(0, 120));
+                    console.log('[RN-Fetch][YESMOVIES-DATAS] ok ' + (text || '').substring(0, 120));
+                    return obj;
+                }
+                catch (e) { }
+            }
+            debugLog('DATAS_EMPTY', String(text).substring(0, 80));
+            console.log('[RN-Fetch][YESMOVIES-DATAS] miss ' + String(text).substring(0, 80));
+            return null;
+        });
+    }
+    function warmPloyanWatch(parseURL, sv, eid, token, reqHeaders) {
+        var watchUrl = token
+            ? "".concat(parseURL, "/watch?v=").concat(token)
+            : "".concat(parseURL, "/watch/?v").concat(sv).concat(eid);
+        console.log('[RN-Fetch][PLOYAN-WATCH] GET ' + watchUrl);
+        return xhrGetText(watchUrl, reqHeaders, 6000).then(function (text) {
+            console.log('[RN-Fetch][PLOYAN-WATCH] bytes=' + (text ? text.length : 0));
+            return text || '';
+        });
+    }
     function xhrGetText(url, reqHeaders, timeoutMs) {
         return new Promise(function (resolve) {
             var xhr = void 0;
@@ -251,7 +321,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v15');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v17');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -299,7 +369,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     if (parsed) {
                         return parsed;
                     }
-                    var lastText = xhrText || axiosText || fetchText || '';
+                    console.log('[RN-Fetch][PLOYAN-GET] fetch miss bytes=' + (fetchText ? fetchText.length : 0));
+                    return libs.request_get(url, reqHeaders).then(function (libsText) {
+                        parsed = parseJsonResponse(typeof libsText === 'string' ? libsText : JSON.stringify(libsText || ''), 'libs');
+                        if (parsed) {
+                            return parsed;
+                        }
+                        var lastText = xhrText || axiosText || fetchText || String(libsText || '');
                     if (lastText && lastText.indexOf('Not Found') >= 0) {
                         debugLog('FETCH_JSON_404', 'Not Found');
                         console.log('[RN-Fetch][PLOYAN-GET-404] Not Found');
@@ -308,6 +384,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     debugLog('FETCH_JSON_EMPTY', String(lastText).substring(0, 80));
                     console.log('[RN-Fetch][PLOYAN-GET-EMPTY] ' + String(lastText).substring(0, 80));
                     return { code: 404, info: '' };
+                    });
                 });
             });
         });
@@ -516,9 +593,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         }
         return gcmGctr(key, j0, c);
     }
-    function generateGetHashPureSafe(loc, mid, ei, sv) {
+    function generateGetHashPureSafe(loc, mid, ei, sv, tsOverride) {
         try {
-            return generateGetHashPure(loc, mid, ei, sv);
+            return generateGetHashPure(loc, mid, ei, sv, tsOverride);
         }
         catch (err) {
             debugLog('HASH_PURE_FAIL', String(err && err.message ? err.message : err));
@@ -526,8 +603,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             return '';
         }
     }
-    function generateGetHashPure(loc, mid, ei, sv) {
-        var ts = Math.floor((new Date()).getTime() / 1000);
+    function generateGetHashPure(loc, mid, ei, sv, tsOverride) {
+        var ts = tsOverride || Math.floor((new Date()).getTime() / 1000);
         var plain = mid + "+" + ei + "+" + sv + "+" + ts;
         var plainBytes = utf8Encode(plain);
         debugLog('HASH_PLAIN', plain);
@@ -698,7 +775,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var keyWordArray = cryptoS.PBKDF2(cryptoS.enc.Utf8.parse(loc), saltWordArray, pbkdf2Opts);
         return wordArrayToUint8Array(keyWordArray);
     }
-    function generateGetHashSubtle(loc, mid, ei, sv) {
+    function generateGetHashSubtle(loc, mid, ei, sv, tsOverride) {
         return __awaiter(this, void 0, void 0, function () {
             var subtle, ts, plain, plainBytes, passwordBytes, saltBytes, baseKey, aesKey, iv, ct, ctHex, ivHex, saltHex;
             return __generator(this, function (_a) {
@@ -708,7 +785,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         if (!subtle) {
                             return [2, ''];
                         }
-                        ts = Math.floor((new Date()).getTime() / 1000);
+                        ts = tsOverride || Math.floor((new Date()).getTime() / 1000);
                         plain = mid + "+" + ei + "+" + sv + "+" + ts;
                         plainBytes = utf8Encode(plain);
                         passwordBytes = utf8Encode(loc);
@@ -770,7 +847,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
-    function generateGetHash(loc, mid, ei, sv) {
+    function generateGetHash(loc, mid, ei, sv, tsOverride) {
         return __awaiter(this, void 0, void 0, function () {
             var subtleHash, pureHash, ts, plain, saltBytes, saltWordArray, saltHex, plainWordArray, iv, alg, keyBytes, key, ptUint8, ctBuffer, ivHex, ctHex, err_1;
             return __generator(this, function (_a) {
@@ -781,7 +858,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         _a.label = 1;
                     case 1:
                         _a.trys.push([1, 3, , 4]);
-                        return [4, generateGetHashSubtle(loc, mid, ei, sv)];
+                        return [4, generateGetHashSubtle(loc, mid, ei, sv, tsOverride)];
                     case 2:
                         subtleHash = _a.sent();
                         if (subtleHash) {
@@ -798,7 +875,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                             return [3, 5];
                         }
                         if (cryptoS && cryptoS.AES) {
-                            pureHash = generateGetHashPureSafe(loc, mid, ei, sv);
+                            pureHash = generateGetHashPureSafe(loc, mid, ei, sv, tsOverride);
                             if (pureHash) {
                                 debugLog('HASH_PURE_OK', pureHash.substring(0, 80));
                                 return [2, pureHash];
@@ -809,7 +886,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         return [2, ''];
                     case 5:
                         _a.trys.push([5, 8, , 9]);
-                        ts = Math.floor((new Date()).getTime() / 1000);
+                        ts = tsOverride || Math.floor((new Date()).getTime() / 1000);
                         plain = mid + "+" + ei + "+" + sv + "+" + ts;
                         plainWordArray = cryptoS.enc.Utf8.parse(plain);
                         saltBytes = getRandomValues(8);
@@ -834,7 +911,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         debugLog('HASH_FAIL', String(err_1 && err_1.message ? err_1.message : err_1));
                         if (cryptoS && cryptoS.AES) {
                             debugLog('HASH_PURE', 'cryptoJS GCM failed, retry pure GCM');
-                            pureHash = generateGetHashPureSafe(loc, mid, ei, sv);
+                            pureHash = generateGetHashPureSafe(loc, mid, ei, sv, tsOverride);
                             if (pureHash) {
                                 debugLog('HASH_PURE_OK', pureHash.substring(0, 80));
                                 return [2, pureHash];
@@ -887,7 +964,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
-    var PROVIDER, DOMAIN, headers, streamHeaders, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, deHash, hashURL, hashID, hlsPath, directURL, e_1;
+    var PROVIDER, DOMAIN, headers, ployanHeaders, streamHeaders, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, traceTs, datasResp, deHash, hashURL, hashID, hlsPath, directURL, e_1;
     var _this = this;
     return __generator(this, function (_b) {
         switch (_b.label) {
@@ -898,9 +975,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     "referer": DOMAIN,
                     'user-agent': "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36",
                 };
+                ployanHeaders = buildPloyanHeaders(headers['user-agent']);
                 _b.label = 1;
             case 1:
-                _b.trys.push([1, 9, , 10]);
+                _b.trys.push([1, 11, , 10]);
                 urlDoc_1 = "https://doc.vidcloud9.org";
                 getIP_1 = function (urlDoc) { return __awaiter(_this, void 0, void 0, function () {
                     var urlDocTrace, traceData, arr;
@@ -908,7 +986,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         switch (_a.label) {
                             case 0:
                                 urlDocTrace = "".concat(urlDoc, "/cdn-cgi/trace");
-                                return [4, fetchText(urlDocTrace, headers)];
+                                return [4, fetchText(urlDocTrace, ployanHeaders)];
                             case 1:
                                 traceData = _a.sent();
                                 if (typeof traceData !== 'string') {
@@ -1000,8 +1078,23 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [2];
                 }
                 parseURL = libs.string_atob(playURL);
-                return [4, getIP_1(parseURL)];
+                sv = 1;
+                eid = movieInfo.type == 'movie' ? 1 : movieInfo.episode;
+                if (movieInfo.type == 'tv') {
+                    eid = parseEpisodeDataId(textHtml, movieInfo.episode, sv);
+                }
+                mid = id;
+                streamHeaders = Object.assign({}, ployanHeaders);
+                debugLog('GET_HDR', 'no-referrer');
+                debugLog('EP_PARAMS', 'mid=' + mid + ' eid=' + eid + ' sv=' + sv);
+                console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' mid=' + mid + ' eid=' + eid + ' sv=' + sv);
+                return [4, fetchDatasToken(mid, eid, sv, headers)];
             case 4:
+                datasResp = _b.sent();
+                return [4, warmPloyanWatch(parseURL, sv, eid, datasResp && datasResp.url ? datasResp.url : '', streamHeaders)];
+            case 5:
+                return [4, getIP_1(parseURL)];
+            case 6:
                 ipData = _b.sent();
                 loc = ipData['loc'];
                 debugLog('PARSE_URL', 'parseURL=' + parseURL + ' loc=' + (loc || 'EMPTY'));
@@ -1011,21 +1104,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     console.log('[RN-Fetch][PLOYAN-ERR] ABORT missing parseURL or loc');
                     return [2];
                 }
-                sv = 1;
-                eid = movieInfo.type == 'movie' ? 1 : movieInfo.episode;
-                if (movieInfo.type == 'tv') {
-                    eid = parseEpisodeDataId(textHtml, movieInfo.episode, sv);
+                traceTs = Math.floor(parseFloat(ipData['ts'] || '0'));
+                if (!traceTs) {
+                    traceTs = Math.floor((new Date()).getTime() / 1000);
                 }
-                mid = id;
-                streamHeaders = Object.assign({}, headers, {
-                    referer: "".concat(parseURL, "/watch/?v").concat(sv).concat(eid),
-                    origin: parseURL
-                });
-                debugLog('EP_PARAMS', 'mid=' + mid + ' eid=' + eid + ' sv=' + sv);
-                console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' loc=' + loc + ' mid=' + mid + ' eid=' + eid + ' sv=' + sv);
+                debugLog('TRACE_TS', String(traceTs));
                 console.log('[RN-Fetch][PLOYAN-HASH] generating hash...');
-                return [4, generateGetHash(loc, mid, eid, sv)];
-            case 5:
+                return [4, generateGetHash(loc, mid, eid, sv, traceTs)];
+            case 7:
                 deHash = _b.sent();
                 console.log('[RN-Fetch][PLOYAN-HASH] done len=' + (deHash ? deHash.length : 0));
                 libs.log({ deHash: deHash, loc: loc, sv: sv, mid: mid, eid: eid }, PROVIDER, 'GET HASH');
@@ -1036,7 +1122,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
                 debugLog('GET_REQ', hashURL.substring(0, 120));
                 return [4, fetchJson(hashURL, streamHeaders)];
-            case 6:
+            case 8:
                 hashID = _b.sent();
                 libs.log({ hashID: hashID, hashURL: hashURL }, PROVIDER, 'HASH ID');
                 if (!hashID || !hashID.info) {
@@ -1044,7 +1130,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [2];
                 }
                 return [4, decryptInfo(loc, hashID.info)];
-            case 7:
+            case 9:
                 hlsPath = _b.sent();
                 libs.log({ hlsPath: hlsPath }, PROVIDER, 'HLS PATH');
                 if (!hlsPath) {
@@ -1056,13 +1142,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ directURL: directURL }, PROVIDER, 'DIRECT QUALITY');
                 libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], streamHeaders);
                 return [2];
-            case 8:
+            case 10:
                 e_1 = _b.sent();
                 debugLog('ERROR', String(e_1 && e_1.message ? e_1.message : e_1));
                 console.log('[RN-Fetch][PLOYAN-ERR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 libs.log({ e: e_1, message: e_1 && e_1.message ? e_1.message : e_1 }, PROVIDER, 'ERROR CATCH');
-                return [3, 9];
-            case 9: return [2, true];
+                return [3, 11];
+            case 11: return [2, true];
         }
     });
 }); };
