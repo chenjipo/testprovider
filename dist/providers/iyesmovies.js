@@ -251,7 +251,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v12');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v13');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -331,8 +331,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         return cryptoS._iyesEcbMode;
     }
     function aesBlockEncrypt(key32, block16) {
-        var keyWa = cryptoS.lib.WordArray.create(Array.prototype.slice.call(key32));
-        var blockWa = cryptoS.lib.WordArray.create(Array.prototype.slice.call(block16));
+        var keyWa = bytesToWordArray(key32);
+        var blockWa = bytesToWordArray(block16);
         var encrypted = cryptoS.AES.encrypt(blockWa, keyWa, {
             mode: getEcbMode(),
             padding: cryptoS.pad.NoPadding
@@ -558,15 +558,18 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             return ('0' + b.toString(16)).slice(-2);
         }).join('');
     }
-    function bytesToSaltWordArray(bytes) {
+    function bytesToWordArray(bytes) {
         return cryptoS.enc.Hex.parse(bytesToHex(bytes));
+    }
+    function bytesToSaltWordArray(bytes) {
+        return bytesToWordArray(bytes);
     }
     function importKey(format, keyData, algorithm, extractable, keyUsages) {
         return __awaiter(this, void 0, void 0, function () {
             var encodedKeyData, key;
             return __generator(this, function (_a) {
                 if (keyData instanceof Uint8Array) {
-                    encodedKeyData = cryptoS.lib.WordArray.create(Array.prototype.slice.call(keyData));
+                    encodedKeyData = bytesToWordArray(keyData);
                 }
                 else {
                     encodedKeyData = cryptoS.enc.Hex.parse(cryptoS.enc.Hex.stringify(keyData));
@@ -587,7 +590,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             var ptWordArray, encryptedData, ciphertext, tagBytes, out, i;
             return __generator(this, function (_a) {
                 ptWordArray = plaintext instanceof Uint8Array
-                    ? cryptoS.lib.WordArray.create(Array.prototype.slice.call(plaintext))
+                    ? bytesToWordArray(plaintext)
                     : plaintext;
                 encryptedData = cryptoS[algorithm].encrypt(ptWordArray, key, {
                     iv: cryptoS.enc.Hex.parse(cryptoS.enc.Hex.stringify(iv)),
