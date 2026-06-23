@@ -204,13 +204,15 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function base64EncodeUri(b64) {
         return String(b64 || '').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
     }
-    function fetchDatasToken(mid, eid, sv, reqHeaders) {
+    function fetchDatasToken(mid, eid, sv, reqHeaders, detailUrl) {
         var datasUrl = "".concat(DOMAIN, "/datas");
         var body = JSON.stringify({ m: mid, e: String(eid), s: String(sv) });
         var postHeaders = Object.assign({}, reqHeaders, {
             'Content-Type': 'application/json',
             'X-Requested-With': 'XMLHttpRequest',
-            'Accept': 'application/json, text/plain, */*'
+            'Accept': 'application/json, text/plain, */*',
+            'Referer': detailUrl || reqHeaders['Referer'] || DOMAIN,
+            'Origin': DOMAIN
         });
         console.log('[RN-Fetch][YESMOVIES-DATAS] POST ' + datasUrl + ' body=' + body);
         return xhrPostText(datasUrl, body, postHeaders, 8000).then(function (text) {
@@ -371,7 +373,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v28');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v29');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1018,7 +1020,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
-    var PROVIDER, DOMAIN, headers, ployanHeaders, streamHeaders, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, hashTs, datasResp, datasToken, yesTraceData, yesLoc, watchEmbedUrl, watchUrix, embedPack, deHash, hashURL, hashID, directURL, e_1;
+    var PROVIDER, DOMAIN, headers, ployanHeaders, streamHeaders, warmHeaders, getHeaders, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, hashTs, datasResp, datasToken, yesTraceData, yesLoc, watchEmbedUrl, watchUrix, embedPack, deHash, hashURL, hashID, directURL, e_1;
     var _this = this;
     return __generator(this, function (_b) {
         switch (_b.label) {
@@ -1143,7 +1145,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('GET_HDR', 'referer=' + LINK_DETAIL.substring(0, 80));
                 debugLog('EP_PARAMS', 'mid=' + mid + ' eid=' + eid + ' sv=' + sv);
                 console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' mid=' + mid + ' eid=' + eid + ' sv=' + sv);
-                return [4, fetchDatasToken(mid, eid, sv, headers)];
+                return [4, fetchDatasToken(mid, eid, sv, headers, LINK_DETAIL)];
             case 4:
                 datasResp = _b.sent();
                 datasToken = datasResp && datasResp.url ? datasResp.url : '';
@@ -1158,11 +1160,17 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 embedPack = _b.sent();
                 watchEmbedUrl = embedPack && embedPack.url ? embedPack.url : embedPack;
                 watchUrix = embedPack && embedPack.urix ? embedPack.urix : '';
-                streamHeaders['Referer'] = String(watchEmbedUrl || '').split('#')[0];
-                streamHeaders['Origin'] = parseURL;
-                debugLog('GET_HDR', 'referer=' + streamHeaders['Referer']);
-                console.log('[RN-Fetch][PLOYAN-WARM] GET ' + streamHeaders['Referer']);
-                return [4, xhrGetText(streamHeaders['Referer'], streamHeaders, 8000)];
+                warmHeaders = Object.assign({}, streamHeaders, {
+                    'Referer': String(watchEmbedUrl || '').split('#')[0],
+                    'Origin': parseURL
+                });
+                getHeaders = {
+                    'user-agent': streamHeaders['user-agent'],
+                    'accept': '*/*'
+                };
+                debugLog('GET_HDR', 'referer=' + warmHeaders['Referer']);
+                console.log('[RN-Fetch][PLOYAN-WARM] GET ' + warmHeaders['Referer']);
+                return [4, xhrGetText(warmHeaders['Referer'], warmHeaders, 8000)];
             case 7:
                 console.log('[RN-Fetch][PLOYAN-DIRECT] try /get/ with ployan trace');
                 return [4, getIP_1(parseURL)];
@@ -1196,7 +1204,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
                 debugLog('GET_REQ', hashURL.substring(0, 120));
-                return [4, fetchJson(hashURL, streamHeaders)];
+                return [4, fetchJson(hashURL, getHeaders)];
             case 10:
                 if (!hashURL) {
                     return [2];
@@ -1207,7 +1215,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     directURL = "".concat(parseURL, "/hls/").concat(hashID.info, "/master.m3u8");
                     console.log('[RN-Fetch][PLOYAN-HLS] GET ' + directURL);
                     libs.log({ directURL: directURL }, PROVIDER, 'DIRECT QUALITY');
-                    libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], streamHeaders);
+                    libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], warmHeaders);
                     return [2];
                 }
                 debugLog('GET_FALLBACK', 'embed watch url');

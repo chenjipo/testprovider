@@ -47,7 +47,7 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                 return [2];
             }
             if (data.step) {
-                console.log('[RN-Fetch][PLOYAN-STEP] ' + data.step + (data.mode ? ' mode=' + data.mode : '') + (data.loc ? ' loc=' + data.loc : '') + (data.plain ? ' plain=' + data.plain : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.error ? ' err=' + data.error : ''));
+                console.log('[RN-Fetch][PLOYAN-STEP] ' + data.step + (data.mode ? ' mode=' + data.mode : '') + (data.loc ? ' loc=' + data.loc : '') + (data.plain ? ' plain=' + data.plain : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.error ? ' err=' + data.error : '') + (data.source ? ' src=' + data.source : ''));
                 return [2];
             }
             if (data.error) {
@@ -64,7 +64,7 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                 });
                 return [2];
             }
-            if (data.responseText && data.responseText.charAt(0) === '{' && (data.source === 'inject' || data.source === 'hook' || (data.responseURL && data.responseURL.indexOf('/get/') != -1))) {
+            if (data.responseText && data.responseText.charAt(0) === '{' && (data.source === 'inject' || data.source === 'hook' || data.source === 'xhr' || (data.responseURL && data.responseURL.indexOf('/get/') != -1))) {
                 json = JSON.parse(data.responseText);
                 if (json && json.code === 200 && json.info) {
                     info = json.info;
