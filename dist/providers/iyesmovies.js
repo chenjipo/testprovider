@@ -195,6 +195,35 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function hasTraceLoc(text) {
         return !!(text && text.indexOf('loc=') >= 0);
     }
+    function hasPlyUrl(text) {
+        return !!(text && /plyURL\s*=\s*"/i.test(text));
+    }
+    function fetchDetailHtml(url, reqHeaders) {
+        var timeoutMs = 10000;
+        console.log('[RN-Fetch][YESMOVIES-DETAIL] GET ' + url);
+        return xhrGetText(url, reqHeaders, timeoutMs).then(function (xhrText) {
+            if (hasPlyUrl(xhrText)) {
+                console.log('[RN-Fetch][YESMOVIES-DETAIL] ok via=xhr bytes=' + xhrText.length);
+                return xhrText;
+            }
+            console.log('[RN-Fetch][YESMOVIES-DETAIL] xhr miss bytes=' + (xhrText ? xhrText.length : 0));
+            return requestGetWithTimeout(url, reqHeaders, timeoutMs).then(function (axiosText) {
+                if (hasPlyUrl(axiosText)) {
+                    console.log('[RN-Fetch][YESMOVIES-DETAIL] ok via=axios bytes=' + axiosText.length);
+                    return axiosText;
+                }
+                console.log('[RN-Fetch][YESMOVIES-DETAIL] axios miss bytes=' + (axiosText ? axiosText.length : 0));
+                return fetchWithTimeout(url, reqHeaders, timeoutMs).then(function (fetchText) {
+                    if (hasPlyUrl(fetchText)) {
+                        console.log('[RN-Fetch][YESMOVIES-DETAIL] ok via=fetch bytes=' + fetchText.length);
+                        return fetchText;
+                    }
+                    console.log('[RN-Fetch][YESMOVIES-DETAIL] fetch miss bytes=' + (fetchText ? fetchText.length : 0));
+                    return xhrText || axiosText || fetchText || '';
+                });
+            });
+        });
+    }
     function tryTraceOnce(url, reqHeaders, timeoutMs) {
         return xhrGetText(url, reqHeaders, timeoutMs).then(function (xhrText) {
             if (hasTraceLoc(xhrText)) {
@@ -222,7 +251,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v9');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v10');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -822,7 +851,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
-    var PROVIDER, DOMAIN, headers, streamHeaders, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, htmlDetail, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, deHash, hashURL, hashID, hlsPath, directURL, e_1;
+    var PROVIDER, DOMAIN, headers, streamHeaders, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, deHash, hashURL, hashID, hlsPath, directURL, e_1;
     var _this = this;
     return __generator(this, function (_b) {
         switch (_b.label) {
@@ -835,7 +864,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 };
                 _b.label = 1;
             case 1:
-                _b.trys.push([1, 10, , 11]);
+                _b.trys.push([1, 9, , 10]);
                 urlDoc_1 = "https://doc.vidcloud9.org";
                 getIP_1 = function (urlDoc) { return __awaiter(_this, void 0, void 0, function () {
                     var urlDocTrace, traceData, arr;
@@ -924,13 +953,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     debugLog('ABORT', 'no id from detail URL');
                     return [2];
                 }
-                return [4, fetch(LINK_DETAIL, {
-                        headers: headers
-                    })];
+                return [4, fetchDetailHtml(LINK_DETAIL, headers)];
             case 3:
-                htmlDetail = _b.sent();
-                return [4, htmlDetail.text()];
-            case 4:
                 textHtml = _b.sent();
                 playURL = textHtml.match(/plyURL *\= *\"([^\"]+)/i);
                 playURL = playURL ? playURL[1] : "";
@@ -941,7 +965,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 parseURL = libs.string_atob(playURL);
                 return [4, getIP_1(parseURL)];
-            case 5:
+            case 4:
                 ipData = _b.sent();
                 loc = ipData['loc'];
                 debugLog('PARSE_URL', 'parseURL=' + parseURL + ' loc=' + (loc || 'EMPTY'));
@@ -958,7 +982,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 mid = id;
                 console.log('[RN-Fetch][PLOYAN-HASH] generating hash...');
                 return [4, generateGetHash(loc, mid, eid, sv)];
-            case 6:
+            case 5:
                 deHash = _b.sent();
                 console.log('[RN-Fetch][PLOYAN-HASH] done len=' + (deHash ? deHash.length : 0));
                 libs.log({ deHash: deHash, loc: loc, sv: sv, mid: mid, eid: eid }, PROVIDER, 'GET HASH');
@@ -969,7 +993,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
                 debugLog('GET_REQ', hashURL.substring(0, 120));
                 return [4, fetchJson(hashURL, streamHeaders)];
-            case 7:
+            case 6:
                 hashID = _b.sent();
                 libs.log({ hashID: hashID, hashURL: hashURL }, PROVIDER, 'HASH ID');
                 if (!hashID || !hashID.info) {
@@ -977,7 +1001,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [2];
                 }
                 return [4, decryptInfo(loc, hashID.info)];
-            case 8:
+            case 7:
                 hlsPath = _b.sent();
                 libs.log({ hlsPath: hlsPath }, PROVIDER, 'HLS PATH');
                 if (!hlsPath) {
@@ -989,13 +1013,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ directURL: directURL }, PROVIDER, 'DIRECT QUALITY');
                 libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], streamHeaders);
                 return [2];
-            case 9:
+            case 8:
                 e_1 = _b.sent();
                 debugLog('ERROR', String(e_1 && e_1.message ? e_1.message : e_1));
                 console.log('[RN-Fetch][PLOYAN-ERR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 libs.log({ e: e_1, message: e_1 && e_1.message ? e_1.message : e_1 }, PROVIDER, 'ERROR CATCH');
-                return [3, 10];
-            case 10: return [2, true];
+                return [3, 9];
+            case 9: return [2, true];
         }
     });
 }); };
