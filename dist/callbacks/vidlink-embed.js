@@ -84,35 +84,81 @@ function buildHeaderDirect() {
         'Accept-Language': 'en-US,en;q=0.9',
     };
 }
+function normalizeStreamHeaders(headersObj, headerDirect) {
+    var out = __assign({}, headerDirect);
+    var keys = Object.keys(headersObj || {});
+    for (var i = 0; i < keys.length; i++) {
+        var key = keys[i];
+        var lower = key.toLowerCase();
+        if (lower === 'referer') {
+            out['Referer'] = headersObj[key];
+        }
+        else if (lower === 'origin') {
+            out['Origin'] = headersObj[key];
+        }
+        else {
+            out[key] = headersObj[key];
+        }
+    }
+    return out;
+}
+function parseProxyQueryParams(directUrl) {
+    var qIndex = directUrl.indexOf('?');
+    if (qIndex < 0) {
+        return { headersObj: {}, host: '', tailQuery: '' };
+    }
+    var queryParams = directUrl.substring(qIndex + 1);
+    var headersObj = {};
+    var host = '';
+    var tailParams = [];
+    var params = queryParams.split('&');
+    for (var i = 0; i < params.length; i++) {
+        var param = params[i];
+        if (param.indexOf('headers=') === 0) {
+            var rawHeaders = param.substring('headers='.length);
+            try {
+                headersObj = JSON.parse(decodeURIComponent(rawHeaders));
+            }
+            catch (e1) {
+                headersObj = JSON.parse(rawHeaders);
+            }
+        }
+        else if (param.indexOf('host=') === 0) {
+            host = decodeURIComponent(param.substring('host='.length));
+        }
+        else {
+            tailParams.push(param);
+        }
+    }
+    return {
+        headersObj: headersObj,
+        host: host,
+        tailQuery: tailParams.length ? tailParams.join('&') : '',
+    };
+}
 function transformProxyUrl(directUrl, headerDirect) {
-    if (!directUrl.includes('vidlvod.store/proxy/')) {
+    if (directUrl.indexOf('/proxy/') < 0) {
         return { directUrl: directUrl, headerDirect: headerDirect };
     }
     try {
-        var encodedPart = directUrl.split('/proxy/')[1];
-        var parts = encodedPart.split('?');
-        var encodedUrl = parts[0];
-        var queryParams = parts[1];
-        var decodedUrl = decodeURIComponent(encodedUrl);
-        var headersObj = {};
-        var host = '';
-        if (queryParams) {
-            var params = queryParams.split('&');
-            for (var i = 0; i < params.length; i++) {
-                var param = params[i];
-                if (param.startsWith('headers=')) {
-                    headersObj = JSON.parse(param.substring('headers='.length));
-                }
-                else if (param.startsWith('host=')) {
-                    host = decodeURIComponent(param.substring('host='.length));
-                }
+        var proxyIdx = directUrl.indexOf('/proxy/');
+        var pathPart = directUrl.substring(proxyIdx + '/proxy/'.length);
+        var qIdx = pathPart.indexOf('?');
+        var encodedPath = qIdx >= 0 ? pathPart.substring(0, qIdx) : pathPart;
+        var parsed = parseProxyQueryParams(directUrl);
+        var nextHeaders = normalizeStreamHeaders(parsed.headersObj, headerDirect);
+        if (parsed.host) {
+            var decodedPath = decodeURIComponent(encodedPath);
+            var nextUrl = parsed.host.replace(/\/$/, '') + '/' + decodedPath.replace(/^\//, '');
+            if (parsed.tailQuery) {
+                nextUrl += '?' + parsed.tailQuery;
             }
+            libs.log({ proxyFrom: directUrl, proxyTo: nextUrl, headerDirect: nextHeaders }, 'MVidlink', 'PROXY UNWRAP');
+            return { directUrl: nextUrl, headerDirect: nextHeaders };
         }
-        if (host && Object.keys(headersObj).length > 0) {
-            return {
-                directUrl: host + '/' + decodedUrl,
-                headerDirect: __assign(__assign({}, headersObj), { 'User-Agent': headerDirect['User-Agent'] }),
-            };
+        if (Object.keys(parsed.headersObj).length > 0) {
+            libs.log({ directUrl: directUrl, headerDirect: nextHeaders }, 'MVidlink', 'PROXY HEADERS ONLY');
+            return { directUrl: directUrl, headerDirect: nextHeaders };
         }
     }
     catch (error) {
@@ -205,8 +251,9 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
         }
     });
 }); }
+var _vidlinkEmbedDone = {};
 callbacksEmbed['vidlink-embed'] = function (dataCallback, provider, host, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
-    var data, parseSearch, e_1;
+    var data, parseSearch, dedupeKey, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -227,6 +274,11 @@ callbacksEmbed['vidlink-embed'] = function (dataCallback, provider, host, callba
                     return [2];
                 }
                 if (!(data.responseURL && data.responseURL.indexOf('/api/b/') != -1 && data.responseText && data.responseText.charAt(0) === '{')) return [3, 2];
+                dedupeKey = String(data.responseText).substring(0, 80);
+                if (_vidlinkEmbedDone[dedupeKey]) {
+                    return [2];
+                }
+                _vidlinkEmbedDone[dedupeKey] = true;
                 parseSearch = JSON.parse(data.responseText);
                 libs.log({ parseSearch: parseSearch }, provider, 'PARSE SEARCH');
                 return [4, processVidlinkStream(parseSearch, provider, callback, metadata)];
