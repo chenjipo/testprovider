@@ -35,20 +35,31 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-function buildVidlinkEmbedScript() {
-    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function isApi(u){return u&&u.indexOf('/api/b/')>=0;}function markApi(m){if(m&&m.status===200&&m.responseText&&m.responseText.charAt(0)==='{'){done=1;}}function hookNet(){if(window.__vlHooked)return;window.__vlHooked=1;pm({step:'vl-hook-ready'});var fo=fetch;fetch=function(a,b){b=b||{};return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(isApi(s)){r.clone().text().then(function(t){var m={status:r.status,responseURL:s,responseText:t,source:'vl-hook'};markApi(m);pm(m);}).catch(function(){});}return r;});};var xo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){this._vlUrl=u;return xo.apply(this,arguments);};var xs=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.send=function(){var x=this;x.addEventListener('load',function(){var u=x._vlUrl||x.responseURL||'';if(isApi(u)){var m={status:x.status,responseURL:u,responseText:x.responseText||'',source:'vl-xhr'};markApi(m);pm(m);}});return xs.apply(x,arguments);};}hookNet();pm({step:'vl-boot'});})();";
+function escJs(value) {
+    return String(value || '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+function buildVidlinkEmbedScript(tmdbId, isTv, season, episode) {
+    var sTmdb = escJs(tmdbId);
+    var sSeason = escJs(season);
+    var sEpisode = escJs(episode);
+    var tvFlag = isTv ? '1' : '0';
+    return "(function(){var tmdb='" + sTmdb + "',isTv=" + tvFlag + ",season='" + sSeason + "',episode='" + sEpisode + "',done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function isApi(u){return u&&String(u).indexOf('/api/b/')>=0;}function isDbg(u){u=String(u||'');return u.indexOf('/api/b/')>=0||u.indexOf('fu.wasm')>=0||u.indexOf('script.js')>=0;}function markApi(m){if(m&&m.status===200&&m.responseText&&m.responseText.charAt(0)==='{'){done=1;}}function hookNet(){if(window.__vlHooked)return;window.__vlHooked=1;pm({step:'vl-hook-ready'});var fo=fetch;fetch=function(a,b){b=b||{};var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(isDbg(s)){pm({step:'vl-fetch',url:s});}return fo(a,b).then(function(r){if(isApi(s)){r.clone().text().then(function(t){var m={status:r.status,responseURL:s,responseText:t,source:'vl-hook'};markApi(m);pm(m);}).catch(function(){});}return r;});};var xo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){this._vlUrl=u;if(isDbg(u)){pm({step:'vl-xhr-open',url:String(u)});}return xo.apply(this,arguments);};var xs=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.send=function(){var x=this;x.addEventListener('load',function(){var u=x._vlUrl||x.responseURL||'';if(isApi(u)){var m={status:x.status,responseURL:u,responseText:x.responseText||'',source:'vl-xhr'};markApi(m);pm(m);}});return xs.apply(x,arguments);};}function callApi(token){if(!token||done)return;var api=isTv?('/api/b/tv/'+token+'/'+season+'/'+episode+'?multiLang=0'):('/api/b/movie/'+token+'?multiLang=0');pm({step:'vl-api-url',url:api});fetch(api,{credentials:'include'}).then(function(r){return r.text().then(function(t){var m={status:r.status,responseURL:location.origin+api,responseText:t,source:'vl-manual'};markApi(m);pm(m);});}).catch(function(e){pm({step:'vl-api-err',error:String(e)});});}function waitAdv(left){if(done)return;if(typeof window.getAdv==='function'){pm({step:'vl-getadv-ready'});try{var token=window.getAdv(String(tmdb));pm({step:'vl-getadv-token',token:token||''});if(token){callApi(token);}else{pm({step:'vl-getadv-null'});}}catch(e){pm({step:'vl-getadv-err',error:String(e)});}return;}if(left<=0){pm({step:'vl-getadv-timeout',getAdv:typeof window.getAdv,sodium:typeof window.sodium});return;}setTimeout(function(){waitAdv(left-1);},500);}hookNet();pm({step:'vl-boot',tmdb:tmdb,isTv:isTv});setTimeout(function(){waitAdv(80);},1500);})();";
 }
 hosts['vidlink-embed'] = function (url, movieInfo, provider, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var HOST, embedUrl, headers, beforeLoadScript;
+    var HOST, embedUrl, headers, beforeLoadScript, tmdbId, isTv, season, episode;
     return __generator(this, function (_a) {
         HOST = 'vidlink-embed';
         embedUrl = (config && config.embedUrl) ? config.embedUrl : String(url || '');
+        tmdbId = (movieInfo && movieInfo.tmdb_id) ? String(movieInfo.tmdb_id) : '';
+        isTv = !!(movieInfo && movieInfo.type == 'tv');
+        season = (movieInfo && movieInfo.season) ? String(movieInfo.season) : '1';
+        episode = (movieInfo && movieInfo.episode) ? String(movieInfo.episode) : '1';
         headers = {
             'Referer': 'https://vidlink.pro/',
             'Origin': 'https://vidlink.pro',
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
         };
-        beforeLoadScript = buildVidlinkEmbedScript();
+        beforeLoadScript = buildVidlinkEmbedScript(tmdbId, isTv, season, episode);
         console.log('[RN-Fetch][VIDLINK-EMBED-HOST] ' + embedUrl.substring(0, 120));
         try {
             callback({
@@ -63,7 +74,10 @@ hosts['vidlink-embed'] = function (url, movieInfo, provider, config, callback) {
                     metadata: {
                         embedUrl: embedUrl,
                         url_webview: embedUrl,
-                        movieInfo: movieInfo
+                        movieInfo: movieInfo,
+                        tmdbId: tmdbId,
+                        season: season,
+                        episode: episode
                     }
                 }
             });

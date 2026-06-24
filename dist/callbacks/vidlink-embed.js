@@ -219,7 +219,7 @@ callbacksEmbed['vidlink-embed'] = function (dataCallback, provider, host, callba
                     return [2];
                 }
                 if (data.step) {
-                    console.log('[RN-Fetch][VIDLINK-EMBED-STEP] ' + data.step);
+                    console.log('[RN-Fetch][VIDLINK-EMBED-STEP] ' + data.step + (data.url ? ' url=' + String(data.url).substring(0, 120) : '') + (data.token ? ' token=' + String(data.token).substring(0, 40) : '') + (data.error ? ' err=' + data.error : '') + (data.getAdv ? ' getAdv=' + data.getAdv : '') + (data.sodium ? ' sodium=' + data.sodium : ''));
                     return [2];
                 }
                 if (data.error) {
