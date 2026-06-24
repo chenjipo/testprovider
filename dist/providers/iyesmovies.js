@@ -268,17 +268,18 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             var finish = function () {
                 if (!settled) {
                     settled = true;
-                    resolve(true);
+                    resolve();
                 }
             };
             var wrappedCallback = function (data) {
+                var hasFile = !!(data && data.file);
                 callback(data);
-                if (data && data.file) {
-                    finish();
+                if (hasFile) {
+                    setTimeout(finish, 0);
                 }
             };
             if (!(LINK_DETAIL && mid && hosts && hosts['yesmovies-embed'])) {
-                resolve(false);
+                resolve();
                 return;
             }
             console.log('[RN-Fetch][YESMOVIES-EMBED] early detail webview (hold provider)');
@@ -417,7 +418,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v33');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v34');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
