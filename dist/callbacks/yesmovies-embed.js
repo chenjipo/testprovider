@@ -57,10 +57,7 @@ callbacksEmbed['yesmovies-embed'] = function (dataCallback, provider, host, call
             if (data.responseURL && (data.responseURL.indexOf('.m3u8') != -1 || data.responseURL.indexOf('/hls/') != -1)) {
                 directUrl = data.responseURL;
                 console.log('[RN-Fetch][YESMOVIES-EMBED-HLS] ' + directUrl);
-                libs.embed_callback(directUrl, provider, provider, 'Hls', callback, 1, [], [{ file: directUrl, quality: 1080 }], {}, {
-                    is_end_webview: true,
-                    url_webview: metadata && metadata.url_webview ? metadata.url_webview : ''
-                });
+                libs.embed_callback(directUrl, provider, provider, 'Hls', callback, 1, [], [{ file: directUrl, quality: 1080 }], {}, {});
                 return [2];
             }
             if (data.responseText && data.responseText.charAt(0) === '{' && (data.source === 'yes-hook' || data.source === 'yes-xhr')) {
@@ -73,10 +70,7 @@ callbacksEmbed['yesmovies-embed'] = function (dataCallback, provider, host, call
                         'Referer': 'https://ployan.me/',
                         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
                     };
-                    libs.embed_callback(directUrl, provider, provider, 'Hls', callback, 1, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {
-                        is_end_webview: true,
-                        url_webview: metadata && metadata.detailUrl ? metadata.detailUrl : ''
-                    });
+                    libs.embed_callback(directUrl, provider, provider, 'Hls', callback, 1, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {});
                 }
             }
         }
