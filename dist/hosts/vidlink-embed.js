@@ -35,49 +35,42 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-function openVidlinkEmbedAndWait(urlEmbed, movieInfo, callback) {
-    return new Promise(function (resolve) {
-        var wrappedCallback = function (data) {
-            callback(data);
-            if (data && data.file) {
-                console.log('[RN-Fetch][VIDLINK-EMBED] file ok, keep provider pending (avoid getLinks error batch)');
-                return;
-            }
-        };
-        if (!(urlEmbed && hosts && hosts['vidlink-embed'])) {
-            resolve();
-            return;
-        }
-        console.log('[RN-Fetch][VIDLINK-EMBED] early webview (hold provider)');
-        hosts['vidlink-embed'](urlEmbed, movieInfo || {}, PROVIDER, {
-            embedUrl: urlEmbed,
-        }, wrappedCallback);
-    });
+function buildVidlinkEmbedScript() {
+    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function isApi(u){return u&&u.indexOf('/api/b/')>=0;}function markApi(m){if(m&&m.status===200&&m.responseText&&m.responseText.charAt(0)==='{'){done=1;}}function hookNet(){if(window.__vlHooked)return;window.__vlHooked=1;pm({step:'vl-hook-ready'});var fo=fetch;fetch=function(a,b){b=b||{};return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(isApi(s)){r.clone().text().then(function(t){var m={status:r.status,responseURL:s,responseText:t,source:'vl-hook'};markApi(m);pm(m);}).catch(function(){});}return r;});};var xo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){this._vlUrl=u;return xo.apply(this,arguments);};var xs=XMLHttpRequest.prototype.send;XMLHttpRequest.prototype.send=function(){var x=this;x.addEventListener('load',function(){var u=x._vlUrl||x.responseURL||'';if(isApi(u)){var m={status:x.status,responseURL:u,responseText:x.responseText||'',source:'vl-xhr'};markApi(m);pm(m);}});return xs.apply(x,arguments);};}hookNet();pm({step:'vl-boot'});})();";
 }
-var PROVIDER = 'MVidlink';
-source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var DOMAIN, urlEmbed, e_1;
+hosts['vidlink-embed'] = function (url, movieInfo, provider, config, callback) { return __awaiter(_this, void 0, void 0, function () {
+    var HOST, embedUrl, headers, beforeLoadScript;
     return __generator(this, function (_a) {
-        switch (_a.label) {
-            case 0:
-                DOMAIN = 'https://vidlink.pro';
-                urlEmbed = DOMAIN + '/movie/' + movieInfo.tmdb_id;
-                if (movieInfo.type == 'tv') {
-                    urlEmbed = DOMAIN + '/tv/' + movieInfo.tmdb_id + '/' + movieInfo.season + '/' + movieInfo.episode;
+        HOST = 'vidlink-embed';
+        embedUrl = (config && config.embedUrl) ? config.embedUrl : String(url || '');
+        headers = {
+            'Referer': 'https://vidlink.pro/',
+            'Origin': 'https://vidlink.pro',
+            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
+        };
+        beforeLoadScript = buildVidlinkEmbedScript();
+        console.log('[RN-Fetch][VIDLINK-EMBED-HOST] ' + embedUrl.substring(0, 120));
+        try {
+            callback({
+                callback: {
+                    provider: provider,
+                    host: HOST,
+                    url: embedUrl,
+                    headers: headers,
+                    callback: callback,
+                    userAgent: headers['user-agent'],
+                    beforeLoadScript: beforeLoadScript,
+                    metadata: {
+                        embedUrl: embedUrl,
+                        url_webview: embedUrl,
+                        movieInfo: movieInfo
+                    }
                 }
-                libs.log({ urlEmbed: urlEmbed }, PROVIDER, 'URL EMBED');
-                _a.label = 1;
-            case 1:
-                _a.trys.push([1, 3, , 4]);
-                return [4, openVidlinkEmbedAndWait(urlEmbed, movieInfo, callback)];
-            case 2:
-                _a.sent();
-                return [2];
-            case 3:
-                e_1 = _a.sent();
-                libs.log({ e: e_1 }, PROVIDER, 'ERROR');
-                return [3, 4];
-            case 4: return [2];
+            });
         }
+        catch (e) {
+            libs.log({ e: e }, HOST, 'ERROR');
+        }
+        return [2];
     });
 }); };

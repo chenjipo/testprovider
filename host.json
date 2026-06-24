@@ -30,6 +30,7 @@
     "dist/hosts/player.smashy.js",
     "dist/hosts/streamwish.js",
     "dist/hosts/ployan.js",
-    "dist/hosts/yesmovies-embed.js"
+    "dist/hosts/yesmovies-embed.js",
+    "dist/hosts/vidlink-embed.js"
   ]
 }
