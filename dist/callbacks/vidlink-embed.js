@@ -136,18 +136,26 @@ function parseProxyQueryParams(directUrl) {
         tailQuery: tailParams.length ? tailParams.join('&') : '',
     };
 }
+function isStormProxyUrl(directUrl) {
+    return directUrl.indexOf('vodvidl.site') >= 0;
+}
 function transformProxyUrl(directUrl, headerDirect) {
     if (directUrl.indexOf('/proxy/') < 0) {
         return { directUrl: directUrl, headerDirect: headerDirect };
     }
     try {
-        var proxyIdx = directUrl.indexOf('/proxy/');
-        var pathPart = directUrl.substring(proxyIdx + '/proxy/'.length);
-        var qIdx = pathPart.indexOf('?');
-        var encodedPath = qIdx >= 0 ? pathPart.substring(0, qIdx) : pathPart;
         var parsed = parseProxyQueryParams(directUrl);
         var nextHeaders = normalizeStreamHeaders(parsed.headersObj, headerDirect);
-        if (parsed.host) {
+        if (isStormProxyUrl(directUrl)) {
+            libs.log({ directUrl: directUrl, headerDirect: nextHeaders }, 'MVidlink', 'PROXY STORM KEEP');
+            console.log('[RN-Fetch][VIDLINK-PROXY] keep storm referer=' + (nextHeaders['Referer'] || ''));
+            return { directUrl: directUrl, headerDirect: nextHeaders };
+        }
+        if (parsed.host && Object.keys(parsed.headersObj).length > 0) {
+            var proxyIdx = directUrl.indexOf('/proxy/');
+            var pathPart = directUrl.substring(proxyIdx + '/proxy/'.length);
+            var qIdx = pathPart.indexOf('?');
+            var encodedPath = qIdx >= 0 ? pathPart.substring(0, qIdx) : pathPart;
             var decodedPath = decodeURIComponent(encodedPath);
             var nextUrl = parsed.host.replace(/\/$/, '') + '/' + decodedPath.replace(/^\//, '');
             if (parsed.tailQuery) {
@@ -187,6 +195,7 @@ function parseTracks(captions) {
     return tracks;
 }
 function finishEmbed(file, provider, callback, tracks, qualities, headerDirect, metadata) {
+    console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['Referer'] || ''));
     libs.embed_callback(file, provider, provider, 'Hls', callback, 1, tracks, qualities, headerDirect, {
         type: 'm3u8',
         is_end_webview: true,
@@ -233,6 +242,10 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
                 directUrl = transformed.directUrl;
                 headerDirect = transformed.headerDirect;
                 libs.log({ directUrl: directUrl, headerDirect: headerDirect }, provider, 'DIRECT URL DATA');
+                if (isStormProxyUrl(directUrl) || directUrl.indexOf('/proxy/') >= 0) {
+                    finishEmbed(directUrl, provider, callback, tracks, [{ file: directUrl, quality: 1080 }], headerDirect, metadata);
+                    return [2];
+                }
                 return [4, fetch(directUrl)];
             case 1:
                 parseDirectSize = _a.sent();
@@ -274,12 +287,12 @@ callbacksEmbed['vidlink-embed'] = function (dataCallback, provider, host, callba
                     return [2];
                 }
                 if (!(data.responseURL && data.responseURL.indexOf('/api/b/') != -1 && data.responseText && data.responseText.charAt(0) === '{')) return [3, 2];
-                dedupeKey = String(data.responseText).substring(0, 80);
-                if (_vidlinkEmbedDone[dedupeKey]) {
+                parseSearch = JSON.parse(data.responseText);
+                dedupeKey = parseSearch && parseSearch.stream && parseSearch.stream.playlist ? parseSearch.stream.playlist : '';
+                if (!dedupeKey || _vidlinkEmbedDone[dedupeKey]) {
                     return [2];
                 }
                 _vidlinkEmbedDone[dedupeKey] = true;
-                parseSearch = JSON.parse(data.responseText);
                 libs.log({ parseSearch: parseSearch }, provider, 'PARSE SEARCH');
                 return [4, processVidlinkStream(parseSearch, provider, callback, metadata)];
             case 1:
