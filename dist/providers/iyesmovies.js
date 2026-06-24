@@ -266,6 +266,18 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var watchBase = String(watchEmbedUrl || '').split('#')[0];
         var yesReferer = yesDetailUrl || 'https://ww.yesmovies.ag/';
         console.log('[RN-Fetch][PLOYAN-WEBVIEW] watch=' + watchBase + ' ref=' + yesReferer.substring(0, 80) + ' loc=' + (yesLoc || 'US'));
+        if (yesDetailUrl && mid && hosts && hosts['yesmovies-embed']) {
+            console.log('[RN-Fetch][YESMOVIES-EMBED] fallback detail page iframe flow');
+            hosts['yesmovies-embed'](yesDetailUrl, movieInfo || {}, PROVIDER, {
+                detailUrl: yesDetailUrl,
+                mid: mid,
+                eid: eid,
+                sv: sv,
+                yesLoc: yesLoc || 'US',
+                watchUrl: watchEmbedUrl
+            }, callback);
+            return;
+        }
         if (hosts && hosts['ployan']) {
             hosts['ployan'](watchBase, movieInfo || {}, PROVIDER, {
                 urix: urix,
@@ -373,7 +385,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v29');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v30');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');

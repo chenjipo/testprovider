@@ -10,6 +10,7 @@
     "dist/callbacks/wsoap2day.js",
     "dist/callbacks/vidplay.js",
     "dist/callbacks/smashystream.js",
-    "dist/callbacks/ployan.js"
+    "dist/callbacks/ployan.js",
+    "dist/callbacks/yesmovies-embed.js"
   ]
 }
