@@ -262,6 +262,37 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             throw err;
         });
     }
+    function openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL) {
+        return new Promise(function (resolve) {
+            var settled = false;
+            var finish = function () {
+                if (!settled) {
+                    settled = true;
+                    resolve(true);
+                }
+            };
+            var wrappedCallback = function (data) {
+                callback(data);
+                if (data && data.file) {
+                    finish();
+                }
+            };
+            if (!(LINK_DETAIL && mid && hosts && hosts['yesmovies-embed'])) {
+                resolve(false);
+                return;
+            }
+            console.log('[RN-Fetch][YESMOVIES-EMBED] early detail webview (hold provider)');
+            hosts['yesmovies-embed'](LINK_DETAIL, movieInfo || {}, PROVIDER, {
+                detailUrl: LINK_DETAIL,
+                mid: mid,
+                eid: eid,
+                sv: sv,
+                epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
+                yesLoc: 'US',
+                watchUrl: ''
+            }, wrappedCallback);
+        });
+    }
     function openPloyanWebView(watchEmbedUrl, urix, mid, eid, sv, movieInfo, callback, streamHeaders, yesDetailUrl, yesLoc) {
         var watchBase = String(watchEmbedUrl || '').split('#')[0];
         var yesReferer = yesDetailUrl || 'https://ww.yesmovies.ag/';
@@ -386,7 +417,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v31');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v33');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1158,11 +1189,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('GET_HDR', 'referer=' + LINK_DETAIL.substring(0, 80));
                 debugLog('EP_PARAMS', 'mid=' + mid + ' eid=' + eid + ' sv=' + sv);
                 console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' mid=' + mid + ' eid=' + eid + ' sv=' + sv);
-                return [4, fetchDatasToken(mid, eid, sv, headers, LINK_DETAIL)];
+                debugLog('GET_FALLBACK', 'early yesmovies embed');
+                return [4, openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
             case 4:
-                datasResp = _b.sent();
-                datasToken = datasResp && datasResp.url ? datasResp.url : '';
-                return [4, fetchYesmoviesTrace(headers)];
+                _b.sent();
+                return [2];
             case 5:
                 yesTraceData = _b.sent();
                 yesLoc = yesTraceData && yesTraceData.loc ? yesTraceData.loc : 'US';
@@ -1239,7 +1270,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 return [2, true];
             case 12:
-                return [2, true];
+                return [2];
         }
     });
 }); };
