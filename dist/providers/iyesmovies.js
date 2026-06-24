@@ -273,6 +273,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 mid: mid,
                 eid: eid,
                 sv: sv,
+                epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
                 yesLoc: yesLoc || 'US',
                 watchUrl: watchEmbedUrl
             }, callback);
@@ -385,7 +386,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v30');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v31');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1172,17 +1173,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 embedPack = _b.sent();
                 watchEmbedUrl = embedPack && embedPack.url ? embedPack.url : embedPack;
                 watchUrix = embedPack && embedPack.urix ? embedPack.urix : '';
-                warmHeaders = Object.assign({}, streamHeaders, {
-                    'Referer': String(watchEmbedUrl || '').split('#')[0],
-                    'Origin': parseURL
-                });
-                getHeaders = {
-                    'user-agent': streamHeaders['user-agent'],
-                    'accept': '*/*'
-                };
-                debugLog('GET_HDR', 'referer=' + warmHeaders['Referer']);
-                console.log('[RN-Fetch][PLOYAN-WARM] GET ' + warmHeaders['Referer']);
-                return [4, xhrGetText(warmHeaders['Referer'], warmHeaders, 8000)];
+                debugLog('GET_FALLBACK', 'yesmovies embed webview');
+                console.log('[RN-Fetch][YESMOVIES-EMBED] open detail webview');
+                openPloyanWebView(watchEmbedUrl, watchUrix, mid, eid, sv, movieInfo, callback, streamHeaders, LINK_DETAIL, yesLoc);
+                return [2];
             case 7:
                 console.log('[RN-Fetch][PLOYAN-DIRECT] try /get/ with ployan trace');
                 return [4, getIP_1(parseURL)];

@@ -47,7 +47,7 @@ callbacksEmbed['yesmovies-embed'] = function (dataCallback, provider, host, call
                 return [2];
             }
             if (data.step) {
-                console.log('[RN-Fetch][YESMOVIES-EMBED-STEP] ' + data.step + (data.src ? ' src=' + String(data.src).substring(0, 100) : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.error ? ' err=' + data.error : ''));
+                console.log('[RN-Fetch][YESMOVIES-EMBED-STEP] ' + data.step + (data.src ? ' src=' + String(data.src).substring(0, 100) : '') + (data.sel ? ' sel=' + data.sel : '') + (data.clicked !== undefined ? ' clicked=' + data.clicked : '') + (data.raw ? ' raw=' + String(data.raw).substring(0, 80) : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.error ? ' err=' + data.error : ''));
                 return [2];
             }
             if (data.error) {
