@@ -139,30 +139,74 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
     callback(__assign({ file: urlDirect, quality: quality, host: host, source: provider, provider: libs.string_provider(provider, rank), subs: parseSubs, direct_quality: direct_quality, headers: headers }, options));
 };
 libs.__embedCallbackCore = libs.embed_callback;
-libs.__linkBatch = { items: [], timer: null, ms: 26000 };
+libs.__linkBatch = { items: [], timer: null, releaseTimer: null, sessionStart: 0, maxMs: 65000 };
 libs.__isBatchableVodLink = function (provider, options) {
     if (!options || options.type !== 'm3u8') {
         return false;
     }
     return provider === 'MUniqueStream' || provider === 'MVidlink' || provider === 'IYesMovies';
 };
+libs.beginVodLinkSession = function () {
+    var batch = libs.__linkBatch;
+    if (!batch.sessionStart) {
+        batch.sessionStart = Date.now();
+        console.log('[RN-Fetch][BATCH-SESSION] start');
+    }
+    libs.__embedWebviewSlot.multiSourceBatch = true;
+};
 libs.__shouldBatchVodLinks = function () {
-    var slot = libs.__embedWebviewSlot;
-    return !!(slot && slot.multiSourceBatch);
+    var batch = libs.__linkBatch;
+    if (!batch.sessionStart) {
+        return false;
+    }
+    return Date.now() - batch.sessionStart < batch.maxMs;
 };
 libs.__releaseLinkBatch = function () {
     var batch = libs.__linkBatch;
     if (!batch.items.length) {
         batch.timer = null;
+        batch.releaseTimer = null;
+        batch.sessionStart = 0;
         return;
     }
     var items = batch.items.slice();
     batch.items = [];
     batch.timer = null;
+    batch.releaseTimer = null;
+    batch.sessionStart = 0;
     console.log('[RN-Fetch][BATCH-RELEASE] count=' + items.length);
     for (var i = 0; i < items.length; i++) {
         libs.__embedCallbackCore.apply(libs, items[i]);
     }
+};
+libs.__tryReleaseLinkBatch = function () {
+    var batch = libs.__linkBatch;
+    var slot = libs.__embedWebviewSlot;
+    if (!batch.items.length) {
+        return;
+    }
+    var elapsed = batch.sessionStart ? Date.now() - batch.sessionStart : 0;
+    var webviewIdle = !slot.pumping && (!slot.queue || !slot.queue.length);
+    if (webviewIdle || elapsed >= batch.maxMs) {
+        console.log('[RN-Fetch][BATCH-READY] idle=' + (webviewIdle ? 1 : 0) + ' elapsed=' + elapsed + 'ms queued=' + batch.items.length);
+        libs.__releaseLinkBatch();
+        return;
+    }
+    if (batch.releaseTimer) {
+        clearTimeout(batch.releaseTimer);
+    }
+    batch.releaseTimer = setTimeout(function () {
+        libs.__tryReleaseLinkBatch();
+    }, 1200);
+};
+libs.__scheduleBatchRelease = function () {
+    var batch = libs.__linkBatch;
+    if (batch.timer) {
+        clearTimeout(batch.timer);
+    }
+    batch.timer = setTimeout(function () {
+        libs.__tryReleaseLinkBatch();
+    }, 1500);
 };
 libs.embed_callback = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
     if (subs === void 0) { subs = []; }
@@ -173,16 +217,12 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
         var batch = libs.__linkBatch;
         batch.items.push([urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options]);
         console.log('[RN-Fetch][BATCH-QUEUE] provider=' + provider + ' total=' + batch.items.length);
-        if (!batch.timer) {
-            console.log('[RN-Fetch][BATCH-START] hold ' + batch.ms + 'ms');
-            batch.timer = setTimeout(function () {
-                libs.__releaseLinkBatch();
-            }, batch.ms);
-        }
+        libs.__scheduleBatchRelease();
         return;
     }
     libs.__embedCallbackCore(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
 };
+console.log('[RN-Fetch][EMBED-CFG] batch-v3');
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {
@@ -216,7 +256,7 @@ libs.__embedWebviewSlot = libs.__embedWebviewSlot || { busyUntil: 0, pumping: fa
 libs.__embedWebviewOrder = { 'MVidlink': 0, 'IYesMovies': 1, 'MUniqueStream': 2 };
 libs.scheduleEmbedWebview = function (provider, task, slotMs) {
     var slot = libs.__embedWebviewSlot;
-    slot.multiSourceBatch = true;
+    libs.beginVodLinkSession();
     var order = libs.__embedWebviewOrder[provider];
     if (typeof order !== 'number') {
         order = 99;
@@ -236,6 +276,7 @@ libs.scheduleEmbedWebview = function (provider, task, slotMs) {
     function runNext() {
         if (!slot.queue.length) {
             slot.pumping = false;
+            libs.__tryReleaseLinkBatch();
             return;
         }
         var now = Date.now();

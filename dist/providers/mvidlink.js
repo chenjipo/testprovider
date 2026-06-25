@@ -42,12 +42,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_a.label) {
             case 0:
                 _a.trys.push([0, 2, , 3]);
+                libs.beginVodLinkSession();
                 DOMAIN = 'https://vidlink.pro';
                 urlEmbed = DOMAIN + '/movie/' + movieInfo.tmdb_id;
                 if (movieInfo.type == 'tv') {
                     urlEmbed = DOMAIN + '/tv/' + movieInfo.tmdb_id + '/' + movieInfo.season + '/' + movieInfo.episode;
                 }
-                console.log('[RN-Fetch][VIDLINK-VERSION] v19');
+                console.log('[RN-Fetch][VIDLINK-VERSION] v20');
                 libs.log({ urlEmbed: urlEmbed }, PROVIDER, 'URL EMBED');
                 if (urlEmbed && hosts && hosts['vidlink-embed']) {
                     console.log('[RN-Fetch][VIDLINK-EMBED] queue webview slot');

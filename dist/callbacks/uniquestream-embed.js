@@ -118,7 +118,7 @@ function finishUniqueStreamCbEmbed(playUrl, provider, callback, qualities, heade
     if (!sorted.length) {
         sorted = [{ file: playUrl, quality: 1080 }];
     }
-    var playFile = playUrl;
+    var playFile = sorted[0].file || playUrl;
     var playKey = playKeyFromUrl(playFile) || String(playFile).substring(0, 160);
     if (state.played[playKey]) {
         return;

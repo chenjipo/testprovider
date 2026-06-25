@@ -90,6 +90,16 @@ function stormPlaylistDedupeKey(playlistUrl) {
     var qIdx = playlistUrl.indexOf('?');
     return qIdx >= 0 ? playlistUrl.substring(0, qIdx) : playlistUrl;
 }
+function stormSessionDedupeKey(playlistUrl) {
+    if (!playlistUrl) {
+        return '';
+    }
+    var match = String(playlistUrl).match(/\/proxy\/[^/]+\/([a-f0-9]{32,})/i);
+    if (match) {
+        return match[1];
+    }
+    return stormPlaylistDedupeKey(playlistUrl);
+}
 function buildStormQualitiesFromMasterUrl(masterUrl) {
     if (masterUrl.indexOf('/playlist.m3u8') < 0) {
         return [];
@@ -363,15 +373,16 @@ function parseTracks(captions) {
 }
 function finishVidlinkEmbed(file, provider, callback, tracks, qualities, headerDirect, metadata) {
     var state = getVidlinkState();
-    file = sanitizePlayUrl(file);
     qualities = sanitizeQualities(qualities);
-    var playKey = stormPlaylistDedupeKey(file) || String(file).substring(0, 160);
+    var sorted = _.orderBy(qualities || [], ['quality'], ['desc']);
+    file = sanitizePlayUrl(sorted.length ? sorted[0].file : file);
+    var playKey = stormSessionDedupeKey(file) || String(file).substring(0, 160);
     if (state.played[playKey]) {
         return;
     }
     state.played[playKey] = true;
     console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));
-    libs.embed_callback(file, provider, provider, 'Hls', callback, 1, tracks, qualities, headerDirect, {
+    libs.embed_callback(file, provider, provider, 'Hls', callback, 1, tracks, sorted.length ? sorted : qualities, headerDirect, {
         type: 'm3u8',
     });
 }
@@ -562,7 +573,7 @@ callbacksEmbed['vidlink-embed'] = function (dataCallback, provider, host, callba
                 }
                 if (!(data.responseURL && data.responseURL.indexOf('/api/b/') != -1 && data.responseText && data.responseText.charAt(0) === '{')) return [3, 2];
                 parseSearch = JSON.parse(data.responseText);
-                dedupeKey = stormPlaylistDedupeKey(parseSearch && parseSearch.stream && parseSearch.stream.playlist ? parseSearch.stream.playlist : '');
+                dedupeKey = stormSessionDedupeKey(parseSearch && parseSearch.stream && parseSearch.stream.playlist ? parseSearch.stream.playlist : '');
                 embedDone = getVidlinkEmbedDoneMap();
                 if (!dedupeKey || embedDone[dedupeKey]) {
                     return [2];

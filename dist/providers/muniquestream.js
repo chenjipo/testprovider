@@ -149,8 +149,9 @@ function deliverUniqueStreamLink(playUrl, callback, sorted, headerDirect) {
         return;
     }
     state.played[playKey] = true;
-    console.log('[RN-Fetch][UNIQUESTREAM-PLAY] url=' + String(playUrl).substring(0, 140) + ' qualities=' + sorted.length);
-    libs.embed_callback(playUrl, PROVIDER, PROVIDER, 'Hls', callback, 1, [], sorted, headerDirect, {
+    var playFile = sorted.length ? sorted[0].file : playUrl;
+    console.log('[RN-Fetch][UNIQUESTREAM-PLAY] url=' + String(playFile).substring(0, 140) + ' qualities=' + sorted.length);
+    libs.embed_callback(playFile, PROVIDER, PROVIDER, 'Hls', callback, 1, [], sorted, headerDirect, {
         type: 'm3u8',
     });
 }
@@ -352,7 +353,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v11');
+                libs.beginVodLinkSession();
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v12');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 4, , 5]);

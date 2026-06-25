@@ -413,7 +413,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v42');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v43');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1066,6 +1066,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_b.label) {
             case 0:
                 PROVIDER = 'IYesMovies';
+                libs.beginVodLinkSession();
                 DOMAIN = "https://ww.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
