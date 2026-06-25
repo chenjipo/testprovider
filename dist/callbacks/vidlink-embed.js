@@ -361,7 +361,7 @@ function parseTracks(captions) {
     }
     return tracks;
 }
-function finishEmbed(file, provider, callback, tracks, qualities, headerDirect, metadata) {
+function finishVidlinkEmbed(file, provider, callback, tracks, qualities, headerDirect, metadata) {
     var state = getVidlinkState();
     file = sanitizePlayUrl(file);
     qualities = sanitizeQualities(qualities);
@@ -408,7 +408,7 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
                             return [2];
                         }
                         directQuality = _.orderBy(directQuality, ['quality'], ['desc']);
-                        finishEmbed(directQuality[0].file, provider, callback, tracks, directQuality, headerDirect, metadata);
+                        finishVidlinkEmbed(directQuality[0].file, provider, callback, tracks, directQuality, headerDirect, metadata);
                         return [2];
                     }
                     return [2];
@@ -447,7 +447,7 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
                 if (isValidM3u8Body(probeBody)) {
                     mappedQualities = mapQualitiesForTag(directUrl, probeCandidate.tag);
                     console.log('[RN-Fetch][VIDLINK-PROBE] ok tag=' + probeCandidate.tag);
-                    finishEmbed(probeCandidate.file, provider, callback, tracks, mappedQualities, probeCandidate.headers, metadata);
+                    finishVidlinkEmbed(probeCandidate.file, provider, callback, tracks, mappedQualities, probeCandidate.headers, metadata);
                     return [2];
                 }
                 console.log('[RN-Fetch][VIDLINK-PROBE] fail tag=' + probeCandidate.tag + ' prev=' + String(probeBody || '').substring(0, 80));
@@ -462,7 +462,7 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
                     };
                     mappedQualities = mapQualitiesForTag(directUrl, probeCandidate.tag);
                     console.log('[RN-Fetch][VIDLINK-PROBE] ok tag=webview-hls');
-                    finishEmbed(probeCandidate.file, provider, callback, tracks, mappedQualities, probeCandidate.headers, metadata);
+                    finishVidlinkEmbed(probeCandidate.file, provider, callback, tracks, mappedQualities, probeCandidate.headers, metadata);
                     return [2];
                 }
                 if (!pack.candidates.length) {
@@ -482,16 +482,16 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
                     if (stormQualities.length) {
                         directQualitySorted = _.orderBy(stormQualities, ['quality'], ['desc']);
                         console.log('[RN-Fetch][VIDLINK-M3U8] derived=' + stormQualities.length + ' best=' + directQualitySorted[0].quality);
-                        finishEmbed(directQualitySorted[0].file, provider, callback, tracks, directQualitySorted, headerDirect, metadata);
+                        finishVidlinkEmbed(directQualitySorted[0].file, provider, callback, tracks, directQualitySorted, headerDirect, metadata);
                         return [2];
                     }
                 }
                 if (isStormProxyUrl(directUrl)) {
-                    finishEmbed(directUrl, provider, callback, tracks, [{ file: directUrl, quality: 1080 }], headerDirect, metadata);
+                    finishVidlinkEmbed(directUrl, provider, callback, tracks, [{ file: directUrl, quality: 1080 }], headerDirect, metadata);
                     return [2];
                 }
                 if (directUrl.indexOf('/proxy/') >= 0) {
-                    finishEmbed(directUrl, provider, callback, tracks, [{ file: directUrl, quality: 1080 }], headerDirect, metadata);
+                    finishVidlinkEmbed(directUrl, provider, callback, tracks, [{ file: directUrl, quality: 1080 }], headerDirect, metadata);
                     return [2];
                 }
                 return [4, fetch(directUrl)];
@@ -511,17 +511,17 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
                 if (m3u8Data.length) {
                     directQualitySorted = _.orderBy(m3u8Data, ['quality'], ['desc']);
                     console.log('[RN-Fetch][VIDLINK-M3U8] fetched=' + m3u8Data.length + ' best=' + directQualitySorted[0].quality);
-                    finishEmbed(directQualitySorted[0].file, provider, callback, tracks, directQualitySorted, headerDirect, metadata);
+                    finishVidlinkEmbed(directQualitySorted[0].file, provider, callback, tracks, directQualitySorted, headerDirect, metadata);
                     return [2];
                 }
                 stormQualities = buildStormQualitiesFromMasterUrl(directUrl);
                 if (stormQualities.length) {
                     directQualitySorted = _.orderBy(stormQualities, ['quality'], ['desc']);
                     console.log('[RN-Fetch][VIDLINK-M3U8] derived=' + stormQualities.length + ' best=' + directQualitySorted[0].quality);
-                    finishEmbed(directQualitySorted[0].file, provider, callback, tracks, directQualitySorted, headerDirect, metadata);
+                    finishVidlinkEmbed(directQualitySorted[0].file, provider, callback, tracks, directQualitySorted, headerDirect, metadata);
                     return [2];
                 }
-                finishEmbed(directUrl, provider, callback, tracks, [{ file: directUrl, quality: 1080 }], headerDirect, metadata);
+                finishVidlinkEmbed(directUrl, provider, callback, tracks, [{ file: directUrl, quality: 1080 }], headerDirect, metadata);
                 return [2];
         }
     });
@@ -547,7 +547,7 @@ callbacksEmbed['vidlink-embed'] = function (dataCallback, provider, host, callba
                         if (pending && pending.playlist) {
                             playUrl = stripProxyMetaQuery(data.url);
                             mappedQualities = mapQualitiesForTag(pending.playlist, 'storm1080-auth');
-                            finishEmbed(playUrl, pending.provider, pending.callback, pending.tracks, mappedQualities, buildHeaderDirect(), pending.metadata);
+                            finishVidlinkEmbed(playUrl, pending.provider, pending.callback, pending.tracks, mappedQualities, buildHeaderDirect(), pending.metadata);
                         }
                     }
                     return [2];

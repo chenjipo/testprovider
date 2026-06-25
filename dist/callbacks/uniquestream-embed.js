@@ -112,7 +112,7 @@ function normalizeMediacachePlaylistUrl(url) {
     }
     return file;
 }
-function finishEmbed(playUrl, provider, callback, qualities, headerDirect, metadata) {
+function finishUniqueStreamCbEmbed(playUrl, provider, callback, qualities, headerDirect, metadata) {
     var state = getUniqueStreamState();
     var sorted = _.orderBy(qualities || [], ['quality'], ['desc']);
     if (!sorted.length) {
@@ -166,11 +166,11 @@ function processMediacacheMaster(playlistUrl, provider, callback, metadata) { re
                     probeIdx = 0;
                     return [3, 3];
                 }
-                finishEmbed(masterUrl, provider, callback, [{ file: masterUrl, quality: 1080 }], headers, metadata);
+                finishUniqueStreamCbEmbed(masterUrl, provider, callback, [{ file: masterUrl, quality: 1080 }], headers, metadata);
                 return [2];
             case 3:
                 if (!(probeIdx < sorted.length)) {
-                    finishEmbed(masterUrl, provider, callback, sorted, headers, metadata);
+                    finishUniqueStreamCbEmbed(masterUrl, provider, callback, sorted, headers, metadata);
                     return [2];
                 }
                 probeCandidate = sorted[probeIdx];
@@ -179,7 +179,7 @@ function processMediacacheMaster(playlistUrl, provider, callback, metadata) { re
                 probeBody = _a.sent();
                 if (isValidM3u8Body(probeBody)) {
                     console.log('[RN-Fetch][UNIQUESTREAM-PROBE] ok master quality=' + probeCandidate.quality);
-                    finishEmbed(masterUrl, provider, callback, sorted, headers, metadata);
+                    finishUniqueStreamCbEmbed(masterUrl, provider, callback, sorted, headers, metadata);
                     return [2];
                 }
                 probeIdx++;

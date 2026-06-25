@@ -154,7 +154,7 @@ function deliverUniqueStreamLink(playUrl, callback, sorted, headerDirect) {
         type: 'm3u8',
     });
 }
-function finishEmbed(playUrl, callback, qualities, headerDirect, metadata) {
+function finishUniqueStreamProviderEmbed(playUrl, callback, qualities, headerDirect, metadata) {
     var sorted = _.orderBy(qualities || [], ['quality'], ['desc']);
     if (!sorted.length) {
         sorted = [{ file: playUrl, quality: 1080 }];
@@ -183,11 +183,11 @@ function probeAndEmbedPlaylist(playlistUrl, callback, metadata) { return __await
                     probeIdx = 0;
                     return [3, 2];
                 }
-                finishEmbed(playlistUrl, callback, [{ file: playlistUrl, quality: 1080 }], headers, metadata);
+                finishUniqueStreamProviderEmbed(playlistUrl, callback, [{ file: playlistUrl, quality: 1080 }], headers, metadata);
                 return [2, true];
             case 2:
                 if (!(probeIdx < sorted.length)) {
-                    finishEmbed(playlistUrl, callback, sorted, headers, metadata);
+                    finishUniqueStreamProviderEmbed(playlistUrl, callback, sorted, headers, metadata);
                     return [2, true];
                 }
                 probeCandidate = sorted[probeIdx];
@@ -196,7 +196,7 @@ function probeAndEmbedPlaylist(playlistUrl, callback, metadata) { return __await
                 probeBody = _a.sent();
                 if (isValidM3u8Body(probeBody)) {
                     console.log('[RN-Fetch][UNIQUESTREAM-PROBE] ok master quality=' + probeCandidate.quality);
-                    finishEmbed(playlistUrl, callback, sorted, headers, metadata);
+                    finishUniqueStreamProviderEmbed(playlistUrl, callback, sorted, headers, metadata);
                     return [2, true];
                 }
                 probeIdx++;
@@ -352,7 +352,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v10');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v11');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 4, , 5]);
