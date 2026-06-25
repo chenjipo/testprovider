@@ -384,17 +384,13 @@ function finishVidlinkEmbed(file, provider, callback, tracks, qualities, headerD
         }
     }
     var playKey = stormSessionDedupeKey(file) || String(file).substring(0, 160);
-    if (!libs.__vidlinkDelivered) {
-        libs.__vidlinkDelivered = {};
-    }
-    if (playKey && libs.__vidlinkDelivered[playKey]) {
+    var state = getVidlinkState();
+    if (playKey && state.played[playKey]) {
         return;
     }
     if (playKey) {
-        libs.__vidlinkDelivered[playKey] = true;
+        state.played[playKey] = true;
     }
-    var state = getVidlinkState();
-    state.played[playKey] = true;
     console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));
     libs.embed_callback(file, provider, provider, 'Hls', callback, 0, tracks, sorted.length ? sorted : qualities, headerDirect, {
         type: 'm3u8',
