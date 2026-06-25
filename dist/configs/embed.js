@@ -179,9 +179,7 @@ libs.__tryQueueVodBatch = function (urlDirect, provider, host, quality, callback
     if (provider === 'MVidlink') {
         libs.__markVidlinkDelivered(urlDirect);
     }
-    libs.__vodBatchItems.push([urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options]);
-    console.log('[RN-Fetch][BATCH-QUEUE] provider=' + provider + ' total=' + libs.__vodBatchItems.length);
-    libs.__scheduleBatchRelease();
+    libs.__pushVodBatchItem(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
     return true;
 };
 if (!libs.__vodBatchItems) {
@@ -231,19 +229,24 @@ libs.__batchHasProvider = function (provider) {
     return false;
 };
 libs.beginVodLinkSession = function () {
-    if (!libs.__vodBatchActive) {
-        libs.__vodBatchActive = true;
-        libs.__vodBatchStartMs = Date.now();
+    var now = Date.now();
+    if (libs.__vodBatchReleased || !libs.__vodBatchStartMs || now - libs.__vodBatchStartMs > 70000) {
+        libs.__vodBatchStartMs = now;
+        libs.__vodBatchReleased = false;
+        libs.__vodBatchItems = [];
         libs.__vidlinkDelivered = {};
         console.log('[RN-Fetch][BATCH-SESSION] start');
     }
     libs.__embedWebviewSlot.multiSourceBatch = true;
 };
-libs.__shouldBatchVodLinks = function () {
-    if (!libs.__vodBatchActive || !libs.__vodBatchStartMs) {
+libs.__isVodSessionOpen = function () {
+    if (!libs.__vodBatchStartMs || libs.__vodBatchReleased) {
         return false;
     }
     return Date.now() - libs.__vodBatchStartMs < 65000;
+};
+libs.__shouldBatchVodLinks = function () {
+    return libs.__isVodSessionOpen();
 };
 libs.__releaseLinkBatch = function () {
     var items = libs.__vodBatchItems || [];
@@ -251,7 +254,7 @@ libs.__releaseLinkBatch = function () {
         return;
     }
     libs.__vodBatchItems = [];
-    libs.__vodBatchActive = false;
+    libs.__vodBatchReleased = true;
     if (libs.__vodBatchTimer) {
         clearTimeout(libs.__vodBatchTimer);
         libs.__vodBatchTimer = null;
@@ -273,7 +276,7 @@ libs.__tryReleaseLinkBatch = function () {
     var elapsed = libs.__vodBatchStartMs ? Date.now() - libs.__vodBatchStartMs : 0;
     var webviewIdle = !slot.pumping && (!slot.queue || !slot.queue.length);
     if (!items.length) {
-        if (libs.__vodBatchActive && !webviewIdle && elapsed < 52000) {
+        if (libs.__isVodSessionOpen() && !webviewIdle && elapsed < 52000) {
             if (libs.__vodBatchReleaseTimer) {
                 clearTimeout(libs.__vodBatchReleaseTimer);
             }
@@ -313,6 +316,14 @@ libs.__scheduleBatchRelease = function () {
         libs.__tryReleaseLinkBatch();
     }, 1200);
 };
+libs.__pushVodBatchItem = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
+    if (provider === 'MVidlink') {
+        libs.__markVidlinkDelivered(urlDirect);
+    }
+    libs.__vodBatchItems.push([urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options]);
+    console.log('[RN-Fetch][BATCH-QUEUE] provider=' + provider + ' total=' + libs.__vodBatchItems.length);
+    libs.__scheduleBatchRelease();
+};
 libs.embed_callback = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
     if (subs === void 0) { subs = []; }
     if (direct_quality === void 0) { direct_quality = []; }
@@ -322,9 +333,22 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
         return;
     }
     var isVodStream = libs.__isVodBatchStream(urlDirect, provider);
+    if (libs.__isVodBatchProvider(provider) && isVodStream && libs.__isVodSessionOpen()) {
+        if (libs.__batchHasProvider(provider)) {
+            console.log('[RN-Fetch][BATCH-SKIP-DUP] provider=' + provider);
+            return;
+        }
+        if (provider === 'MVidlink' && libs.__isVidlinkDuplicate(urlDirect)) {
+            console.log('[RN-Fetch][BATCH-SKIP-DUP] provider=MVidlink');
+            return;
+        }
+        console.log('[RN-Fetch][BATCH-FORCE-QUEUE] provider=' + provider);
+        libs.__pushVodBatchItem(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
+        return;
+    }
     if (libs.__isVodBatchProvider(provider) && isVodStream) {
         var lateMs = libs.__vodBatchStartMs ? Date.now() - libs.__vodBatchStartMs : 0;
-        if (!libs.__vodBatchActive && lateMs > 0 && lateMs < 60000) {
+        if (libs.__vodBatchReleased && lateMs > 0 && lateMs < 60000) {
             if (provider === 'MVidlink' && libs.__isVidlinkDuplicate(urlDirect)) {
                 console.log('[RN-Fetch][BATCH-SKIP-DUP] provider=MVidlink');
                 return;
@@ -351,18 +375,9 @@ libs.__embedCallbackCore = function (urlDirect, provider, host, quality, callbac
     if (direct_quality === void 0) { direct_quality = []; }
     if (headers === void 0) { headers = {}; }
     if (options === void 0) { options = {}; }
-    if (libs.__tryQueueVodBatch(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options)) {
-        return;
-    }
-    if (provider === 'MVidlink' && libs.__isVidlinkDuplicate(urlDirect)) {
-        return;
-    }
-    if (provider === 'MVidlink') {
-        libs.__markVidlinkDelivered(urlDirect);
-    }
-    libs.__embedCallbackDeliver(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
+    return libs.embed_callback(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
 };
-console.log('[RN-Fetch][EMBED-CFG] batch-v8');
+console.log('[RN-Fetch][EMBED-CFG] batch-v9');
 if (libs.__vodBatchItems.length) {
     console.log('[RN-Fetch][BATCH-RESUME] pending=' + libs.__vodBatchItems.length);
     libs.__scheduleBatchRelease();

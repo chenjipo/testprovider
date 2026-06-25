@@ -384,10 +384,16 @@ function finishVidlinkEmbed(file, provider, callback, tracks, qualities, headerD
         }
     }
     var playKey = stormSessionDedupeKey(file) || String(file).substring(0, 160);
-    var state = getVidlinkState();
-    if (playKey && state.played[playKey]) {
+    if (!libs.__vidlinkPlayLock) {
+        libs.__vidlinkPlayLock = {};
+    }
+    if (playKey && libs.__vidlinkPlayLock[playKey]) {
         return;
     }
+    if (playKey) {
+        libs.__vidlinkPlayLock[playKey] = true;
+    }
+    var state = getVidlinkState();
     if (playKey) {
         state.played[playKey] = true;
     }
