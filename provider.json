@@ -1,5 +1,6 @@
 {
   "providers": [
-    "dist/providers/mvidlink.js"
+    "dist/providers/mvidlink.js",
+    "dist/providers/muniquestream.js"
   ]
 }
