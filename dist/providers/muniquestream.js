@@ -237,11 +237,13 @@ function fireEmbedHostFallback(iframeUrl, movieInfo, callback, pageReferer) {
     if (!(iframeUrl && hosts && hosts['uniquestream-embed'])) {
         return;
     }
-    console.log('[RN-Fetch][UNIQUESTREAM-EMBED] fire webview fallback (justhd-style)');
-    hosts['uniquestream-embed'](iframeUrl, movieInfo || {}, PROVIDER, {
-        embedUrl: iframeUrl,
-        pageReferer: pageReferer,
-    }, callback);
+    console.log('[RN-Fetch][UNIQUESTREAM-EMBED] queue webview fallback');
+    libs.scheduleEmbedWebview(PROVIDER, function () {
+        hosts['uniquestream-embed'](iframeUrl, movieInfo || {}, PROVIDER, {
+            embedUrl: iframeUrl,
+            pageReferer: pageReferer,
+        }, callback);
+    });
 }
 function tryRnPrefetchIframe(iframeUrl, pageReferer) { return __awaiter(_this, void 0, void 0, function () {
     var text, directUrl;
@@ -348,7 +350,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v7');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v8');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 4, , 5]);

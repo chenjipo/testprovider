@@ -47,13 +47,15 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (movieInfo.type == 'tv') {
                     urlEmbed = DOMAIN + '/tv/' + movieInfo.tmdb_id + '/' + movieInfo.season + '/' + movieInfo.episode;
                 }
-                console.log('[RN-Fetch][VIDLINK-VERSION] v15');
+                console.log('[RN-Fetch][VIDLINK-VERSION] v16');
                 libs.log({ urlEmbed: urlEmbed }, PROVIDER, 'URL EMBED');
                 if (urlEmbed && hosts && hosts['vidlink-embed']) {
-                    console.log('[RN-Fetch][VIDLINK-EMBED] fire webview (justhd-style)');
-                    hosts['vidlink-embed'](urlEmbed, movieInfo || {}, PROVIDER, {
-                        embedUrl: urlEmbed,
-                    }, callback);
+                    console.log('[RN-Fetch][VIDLINK-EMBED] queue webview slot');
+                    libs.scheduleEmbedWebview(PROVIDER, function () {
+                        hosts['vidlink-embed'](urlEmbed, movieInfo || {}, PROVIDER, {
+                            embedUrl: urlEmbed,
+                        }, callback);
+                    });
                 }
                 return [3, 3];
             case 2:

@@ -413,7 +413,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v39');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v40');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1185,17 +1185,19 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('GET_HDR', 'referer=' + LINK_DETAIL.substring(0, 80));
                 debugLog('EP_PARAMS', 'mid=' + mid + ' eid=' + eid + ' sv=' + sv);
                 console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' mid=' + mid + ' eid=' + eid + ' sv=' + sv);
-                debugLog('GET_PARALLEL', 'fire embed + RN /get/ (justhd-style)');
+                debugLog('GET_PARALLEL', 'queue embed + RN /get/');
                 if (hosts && hosts['yesmovies-embed']) {
-                    hosts['yesmovies-embed'](LINK_DETAIL, movieInfo || {}, PROVIDER, {
-                        detailUrl: LINK_DETAIL,
-                        mid: mid,
-                        eid: eid,
-                        sv: sv,
-                        epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
-                        yesLoc: 'US',
-                        watchUrl: ''
-                    }, callback);
+                    libs.scheduleEmbedWebview(PROVIDER, function () {
+                        hosts['yesmovies-embed'](LINK_DETAIL, movieInfo || {}, PROVIDER, {
+                            detailUrl: LINK_DETAIL,
+                            mid: mid,
+                            eid: eid,
+                            sv: sv,
+                            epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
+                            yesLoc: 'US',
+                            watchUrl: ''
+                        }, callback);
+                    });
                 }
                 return [3, 7];
             case 4:

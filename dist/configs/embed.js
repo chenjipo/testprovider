@@ -167,3 +167,45 @@ libs.parse_size = function (file, provider, host, type, callback, rank, tracks) 
         }
     });
 }); };
+libs.__embedWebviewSlot = libs.__embedWebviewSlot || { busyUntil: 0, pumping: false, queue: [] };
+libs.__embedWebviewOrder = { 'MVidlink': 0, 'IYesMovies': 1, 'MUniqueStream': 2 };
+libs.scheduleEmbedWebview = function (provider, task, slotMs) {
+    var slot = libs.__embedWebviewSlot;
+    var order = libs.__embedWebviewOrder[provider];
+    if (typeof order !== 'number') {
+        order = 99;
+    }
+    slot.queue.push({ provider: provider, task: task, order: order });
+    slot.queue.sort(function (a, b) {
+        if (a.order !== b.order) {
+            return a.order - b.order;
+        }
+        return 0;
+    });
+    if (slot.pumping) {
+        return;
+    }
+    slot.pumping = true;
+    var holdMs = slotMs || 20000;
+    function runNext() {
+        if (!slot.queue.length) {
+            slot.pumping = false;
+            return;
+        }
+        var now = Date.now();
+        var waitMs = Math.max(0, slot.busyUntil - now);
+        var item = slot.queue.shift();
+        setTimeout(function () {
+            console.log('[RN-Fetch][EMBED-SLOT] start provider=' + item.provider + ' wait=' + waitMs + 'ms queued=' + slot.queue.length);
+            slot.busyUntil = Date.now() + holdMs;
+            try {
+                item.task();
+            }
+            catch (e) {
+                console.log('[RN-Fetch][EMBED-SLOT] err provider=' + item.provider + ' ' + String(e && e.message ? e.message : e));
+            }
+            setTimeout(runNext, holdMs);
+        }, waitMs);
+    }
+    runNext();
+};
