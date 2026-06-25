@@ -1067,6 +1067,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             case 0:
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
+                callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
                 DOMAIN = "https://ww.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
