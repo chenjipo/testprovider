@@ -115,14 +115,14 @@ function buildStormQualitiesFromMasterUrl(masterUrl) {
     }
     return result;
 }
-function getVidlinkEmbedDoneMap() {
-    if (typeof global !== 'undefined') {
-        if (!global.__vidlinkEmbedDone) {
-            global.__vidlinkEmbedDone = {};
-        }
-        return global.__vidlinkEmbedDone;
+function getVidlinkState() {
+    if (!libs.__vidlinkState) {
+        libs.__vidlinkState = { embedDone: {}, played: {} };
     }
-    return {};
+    return libs.__vidlinkState;
+}
+function getVidlinkEmbedDoneMap() {
+    return getVidlinkState().embedDone;
 }
 function buildHeaderDirect() {
     return {
@@ -249,14 +249,12 @@ function parseTracks(captions) {
     return tracks;
 }
 function finishEmbed(file, provider, callback, tracks, qualities, headerDirect, metadata) {
+    var state = getVidlinkState();
     var playKey = stormPlaylistDedupeKey(file) || String(file).substring(0, 160);
-    if (!global.__vidlinkPlayed) {
-        global.__vidlinkPlayed = {};
-    }
-    if (global.__vidlinkPlayed[playKey]) {
+    if (state.played[playKey]) {
         return;
     }
-    global.__vidlinkPlayed[playKey] = true;
+    state.played[playKey] = true;
     console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['Referer'] || ''));
     libs.embed_callback(file, provider, provider, 'Hls', callback, 1, tracks, qualities, headerDirect, {
         type: 'm3u8',
