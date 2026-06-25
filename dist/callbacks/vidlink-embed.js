@@ -126,14 +126,35 @@ function getVidlinkEmbedDoneMap() {
 }
 function buildHeaderDirect() {
     return {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+        'referer': 'https://vidlink.pro/',
+        'origin': 'https://vidlink.pro',
         'Referer': 'https://vidlink.pro/',
         'Origin': 'https://vidlink.pro',
-        'Sec-Fetch-Site': 'cross-site',
-        'Sec-Fetch-Mode': 'cors',
-        'Sec-Fetch-Dest': 'empty',
         'Accept': '*/*',
-        'Accept-Encoding': 'gzip, deflate, br, zstd',
+        'Accept-Language': 'en-US,en;q=0.9',
+    };
+}
+function buildPlaybackHeaders(headersObj) {
+    var referer = 'https://megacloud.live/';
+    var origin = 'https://megacloud.live';
+    var keys = Object.keys(headersObj || {});
+    for (var i = 0; i < keys.length; i++) {
+        var lower = keys[i].toLowerCase();
+        if (lower === 'referer') {
+            referer = headersObj[keys[i]];
+        }
+        else if (lower === 'origin') {
+            origin = headersObj[keys[i]];
+        }
+    }
+    return {
+        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+        'referer': referer,
+        'origin': origin,
+        'Referer': referer,
+        'Origin': origin,
+        'Accept': '*/*',
         'Accept-Language': 'en-US,en;q=0.9',
     };
 }
@@ -189,6 +210,28 @@ function parseProxyQueryParams(directUrl) {
         tailQuery: tailParams.length ? tailParams.join('&') : '',
     };
 }
+function unwrapStormToCdn(directUrl) {
+    var parsed = parseProxyQueryParams(directUrl);
+    if (!parsed.host) {
+        return null;
+    }
+    var proxyIdx = directUrl.indexOf('/proxy/');
+    if (proxyIdx < 0) {
+        return null;
+    }
+    var pathPart = directUrl.substring(proxyIdx + '/proxy/'.length);
+    var qIdx = pathPart.indexOf('?');
+    var encodedPath = qIdx >= 0 ? pathPart.substring(0, qIdx) : pathPart;
+    var decodedPath = decodeURIComponent(encodedPath);
+    var cdnUrl = parsed.host.replace(/\/$/, '') + '/' + decodedPath.replace(/^\//, '');
+    if (parsed.tailQuery) {
+        cdnUrl += '?' + parsed.tailQuery;
+    }
+    return {
+        directUrl: cdnUrl,
+        headerDirect: buildPlaybackHeaders(parsed.headersObj),
+    };
+}
 function isStormProxyUrl(directUrl) {
     return directUrl.indexOf('vodvidl.site') >= 0;
 }
@@ -200,10 +243,12 @@ function transformProxyUrl(directUrl, headerDirect) {
         var parsed = parseProxyQueryParams(directUrl);
         var nextHeaders = normalizeStreamHeaders(parsed.headersObj, headerDirect);
         if (isStormProxyUrl(directUrl)) {
-            var stormHeaders = buildHeaderDirect();
-            libs.log({ directUrl: directUrl, headerDirect: stormHeaders }, 'MVidlink', 'PROXY STORM KEEP');
-            console.log('[RN-Fetch][VIDLINK-PROXY] keep storm referer=' + (stormHeaders['Referer'] || ''));
-            return { directUrl: directUrl, headerDirect: stormHeaders };
+            var cdnUnwrap = unwrapStormToCdn(directUrl);
+            if (cdnUnwrap) {
+                libs.log({ proxyFrom: directUrl, proxyTo: cdnUnwrap.directUrl, headerDirect: cdnUnwrap.headerDirect }, 'MVidlink', 'PROXY CDN UNWRAP');
+                console.log('[RN-Fetch][VIDLINK-PROXY] cdn unwrap referer=' + (cdnUnwrap.headerDirect['referer'] || ''));
+                return cdnUnwrap;
+            }
         }
         if (parsed.host && Object.keys(parsed.headersObj).length > 0) {
             var proxyIdx = directUrl.indexOf('/proxy/');
@@ -255,7 +300,7 @@ function finishEmbed(file, provider, callback, tracks, qualities, headerDirect, 
         return;
     }
     state.played[playKey] = true;
-    console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['Referer'] || ''));
+    console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));
     libs.embed_callback(file, provider, provider, 'Hls', callback, 1, tracks, qualities, headerDirect, {
         type: 'm3u8',
         is_end_webview: true,
@@ -303,7 +348,7 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
                 headerDirect = transformed.headerDirect;
                 libs.log({ directUrl: directUrl, headerDirect: headerDirect }, provider, 'DIRECT URL DATA');
                 stormBase = isStormProxyUrl(directUrl) ? getStormBaseOrigin(directUrl) : '';
-                if (isStormProxyUrl(directUrl) && directUrl.indexOf('/playlist.m3u8') >= 0) {
+                if (directUrl.indexOf('/playlist.m3u8') >= 0) {
                     stormQualities = buildStormQualitiesFromMasterUrl(directUrl);
                     if (stormQualities.length) {
                         directQualitySorted = _.orderBy(stormQualities, ['quality'], ['desc']);
