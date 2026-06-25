@@ -292,15 +292,13 @@ function buildPlayCandidates(stormMasterUrl) {
     var vidlinkHeaders = buildHeaderDirect();
     var cdn = unwrapStormToCdn(storm1080);
     var candidates = [];
-    if (cdn) {
-        candidates.push({ file: cdn.directUrl, headers: cdn.headerDirect, tag: 'cdn1080' });
-    }
     candidates.push({ file: stripProxyMetaQuery(storm1080), headers: vidlinkHeaders, tag: 'storm1080-auth' });
-    if (cdn) {
-        candidates.push({ file: stripProxyMetaQuery(cdn.directUrl), headers: playbackHeaders, tag: 'cdn1080-auth' });
-    }
     candidates.push({ file: stripProxyMetaQuery(storm1080), headers: playbackHeaders, tag: 'storm1080-auth-mega' });
     candidates.push({ file: storm1080, headers: vidlinkHeaders, tag: 'storm1080-full' });
+    if (cdn) {
+        candidates.push({ file: stripProxyMetaQuery(cdn.directUrl), headers: playbackHeaders, tag: 'cdn1080-auth' });
+        candidates.push({ file: cdn.directUrl, headers: cdn.headerDirect, tag: 'cdn1080' });
+    }
     return { candidates: candidates, qualities: qualities };
 }
 function isStormProxyUrl(directUrl) {
@@ -314,12 +312,11 @@ function transformProxyUrl(directUrl, headerDirect) {
         var parsed = parseProxyQueryParams(directUrl);
         var nextHeaders = normalizeStreamHeaders(parsed.headersObj, headerDirect);
         if (isStormProxyUrl(directUrl)) {
-            var cdnUnwrap = unwrapStormToCdn(directUrl);
-            if (cdnUnwrap) {
-                libs.log({ proxyFrom: directUrl, proxyTo: cdnUnwrap.directUrl, headerDirect: cdnUnwrap.headerDirect }, 'MVidlink', 'PROXY CDN UNWRAP');
-                console.log('[RN-Fetch][VIDLINK-PROXY] cdn unwrap referer=' + (cdnUnwrap.headerDirect['referer'] || ''));
-                return cdnUnwrap;
-            }
+            var strippedStorm = stripProxyMetaQuery(directUrl);
+            var vidlinkHeaders = buildHeaderDirect();
+            libs.log({ proxyFrom: directUrl, proxyTo: strippedStorm, headerDirect: vidlinkHeaders }, 'MVidlink', 'PROXY STORM KEEP');
+            console.log('[RN-Fetch][VIDLINK-PROXY] storm keep referer=' + (vidlinkHeaders['referer'] || ''));
+            return { directUrl: strippedStorm, headerDirect: vidlinkHeaders };
         }
         if (parsed.host && Object.keys(parsed.headersObj).length > 0) {
             var proxyIdx = directUrl.indexOf('/proxy/');

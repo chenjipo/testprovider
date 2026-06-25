@@ -65,7 +65,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (movieInfo.type == 'tv') {
                     urlEmbed = DOMAIN + '/tv/' + movieInfo.tmdb_id + '/' + movieInfo.season + '/' + movieInfo.episode;
                 }
-                console.log('[RN-Fetch][VIDLINK-VERSION] v10');
+                console.log('[RN-Fetch][VIDLINK-VERSION] v11');
                 libs.log({ urlEmbed: urlEmbed }, PROVIDER, 'URL EMBED');
                 _a.label = 1;
             case 1:
