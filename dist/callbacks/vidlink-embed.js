@@ -375,14 +375,24 @@ function finishVidlinkEmbed(file, provider, callback, tracks, qualities, headerD
     qualities = sanitizeQualities(qualities);
     var sorted = _.orderBy(qualities || [], ['quality'], ['desc']);
     file = sanitizePlayUrl(sorted.length ? sorted[0].file : file);
+    if (file.indexOf('.m3u8') < 0 && file.indexOf('vodvidl.site') >= 0) {
+        var masterUrl = file.indexOf('/playlist.m3u8') >= 0 ? file : String(file).replace(/\/?$/, '') + '/playlist.m3u8';
+        var derived = buildStormQualitiesFromMasterUrl(masterUrl);
+        if (derived.length) {
+            sorted = _.orderBy(derived, ['quality'], ['desc']);
+            file = sorted[0].file;
+        }
+    }
     var playKey = stormSessionDedupeKey(file) || String(file).substring(0, 160);
     if (!libs.__vidlinkDelivered) {
         libs.__vidlinkDelivered = {};
     }
-    if (libs.__vidlinkDelivered[playKey]) {
+    if (playKey && libs.__vidlinkDelivered[playKey]) {
         return;
     }
-    libs.__vidlinkDelivered[playKey] = true;
+    if (playKey) {
+        libs.__vidlinkDelivered[playKey] = true;
+    }
     var state = getVidlinkState();
     state.played[playKey] = true;
     console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));

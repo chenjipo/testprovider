@@ -158,6 +158,25 @@ libs.__vodStormKey = function (url) {
 libs.__isVodBatchProvider = function (provider) {
     return provider === 'MUniqueStream' || provider === 'MVidlink' || provider === 'IYesMovies';
 };
+libs.__isVodBatchStream = function (urlDirect, provider) {
+    if (!urlDirect) {
+        return false;
+    }
+    var url = String(urlDirect);
+    if (url.indexOf('.m3u8') >= 0 || url.indexOf('.hls') >= 0) {
+        return true;
+    }
+    if (provider === 'MVidlink' && url.indexOf('vodvidl.site') >= 0) {
+        return true;
+    }
+    if (provider === 'MUniqueStream' && (url.indexOf('mediacache.cc') >= 0 || url.indexOf('uniquestream') >= 0)) {
+        return true;
+    }
+    if (provider === 'IYesMovies' && url.indexOf('ployan.me') >= 0) {
+        return true;
+    }
+    return false;
+};
 libs.__batchHasProvider = function (provider) {
     var items = libs.__vodBatchItems;
     for (var i = 0; i < items.length; i++) {
@@ -262,12 +281,15 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
             console.log('[RN-Fetch][BATCH-SKIP-DUP] provider=MVidlink');
             return;
         }
-        if (stormKey) {
-            libs.__vidlinkDelivered[stormKey] = true;
-        }
     }
-    var isM3u8 = !!(urlDirect && String(urlDirect).indexOf('.m3u8') >= 0);
-    if (libs.__shouldBatchVodLinks() && libs.__isVodBatchProvider(provider) && isM3u8) {
+    var isVodStream = libs.__isVodBatchStream(urlDirect, provider);
+    if (libs.__shouldBatchVodLinks() && libs.__isVodBatchProvider(provider) && isVodStream) {
+        if (provider === 'MVidlink') {
+            var markKey = libs.__vodStormKey(urlDirect);
+            if (markKey) {
+                libs.__vidlinkDelivered[markKey] = true;
+            }
+        }
         if (libs.__batchHasProvider(provider)) {
             console.log('[RN-Fetch][BATCH-SKIP-DUP] provider=' + provider);
             return;
@@ -277,9 +299,22 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
         libs.__scheduleBatchRelease();
         return;
     }
-    if (libs.__isVodBatchProvider(provider) && isM3u8) {
+    if (libs.__isVodBatchProvider(provider) && isVodStream) {
         var lateMs = libs.__vodBatchStartMs ? Date.now() - libs.__vodBatchStartMs : 0;
         if (!libs.__vodBatchActive && lateMs > 0 && lateMs < 60000) {
+            if (provider === 'MVidlink') {
+                var lateKey = libs.__vodStormKey(urlDirect);
+                if (lateKey) {
+                    if (!libs.__vidlinkDelivered) {
+                        libs.__vidlinkDelivered = {};
+                    }
+                    if (libs.__vidlinkDelivered[lateKey]) {
+                        console.log('[RN-Fetch][BATCH-SKIP-DUP] provider=MVidlink');
+                        return;
+                    }
+                    libs.__vidlinkDelivered[lateKey] = true;
+                }
+            }
             console.log('[RN-Fetch][BATCH-LATE-ADD] provider=' + provider + ' elapsed=' + lateMs + 'ms');
             libs.__embedCallbackCore(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
             return;
@@ -288,7 +323,7 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
     }
     libs.__embedCallbackCore(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
 };
-console.log('[RN-Fetch][EMBED-CFG] batch-v6');
+console.log('[RN-Fetch][EMBED-CFG] batch-v7');
 if (libs.__vodBatchItems.length) {
     console.log('[RN-Fetch][BATCH-RESUME] pending=' + libs.__vodBatchItems.length);
     libs.__scheduleBatchRelease();
