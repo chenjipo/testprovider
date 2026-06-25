@@ -99,10 +99,17 @@ function playKeyFromUrl(file) {
     var qIdx = file.indexOf('?');
     return qIdx >= 0 ? file.substring(0, qIdx) : file;
 }
+function isMediacacheUrl(url) {
+    return !!(url && (url.indexOf('mediacache.cc') >= 0 || url.indexOf('hls.uniquestream.net') >= 0));
+}
 function finishEmbed(file, provider, callback, qualities, headerDirect, metadata) {
     var state = getUniqueStreamState();
     var playKey = playKeyFromUrl(file) || String(file).substring(0, 160);
     if (state.played[playKey]) {
+        return;
+    }
+    if (!isMediacacheUrl(file)) {
+        console.log('[RN-Fetch][UNIQUESTREAM-PLAY] skip non-mediacache url=' + String(file).substring(0, 100));
         return;
     }
     state.played[playKey] = true;
@@ -167,8 +174,14 @@ callbacksEmbed['uniquestream-embed'] = function (dataCallback, provider, host, c
                     console.log('[RN-Fetch][UNIQUESTREAM-EMBED-STEP] ' + data.step + (data.url ? ' url=' + String(data.url).substring(0, 120) : '') + (data.preview ? ' prev=' + data.preview : ''));
                     return [2];
                 }
+                if (data.responseURL || data.responseText || data.status) {
+                    return [2];
+                }
                 if (data.step === 'us-url' && data.url) {
                     masterUrl = String(data.url);
+                    if (!isMediacacheUrl(masterUrl)) {
+                        return [2];
+                    }
                     dedupeKey = playKeyFromUrl(masterUrl);
                     if (getUniqueStreamState().embedDone[dedupeKey]) {
                         return [2];

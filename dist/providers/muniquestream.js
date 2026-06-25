@@ -38,6 +38,12 @@ var _this = this;
 var PROVIDER = 'MUniqueStream';
 var DOMAIN = 'https://uniquestream.net';
 var USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+function getUniqueStreamState() {
+    if (!libs.__uniquestreamState) {
+        libs.__uniquestreamState = { played: {}, embedDone: {} };
+    }
+    return libs.__uniquestreamState;
+}
 function buildPageUrl(movieInfo) {
     if (movieInfo.type == 'tv') {
         return DOMAIN + '/episodes/' + libs.url_slug_search(movieInfo) + '-' + movieInfo.year + '-season-' + movieInfo.season + '-episode-' + movieInfo.episode;
@@ -65,7 +71,135 @@ function extractLetUrlFromHtml(text) {
     var match = text.match(/let\s+url\s*=\s*['"]([^'"]+)/i);
     return match ? match[1] : '';
 }
-function openEmbedHostAndWait(hostName, iframeUrl, movieInfo, callback, extraConfig) {
+function buildHlsRefererHeaders() {
+    return {
+        'user-agent': USER_AGENT,
+        'referer': 'https://hls.uniquestream.net/',
+        'origin': 'https://hls.uniquestream.net',
+        'Referer': 'https://hls.uniquestream.net/',
+        'Origin': 'https://hls.uniquestream.net',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+    };
+}
+function isValidM3u8Body(text) {
+    return !!(text && String(text).trim().indexOf('#EXTM3U') === 0);
+}
+function isMediacacheUrl(url) {
+    return !!(url && (url.indexOf('mediacache.cc') >= 0 || url.indexOf('hls.uniquestream.net') >= 0));
+}
+function resolveM3u8Url(baseUrl, relativeUrl) {
+    if (!relativeUrl) {
+        return '';
+    }
+    var file = relativeUrl.trim();
+    if (file.indexOf('http://') === 0 || file.indexOf('https://') === 0) {
+        return file;
+    }
+    var base = baseUrl.substring(0, baseUrl.lastIndexOf('/') + 1);
+    if (file.charAt(0) === '/') {
+        var match = baseUrl.match(/^(https?:\/\/[^/]+)/);
+        return match ? match[1] + file : file;
+    }
+    return base + file;
+}
+function parseMasterQualities(masterText, masterUrl) {
+    var lines = String(masterText || '').split('\n');
+    var result = [];
+    for (var i = 0; i < lines.length; i++) {
+        if (lines[i].indexOf('#EXT-X-STREAM-INF:') !== 0) {
+            continue;
+        }
+        var resolutionMatch = lines[i].match(/RESOLUTION=(\d+)x(\d+)/i);
+        var bandwidthMatch = lines[i].match(/BANDWIDTH=(\d+)/i);
+        var nextLine = lines[i + 1] ? lines[i + 1].trim() : '';
+        if (!nextLine || nextLine.charAt(0) === '#') {
+            continue;
+        }
+        var quality = resolutionMatch ? parseInt(resolutionMatch[2], 10) : (bandwidthMatch ? Math.round(parseInt(bandwidthMatch[1], 10) / 1000) : 720);
+        result.push({
+            file: resolveM3u8Url(masterUrl, nextLine),
+            quality: quality,
+        });
+        i++;
+    }
+    return result;
+}
+function playKeyFromUrl(file) {
+    if (!file) {
+        return '';
+    }
+    var qIdx = file.indexOf('?');
+    return qIdx >= 0 ? file.substring(0, qIdx) : file;
+}
+function finishEmbed(file, callback, qualities, headerDirect, metadata) {
+    var state = getUniqueStreamState();
+    var playKey = playKeyFromUrl(file) || String(file).substring(0, 160);
+    if (state.played[playKey]) {
+        return;
+    }
+    if (!isMediacacheUrl(file)) {
+        console.log('[RN-Fetch][UNIQUESTREAM-PLAY] skip non-mediacache url=' + String(file).substring(0, 100));
+        return;
+    }
+    state.played[playKey] = true;
+    console.log('[RN-Fetch][UNIQUESTREAM-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));
+    libs.embed_callback(file, PROVIDER, PROVIDER, 'Hls', callback, 1, [], qualities, headerDirect, {
+        type: 'm3u8',
+        is_end_webview: true,
+        url_webview: metadata && metadata.url_webview ? metadata.url_webview : '',
+    });
+}
+function embedMediacacheMaster(masterUrl, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
+    var dedupeKey, headers, masterBody, qualities, sorted, probeIdx, probeCandidate, probeBody;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                if (!isMediacacheUrl(masterUrl)) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-PROBE] reject url=' + String(masterUrl).substring(0, 100));
+                    return [2];
+                }
+                dedupeKey = playKeyFromUrl(masterUrl);
+                if (getUniqueStreamState().embedDone[dedupeKey]) {
+                    return [2];
+                }
+                getUniqueStreamState().embedDone[dedupeKey] = true;
+                headers = buildHlsRefererHeaders();
+                return [4, libs.request_get(masterUrl, headers)];
+            case 1:
+                masterBody = _a.sent();
+                if (!isValidM3u8Body(masterBody)) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-PROBE] master fail prev=' + String(masterBody || '').substring(0, 80));
+                    return [2];
+                }
+                qualities = parseMasterQualities(masterBody, masterUrl);
+                if (!qualities.length) {
+                    qualities = [{ file: masterUrl, quality: 1080 }];
+                }
+                sorted = _.orderBy(qualities, ['quality'], ['desc']);
+                probeIdx = 0;
+                _a.label = 2;
+            case 2:
+                if (!(probeIdx < sorted.length)) {
+                    return [2];
+                }
+                probeCandidate = sorted[probeIdx];
+                return [4, libs.request_get(probeCandidate.file, headers)];
+            case 3:
+                probeBody = _a.sent();
+                if (isValidM3u8Body(probeBody)) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-PROBE] ok quality=' + probeCandidate.quality);
+                    finishEmbed(probeCandidate.file, callback, sorted, headers, metadata);
+                    return [2];
+                }
+                console.log('[RN-Fetch][UNIQUESTREAM-PROBE] fail quality=' + probeCandidate.quality + ' prev=' + String(probeBody || '').substring(0, 80));
+                probeIdx++;
+                return [3, 2];
+            case 4: return [2];
+        }
+    });
+}); }
+function openEmbedHostAndWait(iframeUrl, movieInfo, callback, extraConfig) {
     return new Promise(function (resolve) {
         var wrappedCallback = function (data) {
             callback(data);
@@ -74,12 +208,12 @@ function openEmbedHostAndWait(hostName, iframeUrl, movieInfo, callback, extraCon
                 return;
             }
         };
-        if (!(iframeUrl && hosts && hosts[hostName])) {
+        if (!(iframeUrl && hosts && hosts['uniquestream-embed'])) {
             resolve();
             return;
         }
-        console.log('[RN-Fetch][UNIQUESTREAM-EMBED] open host=' + hostName);
-        hosts[hostName](iframeUrl, movieInfo || {}, PROVIDER, extraConfig || { embedUrl: iframeUrl }, wrappedCallback);
+        console.log('[RN-Fetch][UNIQUESTREAM-EMBED] open webview fallback');
+        hosts['uniquestream-embed'](iframeUrl, movieInfo || {}, PROVIDER, extraConfig || { embedUrl: iframeUrl }, wrappedCallback);
     });
 }
 function tryRnPrefetchIframe(iframeUrl, pageReferer) { return __awaiter(_this, void 0, void 0, function () {
@@ -181,52 +315,44 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
     });
 }); }
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var resolved, iframeUrl, prefetchUrl, e_1;
+    var resolved, prefetchUrl, metadata, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v1');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v2');
                 _a.label = 1;
             case 1:
-                _a.trys.push([1, 8, , 9]);
+                _a.trys.push([1, 7, , 8]);
                 return [4, resolveUniqueStreamIframe(movieInfo)];
             case 2:
                 resolved = _a.sent();
                 if (!resolved || !resolved.iframeUrl) {
                     return [2];
                 }
-                iframeUrl = resolved.iframeUrl;
+                metadata = {
+                    url_webview: resolved.iframeUrl,
+                    pageReferer: resolved.pageReferer,
+                };
                 prefetchUrl = resolved.prefetchUrl;
-                if (!(iframeUrl.indexOf('vidlink.pro') >= 0)) return [3, 4];
-                return [4, openEmbedHostAndWait('vidlink-embed', iframeUrl, movieInfo, callback, { embedUrl: iframeUrl })];
+                if (!prefetchUrl) return [3, 4];
+                console.log('[RN-Fetch][UNIQUESTREAM-URL] source=rn-prefetch url=' + prefetchUrl.substring(0, 140));
+                return [4, embedMediacacheMaster(prefetchUrl, callback, metadata)];
             case 3:
                 _a.sent();
                 return [2];
-            case 4:
-                if (!prefetchUrl) return [3, 6];
-                callbacksEmbed['uniquestream-embed'](JSON.stringify({
-                    step: 'us-url',
-                    url: prefetchUrl,
-                    source: 'rn-prefetch',
-                }), PROVIDER, 'uniquestream-embed', callback, {
-                    url_webview: iframeUrl,
-                    pageReferer: resolved.pageReferer,
-                });
-                return [3, 7];
-            case 5:
-                return [4, openEmbedHostAndWait('uniquestream-embed', iframeUrl, movieInfo, callback, {
-                        embedUrl: iframeUrl,
+            case 4: return [4, openEmbedHostAndWait(resolved.iframeUrl, movieInfo, callback, {
+                        embedUrl: resolved.iframeUrl,
                         pageReferer: resolved.pageReferer,
                     })];
-            case 6:
+            case 5:
                 _a.sent();
-                _a.label = 7;
-            case 7: return [2];
-            case 8:
+                _a.label = 6;
+            case 6: return [2];
+            case 7:
                 e_1 = _a.sent();
                 libs.log({ e: e_1 }, PROVIDER, 'ERROR');
-                return [3, 9];
-            case 9: return [2];
+                return [3, 8];
+            case 8: return [2];
         }
     });
 }); };
