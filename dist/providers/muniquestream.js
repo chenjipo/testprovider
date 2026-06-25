@@ -146,7 +146,7 @@ function finishEmbed(file, callback, qualities, headerDirect, metadata) {
     console.log('[RN-Fetch][UNIQUESTREAM-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));
     libs.embed_callback(file, PROVIDER, PROVIDER, 'Hls', callback, 1, [], qualities, headerDirect, {
         type: 'm3u8',
-        is_end_webview: true,
+        is_end_webview: !!(metadata && metadata.useWebview),
         url_webview: metadata && metadata.url_webview ? metadata.url_webview : '',
     });
 }
@@ -201,19 +201,21 @@ function embedMediacacheMaster(masterUrl, callback, metadata) { return __awaiter
 }); }
 function openEmbedHostAndWait(iframeUrl, movieInfo, callback, extraConfig) {
     return new Promise(function (resolve) {
-        var wrappedCallback = function (data) {
+        var delivered = false;
+        var linkCallback = function (data) {
             callback(data);
-            if (data && data.file) {
-                console.log('[RN-Fetch][UNIQUESTREAM-EMBED] file ok, keep provider pending');
-                return;
+            if (data && data.file && !delivered) {
+                delivered = true;
+                console.log('[RN-Fetch][UNIQUESTREAM-EMBED] file ok, provider done');
+                resolve(true);
             }
         };
         if (!(iframeUrl && hosts && hosts['uniquestream-embed'])) {
-            resolve();
+            resolve(false);
             return;
         }
         console.log('[RN-Fetch][UNIQUESTREAM-EMBED] open webview fallback');
-        hosts['uniquestream-embed'](iframeUrl, movieInfo || {}, PROVIDER, extraConfig || { embedUrl: iframeUrl }, wrappedCallback);
+        hosts['uniquestream-embed'](iframeUrl, movieInfo || {}, PROVIDER, extraConfig || { embedUrl: iframeUrl }, linkCallback);
     });
 }
 function tryRnPrefetchIframe(iframeUrl, pageReferer) { return __awaiter(_this, void 0, void 0, function () {
@@ -242,9 +244,6 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
         switch (_a.label) {
             case 0:
                 urlSearch = buildPageUrl(movieInfo);
-                return [4, libs.cookies_clearAll()];
-            case 1:
-                _a.sent();
                 return [4, fetch(DOMAIN + '/wp-content/plugins/litespeed-cache/guest.vary.php', {
                         headers: {
                             'user-agent': USER_AGENT,
@@ -253,10 +252,10 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
                         },
                         method: 'POST',
                     })];
-            case 2:
+            case 1:
                 _a.sent();
                 return [4, libs.cookies_get(DOMAIN + '/wp-content/plugins/litespeed-cache/guest.vary.php')];
-            case 3:
+            case 2:
                 headerCookie = _a.sent();
                 cache = headerCookie && headerCookie['_lscache_vary'] ? headerCookie['_lscache_vary']['value'] || '' : '';
                 if (!cache) {
@@ -269,7 +268,7 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
                         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                         Cookie: '_lscache_vary=' + cache + ';',
                     }, true)];
-            case 4:
+            case 3:
                 parseSearch = _a.sent();
                 postID = parseSearch('.server-btn').first().attr('data-post');
                 serverType = parseSearch('.server-btn').first().attr('data-type') || (movieInfo.type == 'movie' ? 'mv' : 'tv');
@@ -295,7 +294,7 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
                         'user-agent': USER_AGENT,
                         Cookie: '_lscache_vary=' + cache + ';',
                     }, body, false)];
-            case 5:
+            case 4:
                 parseEmbed = _a.sent();
                 libs.log({ parseEmbed: parseEmbed }, PROVIDER, 'EMBED INFO');
                 iframeUrl = parseIframeFromEmbedResponse(parseEmbed);
@@ -304,7 +303,7 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
                 }
                 libs.log({ iframeUrl: iframeUrl }, PROVIDER, 'IFRAME URL');
                 return [4, tryRnPrefetchIframe(iframeUrl, urlSearch + '/')];
-            case 6:
+            case 5:
                 prefetchUrl = _a.sent();
                 return [2, {
                         iframeUrl: iframeUrl,
@@ -315,44 +314,57 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
     });
 }); }
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var resolved, prefetchUrl, metadata, e_1;
+    var resolved, prefetchUrl, metadata, ok, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v2');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v4');
                 _a.label = 1;
             case 1:
-                _a.trys.push([1, 7, , 8]);
+                _a.trys.push([1, 6, , 7]);
                 return [4, resolveUniqueStreamIframe(movieInfo)];
             case 2:
                 resolved = _a.sent();
                 if (!resolved || !resolved.iframeUrl) {
                     return [2];
                 }
-                metadata = {
-                    url_webview: resolved.iframeUrl,
-                    pageReferer: resolved.pageReferer,
-                };
                 prefetchUrl = resolved.prefetchUrl;
-                if (!prefetchUrl) return [3, 4];
+                if (!prefetchUrl) {
+                    return [3, 5];
+                }
+                metadata = {
+                    url_webview: '',
+                    pageReferer: resolved.pageReferer,
+                    useWebview: false,
+                };
                 console.log('[RN-Fetch][UNIQUESTREAM-URL] source=rn-prefetch url=' + prefetchUrl.substring(0, 140));
                 return [4, embedMediacacheMaster(prefetchUrl, callback, metadata)];
             case 3:
                 _a.sent();
+                if (Object.keys(getUniqueStreamState().played || {}).length > 0) {
+                    return [2, true];
+                }
                 return [2];
-            case 4: return [4, openEmbedHostAndWait(resolved.iframeUrl, movieInfo, callback, {
+            case 5:
+                metadata = {
+                    url_webview: resolved.iframeUrl,
+                    pageReferer: resolved.pageReferer,
+                    useWebview: true,
+                };
+                return [4, openEmbedHostAndWait(resolved.iframeUrl, movieInfo, callback, {
                         embedUrl: resolved.iframeUrl,
                         pageReferer: resolved.pageReferer,
                     })];
-            case 5:
-                _a.sent();
-                _a.label = 6;
-            case 6: return [2];
+            case 6:
+                ok = _a.sent();
+                if (ok) {
+                    return [2, true];
+                }
+                return [2];
             case 7:
                 e_1 = _a.sent();
                 libs.log({ e: e_1 }, PROVIDER, 'ERROR');
-                return [3, 8];
-            case 8: return [2];
+                return [2];
         }
     });
 }); };

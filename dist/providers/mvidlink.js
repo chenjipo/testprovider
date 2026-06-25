@@ -37,26 +37,28 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 var _this = this;
 function openVidlinkEmbedAndWait(urlEmbed, movieInfo, callback) {
     return new Promise(function (resolve) {
-        var wrappedCallback = function (data) {
+        var delivered = false;
+        var linkCallback = function (data) {
             callback(data);
-            if (data && data.file) {
-                console.log('[RN-Fetch][VIDLINK-EMBED] file ok, keep provider pending (avoid getLinks error batch)');
-                return;
+            if (data && data.file && !delivered) {
+                delivered = true;
+                console.log('[RN-Fetch][VIDLINK-EMBED] file ok, provider done');
+                resolve(true);
             }
         };
         if (!(urlEmbed && hosts && hosts['vidlink-embed'])) {
-            resolve();
+            resolve(false);
             return;
         }
-        console.log('[RN-Fetch][VIDLINK-EMBED] early webview (hold provider)');
+        console.log('[RN-Fetch][VIDLINK-EMBED] early webview');
         hosts['vidlink-embed'](urlEmbed, movieInfo || {}, PROVIDER, {
             embedUrl: urlEmbed,
-        }, wrappedCallback);
+        }, linkCallback);
     });
 }
 var PROVIDER = 'MVidlink';
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var DOMAIN, urlEmbed, e_1;
+    var DOMAIN, urlEmbed, ok, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -65,14 +67,17 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (movieInfo.type == 'tv') {
                     urlEmbed = DOMAIN + '/tv/' + movieInfo.tmdb_id + '/' + movieInfo.season + '/' + movieInfo.episode;
                 }
-                console.log('[RN-Fetch][VIDLINK-VERSION] v11');
+                console.log('[RN-Fetch][VIDLINK-VERSION] v12');
                 libs.log({ urlEmbed: urlEmbed }, PROVIDER, 'URL EMBED');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 3, , 4]);
                 return [4, openVidlinkEmbedAndWait(urlEmbed, movieInfo, callback)];
             case 2:
-                _a.sent();
+                ok = _a.sent();
+                if (ok) {
+                    return [2, true];
+                }
                 return [2];
             case 3:
                 e_1 = _a.sent();

@@ -264,18 +264,20 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     }
     function openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL) {
         return new Promise(function (resolve) {
-            var wrappedCallback = function (data) {
+            var delivered = false;
+            var linkCallback = function (data) {
                 callback(data);
-                if (data && data.file) {
-                    console.log('[RN-Fetch][YESMOVIES-EMBED] file ok, keep provider pending (avoid getLinks error batch)');
-                    return;
+                if (data && data.file && !delivered) {
+                    delivered = true;
+                    console.log('[RN-Fetch][YESMOVIES-EMBED] file ok, provider done');
+                    resolve(true);
                 }
             };
             if (!(LINK_DETAIL && mid && hosts && hosts['yesmovies-embed'])) {
-                resolve();
+                resolve(false);
                 return;
             }
-            console.log('[RN-Fetch][YESMOVIES-EMBED] early detail webview (hold provider)');
+            console.log('[RN-Fetch][YESMOVIES-EMBED] early detail webview');
             hosts['yesmovies-embed'](LINK_DETAIL, movieInfo || {}, PROVIDER, {
                 detailUrl: LINK_DETAIL,
                 mid: mid,
@@ -284,7 +286,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
                 yesLoc: 'US',
                 watchUrl: ''
-            }, wrappedCallback);
+            }, linkCallback);
         });
     }
     function openPloyanWebView(watchEmbedUrl, urix, mid, eid, sv, movieInfo, callback, streamHeaders, yesDetailUrl, yesLoc) {
@@ -411,7 +413,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v35');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v36');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
