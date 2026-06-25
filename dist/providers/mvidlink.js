@@ -47,7 +47,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (movieInfo.type == 'tv') {
                     urlEmbed = DOMAIN + '/tv/' + movieInfo.tmdb_id + '/' + movieInfo.season + '/' + movieInfo.episode;
                 }
-                console.log('[RN-Fetch][VIDLINK-VERSION] v14');
+                console.log('[RN-Fetch][VIDLINK-VERSION] v15');
                 libs.log({ urlEmbed: urlEmbed }, PROVIDER, 'URL EMBED');
                 if (urlEmbed && hosts && hosts['vidlink-embed']) {
                     console.log('[RN-Fetch][VIDLINK-EMBED] fire webview (justhd-style)');
@@ -60,7 +60,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 e_1 = _a.sent();
                 libs.log({ e: e_1 }, PROVIDER, 'ERROR');
                 return [3, 3];
-            case 3: return [2];
+            case 3: return [2, true];
         }
     });
 }); };

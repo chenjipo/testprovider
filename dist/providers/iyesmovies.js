@@ -413,7 +413,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v38');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v39');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1224,8 +1224,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('PARSE_URL', 'parseURL=' + parseURL + ' loc=' + (loc || 'EMPTY'));
                 libs.log({ parseURL: parseURL, loc: loc }, PROVIDER, "PARSE URL");
                 if (!parseURL || !loc) {
-                    debugLog('LOC_EMPTY', 'waiting scheduled embed');
-                    return [2];
+                    debugLog('LOC_EMPTY', 'webview pending');
+                    return [2, true];
                 }
                 hashTs = Math.floor((new Date()).getTime() / 1000);
                 debugLog('HASH_TS', String(hashTs));
@@ -1239,8 +1239,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 console.log('[RN-Fetch][PLOYAN-HASH] done len=' + (deHash ? deHash.length : 0));
                 libs.log({ deHash: deHash, loc: loc, sv: sv, mid: mid, eid: eid }, PROVIDER, 'GET HASH');
                 if (!deHash) {
-                    debugLog('HASH_EMPTY', 'waiting scheduled embed');
-                    return [2];
+                    debugLog('HASH_EMPTY', 'webview pending');
+                    return [2, true];
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
                 debugLog('GET_REQ', hashURL.substring(0, 120));
@@ -1258,10 +1258,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], warmHeaders, {
                         type: 'm3u8',
                     });
-                    return [2];
+                    return [2, true];
                 }
-                debugLog('GET_FALLBACK', 'waiting scheduled embed');
-                return [2];
+                debugLog('GET_FALLBACK', 'webview pending');
+                return [2, true];
             case 11:
                 e_1 = _b.sent();
                 debugLog('ERROR', String(e_1 && e_1.message ? e_1.message : e_1));

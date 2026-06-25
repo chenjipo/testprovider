@@ -142,13 +142,13 @@ function normalizeMediacachePlaylistUrl(url) {
     }
     return file;
 }
-function finishEmbed(file, callback, qualities, headerDirect, metadata) {
+function finishEmbed(playUrl, callback, qualities, headerDirect, metadata) {
     var state = getUniqueStreamState();
     var sorted = _.orderBy(qualities || [], ['quality'], ['desc']);
     if (!sorted.length) {
-        sorted = [{ file: file, quality: 1080 }];
+        sorted = [{ file: playUrl, quality: 1080 }];
     }
-    var playFile = sorted[0].file;
+    var playFile = playUrl;
     var playKey = playKeyFromUrl(playFile) || String(playFile).substring(0, 160);
     if (state.played[playKey]) {
         return;
@@ -163,53 +163,73 @@ function finishEmbed(file, callback, qualities, headerDirect, metadata) {
         type: 'm3u8',
     });
 }
-function embedMediacacheMaster(masterUrl, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
-    var dedupeKey, headers, masterBody, qualities, sorted, probeIdx, probeCandidate, probeBody;
+function probeAndEmbedPlaylist(playlistUrl, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
+    var headers, masterBody, qualities, sorted, probeIdx, probeCandidate, probeBody;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                if (!isMediacacheUrl(masterUrl)) {
-                    console.log('[RN-Fetch][UNIQUESTREAM-PROBE] reject url=' + String(masterUrl).substring(0, 100));
-                    return [2];
-                }
-                masterUrl = normalizeMediacachePlaylistUrl(masterUrl);
-                dedupeKey = playKeyFromUrl(masterUrl);
-                if (getUniqueStreamState().embedDone[dedupeKey]) {
-                    return [2];
-                }
-                getUniqueStreamState().embedDone[dedupeKey] = true;
                 headers = buildHlsRefererHeaders();
-                return [4, libs.request_get(masterUrl, headers)];
+                return [4, libs.request_get(playlistUrl, headers)];
             case 1:
                 masterBody = _a.sent();
                 if (!isValidM3u8Body(masterBody)) {
-                    console.log('[RN-Fetch][UNIQUESTREAM-PROBE] master fail prev=' + String(masterBody || '').substring(0, 80));
-                    return [2];
+                    return [2, false];
                 }
-                qualities = parseMasterQualities(masterBody, masterUrl);
-                if (!qualities.length) {
-                    qualities = [{ file: masterUrl, quality: 1080 }];
+                qualities = parseMasterQualities(masterBody, playlistUrl);
+                if (qualities.length > 1) {
+                    sorted = _.orderBy(qualities, ['quality'], ['desc']);
+                    probeIdx = 0;
+                    return [3, 2];
                 }
-                sorted = _.orderBy(qualities, ['quality'], ['desc']);
-                probeIdx = 0;
-                _a.label = 2;
+                finishEmbed(playlistUrl, callback, [{ file: playlistUrl, quality: 1080 }], headers, metadata);
+                return [2, true];
             case 2:
                 if (!(probeIdx < sorted.length)) {
-                    return [2];
+                    finishEmbed(playlistUrl, callback, sorted, headers, metadata);
+                    return [2, true];
                 }
                 probeCandidate = sorted[probeIdx];
                 return [4, libs.request_get(probeCandidate.file, headers)];
             case 3:
                 probeBody = _a.sent();
                 if (isValidM3u8Body(probeBody)) {
-                    console.log('[RN-Fetch][UNIQUESTREAM-PROBE] ok quality=' + probeCandidate.quality);
-                    finishEmbed(probeCandidate.file, callback, sorted, headers, metadata);
-                    return [2];
+                    console.log('[RN-Fetch][UNIQUESTREAM-PROBE] ok master quality=' + probeCandidate.quality);
+                    finishEmbed(playlistUrl, callback, sorted, headers, metadata);
+                    return [2, true];
                 }
-                console.log('[RN-Fetch][UNIQUESTREAM-PROBE] fail quality=' + probeCandidate.quality + ' prev=' + String(probeBody || '').substring(0, 80));
                 probeIdx++;
                 return [3, 2];
-            case 4: return [2];
+        }
+    });
+}); }
+function embedMediacacheMaster(playlistUrl, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
+    var rawUrl, masterUrl, dedupeKey, ok;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                if (!isMediacacheUrl(playlistUrl)) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-PROBE] reject url=' + String(playlistUrl).substring(0, 100));
+                    return [2];
+                }
+                rawUrl = String(playlistUrl);
+                masterUrl = normalizeMediacachePlaylistUrl(rawUrl);
+                dedupeKey = playKeyFromUrl(masterUrl) || playKeyFromUrl(rawUrl);
+                if (getUniqueStreamState().embedDone[dedupeKey]) {
+                    return [2];
+                }
+                getUniqueStreamState().embedDone[dedupeKey] = true;
+                console.log('[RN-Fetch][UNIQUESTREAM-PREFETCH] raw=' + rawUrl.substring(0, 80) + ' master=' + masterUrl.substring(0, 80));
+                return [4, probeAndEmbedPlaylist(masterUrl, callback, metadata)];
+            case 1:
+                ok = _a.sent();
+                if (ok || masterUrl === rawUrl) {
+                    return [2];
+                }
+                console.log('[RN-Fetch][UNIQUESTREAM-PROBE] master miss, retry raw');
+                return [4, probeAndEmbedPlaylist(rawUrl, callback, metadata)];
+            case 2:
+                _a.sent();
+                return [2];
         }
     });
 }); }
@@ -328,7 +348,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v6');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v7');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 4, , 5]);
@@ -343,7 +363,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 prefetchUrl = resolved.prefetchUrl;
                 if (!prefetchUrl) {
                     fireEmbedHostFallback(iframeUrl, movieInfo, callback, pageReferer);
-                    return [2];
+                    return [2, true];
                 }
                 console.log('[RN-Fetch][UNIQUESTREAM-URL] source=rn-prefetch url=' + prefetchUrl.substring(0, 140));
                 return [4, embedMediacacheMaster(prefetchUrl, callback, {})];
@@ -351,8 +371,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 _a.sent();
                 if (!Object.keys(getUniqueStreamState().played || {}).length) {
                     fireEmbedHostFallback(iframeUrl, movieInfo, callback, pageReferer);
+                    return [2, true];
                 }
-                return [2];
+                return [2, true];
             case 5:
                 e_1 = _a.sent();
                 libs.log({ e: e_1 }, PROVIDER, 'ERROR');

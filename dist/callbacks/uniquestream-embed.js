@@ -112,13 +112,13 @@ function normalizeMediacachePlaylistUrl(url) {
     }
     return file;
 }
-function finishEmbed(file, provider, callback, qualities, headerDirect, metadata) {
+function finishEmbed(playUrl, provider, callback, qualities, headerDirect, metadata) {
     var state = getUniqueStreamState();
     var sorted = _.orderBy(qualities || [], ['quality'], ['desc']);
     if (!sorted.length) {
-        sorted = [{ file: file, quality: 1080 }];
+        sorted = [{ file: playUrl, quality: 1080 }];
     }
-    var playFile = sorted[0].file;
+    var playFile = playUrl;
     var playKey = playKeyFromUrl(playFile) || String(playFile).substring(0, 160);
     if (state.played[playKey]) {
         return;
@@ -133,44 +133,57 @@ function finishEmbed(file, provider, callback, qualities, headerDirect, metadata
         type: 'm3u8',
     });
 }
-function processMediacacheMaster(masterUrl, provider, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
-    var headers, masterBody, qualities, sorted, probeIdx, probeCandidate, probeBody;
+function processMediacacheMaster(playlistUrl, provider, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
+    var rawUrl, masterUrl, headers, masterBody, qualities, sorted, probeIdx, probeCandidate, probeBody;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
+                rawUrl = String(playlistUrl);
+                masterUrl = normalizeMediacachePlaylistUrl(rawUrl);
                 headers = buildHlsRefererHeaders();
-                masterUrl = normalizeMediacachePlaylistUrl(masterUrl);
                 return [4, libs.request_get(masterUrl, headers)];
             case 1:
                 masterBody = _a.sent();
+                if (!isValidM3u8Body(masterBody)) {
+                    if (masterUrl === rawUrl) {
+                        return [2];
+                    }
+                    masterUrl = rawUrl;
+                    return [4, libs.request_get(masterUrl, headers)];
+                }
+                return [3, 2];
+            case 2:
+                if (!isValidM3u8Body(masterBody)) {
+                    masterBody = _a.sent();
+                }
                 if (!isValidM3u8Body(masterBody)) {
                     console.log('[RN-Fetch][UNIQUESTREAM-PROBE] master fail prev=' + String(masterBody || '').substring(0, 80));
                     return [2];
                 }
                 qualities = parseMasterQualities(masterBody, masterUrl);
-                if (!qualities.length) {
-                    qualities = [{ file: masterUrl, quality: 1080 }];
+                if (qualities.length > 1) {
+                    sorted = _.orderBy(qualities, ['quality'], ['desc']);
+                    probeIdx = 0;
+                    return [3, 3];
                 }
-                sorted = _.orderBy(qualities, ['quality'], ['desc']);
-                probeIdx = 0;
-                _a.label = 2;
-            case 2:
+                finishEmbed(masterUrl, provider, callback, [{ file: masterUrl, quality: 1080 }], headers, metadata);
+                return [2];
+            case 3:
                 if (!(probeIdx < sorted.length)) {
+                    finishEmbed(masterUrl, provider, callback, sorted, headers, metadata);
                     return [2];
                 }
                 probeCandidate = sorted[probeIdx];
                 return [4, libs.request_get(probeCandidate.file, headers)];
-            case 3:
+            case 4:
                 probeBody = _a.sent();
                 if (isValidM3u8Body(probeBody)) {
-                    console.log('[RN-Fetch][UNIQUESTREAM-PROBE] ok quality=' + probeCandidate.quality);
-                    finishEmbed(probeCandidate.file, provider, callback, sorted, headers, metadata);
+                    console.log('[RN-Fetch][UNIQUESTREAM-PROBE] ok master quality=' + probeCandidate.quality);
+                    finishEmbed(masterUrl, provider, callback, sorted, headers, metadata);
                     return [2];
                 }
-                console.log('[RN-Fetch][UNIQUESTREAM-PROBE] fail quality=' + probeCandidate.quality + ' prev=' + String(probeBody || '').substring(0, 80));
                 probeIdx++;
-                return [3, 2];
-            case 4: return [2];
+                return [3, 3];
         }
     });
 }); }
