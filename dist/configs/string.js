@@ -47,6 +47,16 @@ libs.string_atob = function (input) {
 };
 libs.string_provider = function (provider, rank) {
     if (rank === void 0) { rank = 0; }
+    var labels = {
+        'MUniqueStream': 'UniqueStream',
+        'MVidlink': 'Vidlink',
+        'IYesMovies': 'YesMovies',
+        'JustHD': 'JustHD',
+        'DUniqueStream': 'DUniqueStream',
+    };
+    if (labels[provider]) {
+        return 'Server ' + labels[provider];
+    }
     if (!rank) {
         return "Server ".concat(provider[0].toUpperCase());
     }

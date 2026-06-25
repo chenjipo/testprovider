@@ -138,6 +138,51 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
     }
     callback(__assign({ file: urlDirect, quality: quality, host: host, source: provider, provider: libs.string_provider(provider, rank), subs: parseSubs, direct_quality: direct_quality, headers: headers }, options));
 };
+libs.__embedCallbackCore = libs.embed_callback;
+libs.__linkBatch = { items: [], timer: null, ms: 26000 };
+libs.__isBatchableVodLink = function (provider, options) {
+    if (!options || options.type !== 'm3u8') {
+        return false;
+    }
+    return provider === 'MUniqueStream' || provider === 'MVidlink' || provider === 'IYesMovies';
+};
+libs.__shouldBatchVodLinks = function () {
+    var slot = libs.__embedWebviewSlot;
+    return !!(slot && slot.multiSourceBatch);
+};
+libs.__releaseLinkBatch = function () {
+    var batch = libs.__linkBatch;
+    if (!batch.items.length) {
+        batch.timer = null;
+        return;
+    }
+    var items = batch.items.slice();
+    batch.items = [];
+    batch.timer = null;
+    console.log('[RN-Fetch][BATCH-RELEASE] count=' + items.length);
+    for (var i = 0; i < items.length; i++) {
+        libs.__embedCallbackCore.apply(libs, items[i]);
+    }
+};
+libs.embed_callback = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
+    if (subs === void 0) { subs = []; }
+    if (direct_quality === void 0) { direct_quality = []; }
+    if (headers === void 0) { headers = {}; }
+    if (options === void 0) { options = {}; }
+    if (libs.__shouldBatchVodLinks() && libs.__isBatchableVodLink(provider, options)) {
+        var batch = libs.__linkBatch;
+        batch.items.push([urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options]);
+        console.log('[RN-Fetch][BATCH-QUEUE] provider=' + provider + ' total=' + batch.items.length);
+        if (!batch.timer) {
+            console.log('[RN-Fetch][BATCH-START] hold ' + batch.ms + 'ms');
+            batch.timer = setTimeout(function () {
+                libs.__releaseLinkBatch();
+            }, batch.ms);
+        }
+        return;
+    }
+    libs.__embedCallbackCore(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
+};
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {
@@ -167,10 +212,11 @@ libs.parse_size = function (file, provider, host, type, callback, rank, tracks) 
         }
     });
 }); };
-libs.__embedWebviewSlot = libs.__embedWebviewSlot || { busyUntil: 0, pumping: false, queue: [] };
+libs.__embedWebviewSlot = libs.__embedWebviewSlot || { busyUntil: 0, pumping: false, queue: [], multiSourceBatch: false };
 libs.__embedWebviewOrder = { 'MVidlink': 0, 'IYesMovies': 1, 'MUniqueStream': 2 };
 libs.scheduleEmbedWebview = function (provider, task, slotMs) {
     var slot = libs.__embedWebviewSlot;
+    slot.multiSourceBatch = true;
     var order = libs.__embedWebviewOrder[provider];
     if (typeof order !== 'number') {
         order = 99;
@@ -208,18 +254,4 @@ libs.scheduleEmbedWebview = function (provider, task, slotMs) {
         }, waitMs);
     }
     runNext();
-};
-libs.getMultiSourceDeferMs = function () {
-    var slot = libs.__embedWebviewSlot;
-    if (!slot) {
-        return 0;
-    }
-    var pending = (slot.pumping ? 1 : 0) + slot.queue.length;
-    if (!pending) {
-        return 0;
-    }
-    var holdMs = 20000;
-    var deferMs = pending * holdMs + 8000;
-    console.log('[RN-Fetch][MULTI-SOURCE-DEFER] webviews=' + pending + ' deferMs=' + deferMs);
-    return deferMs;
 };

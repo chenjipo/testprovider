@@ -163,14 +163,6 @@ function finishEmbed(playUrl, callback, qualities, headerDirect, metadata) {
         console.log('[RN-Fetch][UNIQUESTREAM-PLAY] skip non-mediacache url=' + String(playUrl).substring(0, 100));
         return;
     }
-    var deferMs = libs.getMultiSourceDeferMs ? libs.getMultiSourceDeferMs() : 0;
-    if (deferMs > 0) {
-        console.log('[RN-Fetch][UNIQUESTREAM-DEFER] hold ' + deferMs + 'ms so webview providers can deliver');
-        setTimeout(function () {
-            deliverUniqueStreamLink(playUrl, callback, sorted, headerDirect);
-        }, deferMs);
-        return;
-    }
     deliverUniqueStreamLink(playUrl, callback, sorted, headerDirect);
 }
 function probeAndEmbedPlaylist(playlistUrl, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
@@ -360,7 +352,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v8');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v10');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 4, , 5]);
