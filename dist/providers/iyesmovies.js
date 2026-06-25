@@ -413,7 +413,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v43');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v44');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1258,7 +1258,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     directURL = "".concat(parseURL, "/hls/").concat(hashID.info, "/master.m3u8");
                     console.log('[RN-Fetch][PLOYAN-HLS] GET ' + directURL);
                     libs.log({ directURL: directURL }, PROVIDER, 'DIRECT QUALITY');
-                    libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], warmHeaders, {
+                    libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 0, [], [{ file: directURL, quality: 1080 }], warmHeaders, {
                         type: 'm3u8',
                     });
                     return [2, true];

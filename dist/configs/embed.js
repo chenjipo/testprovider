@@ -111,45 +111,58 @@ libs.embed_parse_source = function (html) {
     eval(source);
     return parse;
 };
-libs.embed_callback = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
-    if (subs === void 0) { subs = []; }
-    if (direct_quality === void 0) { direct_quality = []; }
-    if (headers === void 0) { headers = {}; }
-    if (options === void 0) { options = {}; }
-    var parseSubs = [];
-    if (subs.length > 0) {
-        for (var _i = 0, subs_1 = subs; _i < subs_1.length; _i++) {
-            var item = subs_1[_i];
-            var type = "office";
-            if (item.file.indexOf(".srt") == -1 && item.file.indexOf(".vtt") == -1) {
-                type = "download";
+if (!libs.__linkBatch) {
+    libs.__linkBatch = { items: [], timer: null, releaseTimer: null, sessionStart: 0, maxMs: 65000 };
+}
+if (!libs.__embedCallbackCore) {
+    libs.__embedCallbackCore = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
+        if (subs === void 0) { subs = []; }
+        if (direct_quality === void 0) { direct_quality = []; }
+        if (headers === void 0) { headers = {}; }
+        if (options === void 0) { options = {}; }
+        var parseSubs = [];
+        if (subs.length > 0) {
+            for (var _i = 0, subs_1 = subs; _i < subs_1.length; _i++) {
+                var item = subs_1[_i];
+                var type = "office";
+                if (item.file.indexOf(".srt") == -1 && item.file.indexOf(".vtt") == -1) {
+                    type = "download";
+                }
+                if (item.file.indexOf("opensubtitles") != -1) {
+                    continue;
+                }
+                parseSubs.push({
+                    file: item.file,
+                    kind: 'captions',
+                    label: item.label,
+                    type: type,
+                });
             }
-            if (item.file.indexOf("opensubtitles") != -1) {
-                continue;
-            }
-            parseSubs.push({
-                file: item.file,
-                kind: 'captions',
-                label: item.label,
-                type: type,
-            });
+            console.log({ subs: subs }, "SUBDATAPARSE");
         }
-        console.log({ subs: subs }, "SUBDATAPARSE");
-    }
-    callback(__assign({ file: urlDirect, quality: quality, host: host, source: provider, provider: libs.string_provider(provider, rank), subs: parseSubs, direct_quality: direct_quality, headers: headers }, options));
-};
-libs.__embedCallbackCore = libs.embed_callback;
-libs.__linkBatch = { items: [], timer: null, releaseTimer: null, sessionStart: 0, maxMs: 65000 };
+        callback(__assign({ file: urlDirect, quality: quality, host: host, source: provider, provider: libs.string_provider(provider, rank), subs: parseSubs, direct_quality: direct_quality, headers: headers }, options));
+    };
+}
 libs.__isBatchableVodLink = function (provider, options) {
     if (!options || options.type !== 'm3u8') {
         return false;
     }
     return provider === 'MUniqueStream' || provider === 'MVidlink' || provider === 'IYesMovies';
 };
+libs.__batchHasProvider = function (provider) {
+    var batch = libs.__linkBatch;
+    for (var i = 0; i < batch.items.length; i++) {
+        if (batch.items[i][1] === provider) {
+            return true;
+        }
+    }
+    return false;
+};
 libs.beginVodLinkSession = function () {
     var batch = libs.__linkBatch;
     if (!batch.sessionStart) {
         batch.sessionStart = Date.now();
+        libs.__vidlinkDelivered = {};
         console.log('[RN-Fetch][BATCH-SESSION] start');
     }
     libs.__embedWebviewSlot.multiSourceBatch = true;
@@ -166,7 +179,9 @@ libs.__releaseLinkBatch = function () {
     if (!batch.items.length) {
         batch.timer = null;
         batch.releaseTimer = null;
-        batch.sessionStart = 0;
+        if (batch.sessionStart) {
+            batch.sessionStart = 0;
+        }
         return;
     }
     var items = batch.items.slice();
@@ -187,7 +202,7 @@ libs.__tryReleaseLinkBatch = function () {
     }
     var elapsed = batch.sessionStart ? Date.now() - batch.sessionStart : 0;
     var webviewIdle = !slot.pumping && (!slot.queue || !slot.queue.length);
-    if (webviewIdle || elapsed >= batch.maxMs) {
+    if (webviewIdle || elapsed >= batch.maxMs || elapsed >= 22000) {
         console.log('[RN-Fetch][BATCH-READY] idle=' + (webviewIdle ? 1 : 0) + ' elapsed=' + elapsed + 'ms queued=' + batch.items.length);
         libs.__releaseLinkBatch();
         return;
@@ -214,6 +229,10 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
     if (headers === void 0) { headers = {}; }
     if (options === void 0) { options = {}; }
     if (libs.__shouldBatchVodLinks() && libs.__isBatchableVodLink(provider, options)) {
+        if (libs.__batchHasProvider(provider)) {
+            console.log('[RN-Fetch][BATCH-SKIP-DUP] provider=' + provider);
+            return;
+        }
         var batch = libs.__linkBatch;
         batch.items.push([urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options]);
         console.log('[RN-Fetch][BATCH-QUEUE] provider=' + provider + ' total=' + batch.items.length);
@@ -222,7 +241,7 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
     }
     libs.__embedCallbackCore(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
 };
-console.log('[RN-Fetch][EMBED-CFG] batch-v3');
+console.log('[RN-Fetch][EMBED-CFG] batch-v4');
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {

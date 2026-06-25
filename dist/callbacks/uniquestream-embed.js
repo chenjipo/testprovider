@@ -129,7 +129,7 @@ function finishUniqueStreamCbEmbed(playUrl, provider, callback, qualities, heade
     }
     state.played[playKey] = true;
     console.log('[RN-Fetch][UNIQUESTREAM-PLAY] url=' + String(playFile).substring(0, 140) + ' qualities=' + sorted.length);
-    libs.embed_callback(playFile, provider, provider, 'Hls', callback, 1, [], sorted, headerDirect, {
+    libs.embed_callback(playFile, provider, provider, 'Hls', callback, 0, [], sorted, headerDirect, {
         type: 'm3u8',
     });
 }
