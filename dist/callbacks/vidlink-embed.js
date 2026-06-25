@@ -46,6 +46,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
+var VOD_PROVIDER = 'MVidlink';
 function parseM3U8(content, baseOrigin) {
     var lines = content.split('\n').filter(function (line) { return line.trim() !== ''; });
     var result = [];
@@ -398,7 +399,7 @@ function finishVidlinkEmbed(file, provider, callback, tracks, qualities, headerD
         state.played[playKey] = true;
     }
     console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));
-    libs.embed_callback(file, provider, provider, 'Hls', callback, 0, tracks, sorted.length ? sorted : qualities, headerDirect, {
+    libs.embed_callback(file, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, tracks, sorted.length ? sorted : qualities, headerDirect, {
         type: 'm3u8',
     });
 }
@@ -559,6 +560,12 @@ callbacksEmbed['vidlink-embed'] = function (dataCallback, provider, host, callba
         switch (_a.label) {
             case 0:
                 _a.trys.push([0, 3, , 4]);
+                if (libs.__resolveVodBatchProvider) {
+                    provider = libs.__resolveVodBatchProvider('', provider, host);
+                }
+                else if (!provider || provider === 'vidlink-embed' || host === 'vidlink-embed') {
+                    provider = VOD_PROVIDER;
+                }
                 if (!dataCallback) {
                     return [2];
                 }

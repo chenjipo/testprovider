@@ -48,7 +48,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (movieInfo.type == 'tv') {
                     urlEmbed = DOMAIN + '/tv/' + movieInfo.tmdb_id + '/' + movieInfo.season + '/' + movieInfo.episode;
                 }
-                console.log('[RN-Fetch][VIDLINK-VERSION] v27');
+                console.log('[RN-Fetch][VIDLINK-VERSION] v28');
                 libs.log({ urlEmbed: urlEmbed }, PROVIDER, 'URL EMBED');
                 if (urlEmbed && hosts && hosts['vidlink-embed']) {
                     console.log('[RN-Fetch][VIDLINK-EMBED] queue webview slot');
