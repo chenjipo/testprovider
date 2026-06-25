@@ -102,22 +102,35 @@ function playKeyFromUrl(file) {
 function isMediacacheUrl(url) {
     return !!(url && (url.indexOf('mediacache.cc') >= 0 || url.indexOf('hls.uniquestream.net') >= 0));
 }
+function normalizeMediacachePlaylistUrl(url) {
+    if (!url) {
+        return '';
+    }
+    var file = String(url);
+    if (file.indexOf('/video.m3u8') >= 0) {
+        return file.replace('/video.m3u8', '/master.m3u8');
+    }
+    return file;
+}
 function finishEmbed(file, provider, callback, qualities, headerDirect, metadata) {
     var state = getUniqueStreamState();
-    var playKey = playKeyFromUrl(file) || String(file).substring(0, 160);
+    var sorted = _.orderBy(qualities || [], ['quality'], ['desc']);
+    if (!sorted.length) {
+        sorted = [{ file: file, quality: 1080 }];
+    }
+    var playFile = sorted[0].file;
+    var playKey = playKeyFromUrl(playFile) || String(playFile).substring(0, 160);
     if (state.played[playKey]) {
         return;
     }
-    if (!isMediacacheUrl(file)) {
-        console.log('[RN-Fetch][UNIQUESTREAM-PLAY] skip non-mediacache url=' + String(file).substring(0, 100));
+    if (!isMediacacheUrl(playFile)) {
+        console.log('[RN-Fetch][UNIQUESTREAM-PLAY] skip non-mediacache url=' + String(playFile).substring(0, 100));
         return;
     }
     state.played[playKey] = true;
-    console.log('[RN-Fetch][UNIQUESTREAM-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));
-    libs.embed_callback(file, provider, provider, 'Hls', callback, 1, [], qualities, headerDirect, {
+    console.log('[RN-Fetch][UNIQUESTREAM-PLAY] url=' + String(playFile).substring(0, 140) + ' qualities=' + sorted.length);
+    libs.embed_callback(playFile, provider, provider, 'Hls', callback, 1, [], sorted, headerDirect, {
         type: 'm3u8',
-        is_end_webview: true,
-        url_webview: metadata && metadata.url_webview ? metadata.url_webview : '',
     });
 }
 function processMediacacheMaster(masterUrl, provider, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
@@ -126,6 +139,7 @@ function processMediacacheMaster(masterUrl, provider, callback, metadata) { retu
         switch (_a.label) {
             case 0:
                 headers = buildHlsRefererHeaders();
+                masterUrl = normalizeMediacachePlaylistUrl(masterUrl);
                 return [4, libs.request_get(masterUrl, headers)];
             case 1:
                 masterBody = _a.sent();
@@ -178,7 +192,7 @@ callbacksEmbed['uniquestream-embed'] = function (dataCallback, provider, host, c
                     return [2];
                 }
                 if (data.step === 'us-url' && data.url) {
-                    masterUrl = String(data.url);
+                    masterUrl = normalizeMediacachePlaylistUrl(String(data.url));
                     if (!isMediacacheUrl(masterUrl)) {
                         return [2];
                     }

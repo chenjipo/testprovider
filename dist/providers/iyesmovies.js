@@ -413,7 +413,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v36');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v38');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1185,8 +1185,19 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('GET_HDR', 'referer=' + LINK_DETAIL.substring(0, 80));
                 debugLog('EP_PARAMS', 'mid=' + mid + ' eid=' + eid + ' sv=' + sv);
                 console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' mid=' + mid + ' eid=' + eid + ' sv=' + sv);
-                debugLog('GET_FALLBACK', 'early yesmovies embed');
-                return [4, openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
+                debugLog('GET_PARALLEL', 'fire embed + RN /get/ (justhd-style)');
+                if (hosts && hosts['yesmovies-embed']) {
+                    hosts['yesmovies-embed'](LINK_DETAIL, movieInfo || {}, PROVIDER, {
+                        detailUrl: LINK_DETAIL,
+                        mid: mid,
+                        eid: eid,
+                        sv: sv,
+                        epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
+                        yesLoc: 'US',
+                        watchUrl: ''
+                    }, callback);
+                }
+                return [3, 7];
             case 4:
                 _b.sent();
                 return [2];
@@ -1213,9 +1224,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('PARSE_URL', 'parseURL=' + parseURL + ' loc=' + (loc || 'EMPTY'));
                 libs.log({ parseURL: parseURL, loc: loc }, PROVIDER, "PARSE URL");
                 if (!parseURL || !loc) {
-                    debugLog('LOC_EMPTY', 'embed fallback');
-                    console.log('[RN-Fetch][PLOYAN-EMBED] no loc fallback');
-                    openPloyanWebView(watchEmbedUrl, watchUrix, mid, eid, sv, movieInfo, callback, streamHeaders, LINK_DETAIL, yesLoc);
+                    debugLog('LOC_EMPTY', 'waiting scheduled embed');
                     return [2];
                 }
                 hashTs = Math.floor((new Date()).getTime() / 1000);
@@ -1230,9 +1239,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 console.log('[RN-Fetch][PLOYAN-HASH] done len=' + (deHash ? deHash.length : 0));
                 libs.log({ deHash: deHash, loc: loc, sv: sv, mid: mid, eid: eid }, PROVIDER, 'GET HASH');
                 if (!deHash) {
-                    debugLog('HASH_EMPTY', 'embed fallback');
-                    console.log('[RN-Fetch][PLOYAN-EMBED] hash empty fallback');
-                    openPloyanWebView(watchEmbedUrl, watchUrix, mid, eid, sv, movieInfo, callback, streamHeaders, LINK_DETAIL, yesLoc);
+                    debugLog('HASH_EMPTY', 'waiting scheduled embed');
                     return [2];
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
@@ -1248,12 +1255,12 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     directURL = "".concat(parseURL, "/hls/").concat(hashID.info, "/master.m3u8");
                     console.log('[RN-Fetch][PLOYAN-HLS] GET ' + directURL);
                     libs.log({ directURL: directURL }, PROVIDER, 'DIRECT QUALITY');
-                    libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], warmHeaders);
+                    libs.embed_callback(directURL, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: directURL, quality: 1080 }], warmHeaders, {
+                        type: 'm3u8',
+                    });
                     return [2];
                 }
-                debugLog('GET_FALLBACK', 'embed watch url');
-                console.log('[RN-Fetch][PLOYAN-EMBED] fallback ' + watchEmbedUrl.substring(0, 140));
-                openPloyanWebView(watchEmbedUrl, watchUrix, mid, eid, sv, movieInfo, callback, streamHeaders, LINK_DETAIL, yesLoc);
+                debugLog('GET_FALLBACK', 'waiting scheduled embed');
                 return [2];
             case 11:
                 e_1 = _b.sent();
@@ -1264,7 +1271,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     console.log('[RN-Fetch][PLOYAN-EMBED] error fallback');
                     openPloyanWebView(watchEmbedUrl, watchUrix, mid, eid, sv, movieInfo, callback, streamHeaders, LINK_DETAIL, yesLoc);
                 }
-                return [2, true];
+                return [2];
             case 12:
                 return [2];
         }
