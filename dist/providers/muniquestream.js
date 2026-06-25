@@ -142,26 +142,36 @@ function normalizeMediacachePlaylistUrl(url) {
     }
     return file;
 }
-function finishEmbed(playUrl, callback, qualities, headerDirect, metadata) {
+function deliverUniqueStreamLink(playUrl, callback, sorted, headerDirect) {
     var state = getUniqueStreamState();
+    var playKey = playKeyFromUrl(playUrl) || String(playUrl).substring(0, 160);
+    if (state.played[playKey]) {
+        return;
+    }
+    state.played[playKey] = true;
+    console.log('[RN-Fetch][UNIQUESTREAM-PLAY] url=' + String(playUrl).substring(0, 140) + ' qualities=' + sorted.length);
+    libs.embed_callback(playUrl, PROVIDER, PROVIDER, 'Hls', callback, 1, [], sorted, headerDirect, {
+        type: 'm3u8',
+    });
+}
+function finishEmbed(playUrl, callback, qualities, headerDirect, metadata) {
     var sorted = _.orderBy(qualities || [], ['quality'], ['desc']);
     if (!sorted.length) {
         sorted = [{ file: playUrl, quality: 1080 }];
     }
-    var playFile = playUrl;
-    var playKey = playKeyFromUrl(playFile) || String(playFile).substring(0, 160);
-    if (state.played[playKey]) {
+    if (!isMediacacheUrl(playUrl)) {
+        console.log('[RN-Fetch][UNIQUESTREAM-PLAY] skip non-mediacache url=' + String(playUrl).substring(0, 100));
         return;
     }
-    if (!isMediacacheUrl(playFile)) {
-        console.log('[RN-Fetch][UNIQUESTREAM-PLAY] skip non-mediacache url=' + String(playFile).substring(0, 100));
+    var deferMs = libs.getMultiSourceDeferMs ? libs.getMultiSourceDeferMs() : 0;
+    if (deferMs > 0) {
+        console.log('[RN-Fetch][UNIQUESTREAM-DEFER] hold ' + deferMs + 'ms so webview providers can deliver');
+        setTimeout(function () {
+            deliverUniqueStreamLink(playUrl, callback, sorted, headerDirect);
+        }, deferMs);
         return;
     }
-    state.played[playKey] = true;
-    console.log('[RN-Fetch][UNIQUESTREAM-PLAY] url=' + String(playFile).substring(0, 140) + ' qualities=' + sorted.length);
-    libs.embed_callback(playFile, PROVIDER, PROVIDER, 'Hls', callback, 1, [], sorted, headerDirect, {
-        type: 'm3u8',
-    });
+    deliverUniqueStreamLink(playUrl, callback, sorted, headerDirect);
 }
 function probeAndEmbedPlaylist(playlistUrl, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
     var headers, masterBody, qualities, sorted, probeIdx, probeCandidate, probeBody;
@@ -371,9 +381,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 return [4, embedMediacacheMaster(prefetchUrl, callback, {})];
             case 3:
                 _a.sent();
-                if (!Object.keys(getUniqueStreamState().played || {}).length) {
+                if (!Object.keys(getUniqueStreamState().embedDone || {}).length && !Object.keys(getUniqueStreamState().played || {}).length) {
                     fireEmbedHostFallback(iframeUrl, movieInfo, callback, pageReferer);
-                    return [2, true];
                 }
                 return [2, true];
             case 5:

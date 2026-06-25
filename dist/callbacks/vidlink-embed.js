@@ -373,8 +373,6 @@ function finishEmbed(file, provider, callback, tracks, qualities, headerDirect, 
     console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));
     libs.embed_callback(file, provider, provider, 'Hls', callback, 1, tracks, qualities, headerDirect, {
         type: 'm3u8',
-        is_end_webview: true,
-        url_webview: metadata && metadata.url_webview ? metadata.url_webview : '',
     });
 }
 function processVidlinkStream(parseSearch, provider, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {

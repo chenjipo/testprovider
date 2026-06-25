@@ -209,3 +209,17 @@ libs.scheduleEmbedWebview = function (provider, task, slotMs) {
     }
     runNext();
 };
+libs.getMultiSourceDeferMs = function () {
+    var slot = libs.__embedWebviewSlot;
+    if (!slot) {
+        return 0;
+    }
+    var pending = (slot.pumping ? 1 : 0) + slot.queue.length;
+    if (!pending) {
+        return 0;
+    }
+    var holdMs = 20000;
+    var deferMs = pending * holdMs + 8000;
+    console.log('[RN-Fetch][MULTI-SOURCE-DEFER] webviews=' + pending + ' deferMs=' + deferMs);
+    return deferMs;
+};
