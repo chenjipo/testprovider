@@ -83,6 +83,47 @@ function getStormBaseOrigin(directUrl) {
     var match = directUrl.match(/^(https?:\/\/[^/]+)/);
     return match ? match[1] : 'https://storm.vodvidl.site';
 }
+function stormPlaylistDedupeKey(playlistUrl) {
+    if (!playlistUrl) {
+        return '';
+    }
+    var qIdx = playlistUrl.indexOf('?');
+    return qIdx >= 0 ? playlistUrl.substring(0, qIdx) : playlistUrl;
+}
+function buildStormQualitiesFromMasterUrl(masterUrl) {
+    if (masterUrl.indexOf('/playlist.m3u8') < 0) {
+        return [];
+    }
+    var queryString = '';
+    var qIdx = masterUrl.indexOf('?');
+    if (qIdx >= 0) {
+        queryString = masterUrl.substring(qIdx);
+    }
+    var basePath = qIdx >= 0 ? masterUrl.substring(0, qIdx) : masterUrl;
+    basePath = basePath.replace('/playlist.m3u8', '');
+    var variants = [
+        { quality: 1080, suffix: '/1080/index.m3u8' },
+        { quality: 720, suffix: '/720/index.m3u8' },
+        { quality: 360, suffix: '/360/index.m3u8' },
+    ];
+    var result = [];
+    for (var i = 0; i < variants.length; i++) {
+        result.push({
+            file: basePath + variants[i].suffix + queryString,
+            quality: variants[i].quality,
+        });
+    }
+    return result;
+}
+function getVidlinkEmbedDoneMap() {
+    if (typeof global !== 'undefined') {
+        if (!global.__vidlinkEmbedDone) {
+            global.__vidlinkEmbedDone = {};
+        }
+        return global.__vidlinkEmbedDone;
+    }
+    return {};
+}
 function buildHeaderDirect() {
     return {
         'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
@@ -208,6 +249,14 @@ function parseTracks(captions) {
     return tracks;
 }
 function finishEmbed(file, provider, callback, tracks, qualities, headerDirect, metadata) {
+    var playKey = stormPlaylistDedupeKey(file) || String(file).substring(0, 160);
+    if (!global.__vidlinkPlayed) {
+        global.__vidlinkPlayed = {};
+    }
+    if (global.__vidlinkPlayed[playKey]) {
+        return;
+    }
+    global.__vidlinkPlayed[playKey] = true;
     console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['Referer'] || ''));
     libs.embed_callback(file, provider, provider, 'Hls', callback, 1, tracks, qualities, headerDirect, {
         type: 'm3u8',
@@ -216,7 +265,7 @@ function finishEmbed(file, provider, callback, tracks, qualities, headerDirect, 
     });
 }
 function processVidlinkStream(parseSearch, provider, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
-    var headerDirect, directUrl, tracks, directQuality, qualityIndex, q, qualityItem, parseDirecturl, transformed, stormBase, parseDirectSize, textDirect, m3u8Data, directQualitySorted;
+    var headerDirect, directUrl, tracks, directQuality, qualityIndex, q, qualityItem, parseDirecturl, transformed, stormBase, stormQualities, parseDirectSize, textDirect, m3u8Data, directQualitySorted;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -256,8 +305,18 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
                 headerDirect = transformed.headerDirect;
                 libs.log({ directUrl: directUrl, headerDirect: headerDirect }, provider, 'DIRECT URL DATA');
                 stormBase = isStormProxyUrl(directUrl) ? getStormBaseOrigin(directUrl) : '';
+                if (isStormProxyUrl(directUrl) && directUrl.indexOf('/playlist.m3u8') >= 0) {
+                    stormQualities = buildStormQualitiesFromMasterUrl(directUrl);
+                    if (stormQualities.length) {
+                        directQualitySorted = _.orderBy(stormQualities, ['quality'], ['desc']);
+                        console.log('[RN-Fetch][VIDLINK-M3U8] derived=' + stormQualities.length + ' best=' + directQualitySorted[0].quality);
+                        finishEmbed(directQualitySorted[0].file, provider, callback, tracks, directQualitySorted, headerDirect, metadata);
+                        return [2];
+                    }
+                }
                 if (isStormProxyUrl(directUrl)) {
-                    return [4, libs.request_get(directUrl, headerDirect)];
+                    finishEmbed(directUrl, provider, callback, tracks, [{ file: directUrl, quality: 1080 }], headerDirect, metadata);
+                    return [2];
                 }
                 if (directUrl.indexOf('/proxy/') >= 0) {
                     finishEmbed(directUrl, provider, callback, tracks, [{ file: directUrl, quality: 1080 }], headerDirect, metadata);
@@ -279,7 +338,14 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
                 libs.log({ m3u8Data: m3u8Data }, provider, 'PARSE M3U8');
                 if (m3u8Data.length) {
                     directQualitySorted = _.orderBy(m3u8Data, ['quality'], ['desc']);
-                    console.log('[RN-Fetch][VIDLINK-M3U8] variants=' + m3u8Data.length + ' best=' + directQualitySorted[0].quality);
+                    console.log('[RN-Fetch][VIDLINK-M3U8] fetched=' + m3u8Data.length + ' best=' + directQualitySorted[0].quality);
+                    finishEmbed(directQualitySorted[0].file, provider, callback, tracks, directQualitySorted, headerDirect, metadata);
+                    return [2];
+                }
+                stormQualities = buildStormQualitiesFromMasterUrl(directUrl);
+                if (stormQualities.length) {
+                    directQualitySorted = _.orderBy(stormQualities, ['quality'], ['desc']);
+                    console.log('[RN-Fetch][VIDLINK-M3U8] derived=' + stormQualities.length + ' best=' + directQualitySorted[0].quality);
                     finishEmbed(directQualitySorted[0].file, provider, callback, tracks, directQualitySorted, headerDirect, metadata);
                     return [2];
                 }
@@ -288,9 +354,8 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
         }
     });
 }); }
-var _vidlinkEmbedDone = {};
 callbacksEmbed['vidlink-embed'] = function (dataCallback, provider, host, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
-    var data, parseSearch, dedupeKey, e_1;
+    var data, parseSearch, dedupeKey, embedDone, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -312,11 +377,12 @@ callbacksEmbed['vidlink-embed'] = function (dataCallback, provider, host, callba
                 }
                 if (!(data.responseURL && data.responseURL.indexOf('/api/b/') != -1 && data.responseText && data.responseText.charAt(0) === '{')) return [3, 2];
                 parseSearch = JSON.parse(data.responseText);
-                dedupeKey = parseSearch && parseSearch.stream && parseSearch.stream.playlist ? parseSearch.stream.playlist : '';
-                if (!dedupeKey || _vidlinkEmbedDone[dedupeKey]) {
+                dedupeKey = stormPlaylistDedupeKey(parseSearch && parseSearch.stream && parseSearch.stream.playlist ? parseSearch.stream.playlist : '');
+                embedDone = getVidlinkEmbedDoneMap();
+                if (!dedupeKey || embedDone[dedupeKey]) {
                     return [2];
                 }
-                _vidlinkEmbedDone[dedupeKey] = true;
+                embedDone[dedupeKey] = true;
                 libs.log({ parseSearch: parseSearch }, provider, 'PARSE SEARCH');
                 return [4, processVidlinkStream(parseSearch, provider, callback, metadata)];
             case 1:
