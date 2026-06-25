@@ -151,11 +151,6 @@ function deliverUniqueStreamLink(playUrl, callback, sorted, headerDirect) {
     state.played[playKey] = true;
     var playFile = sorted.length ? sorted[0].file : playUrl;
     console.log('[RN-Fetch][UNIQUESTREAM-PLAY] url=' + String(playFile).substring(0, 140) + ' qualities=' + sorted.length);
-    if (libs.__deliverVodBatchLink && libs.__deliverVodBatchLink(playFile, PROVIDER, PROVIDER, 'Hls', callback, 0, [], sorted, headerDirect, {
-        type: 'm3u8',
-    })) {
-        return;
-    }
     libs.embed_callback(playFile, PROVIDER, PROVIDER, 'Hls', callback, 0, [], sorted, headerDirect, {
         type: 'm3u8',
     });
@@ -360,7 +355,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             case 0:
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v19');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v20');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 4, , 5]);

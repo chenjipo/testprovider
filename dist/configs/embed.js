@@ -364,14 +364,7 @@ libs.__isVodSessionOpen = function () {
     return Date.now() - libs.__vodBatchStartMs < libs.__vodBatchSessionMs;
 };
 libs.__shouldBatchVodLinks = function () {
-    if (libs.__vodBatchReleased) {
-        return false;
-    }
-    var slot = libs.__embedWebviewSlot || {};
-    if (slot.multiSourceBatch && libs.__vodBatchStartMs) {
-        return true;
-    }
-    return libs.__isVodSessionOpen();
+    return false;
 };
 libs.__releaseLinkBatch = function () {
     var items = libs.__vodBatchItems || [];
@@ -540,7 +533,7 @@ libs.__installVodBatchDeliverWrap = function () {
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-console.log('[RN-Fetch][EMBED-CFG] batch-v12');
+console.log('[RN-Fetch][EMBED-CFG] batch-v13-direct');
 if (libs.__vodBatchItems.length) {
     console.log('[RN-Fetch][BATCH-RESUME] pending=' + libs.__vodBatchItems.length);
     libs.__scheduleBatchRelease();
