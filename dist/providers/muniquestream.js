@@ -355,7 +355,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             case 0:
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v22');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v23');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 4, , 5]);

@@ -112,6 +112,10 @@ function buildStormQualitiesFromMasterUrl(masterUrl) {
     }
     var basePath = qIdx >= 0 ? masterUrl.substring(0, qIdx) : masterUrl;
     basePath = basePath.replace('/playlist.m3u8', '');
+    return buildStormVariantFiles(basePath, queryString);
+}
+function buildStormVariantFiles(basePath, queryString) {
+    if (queryString === void 0) { queryString = ''; }
     var variants = [
         { quality: 1080, suffix: '/1080/index.m3u8' },
         { quality: 720, suffix: '/720/index.m3u8' },
@@ -125,6 +129,19 @@ function buildStormQualitiesFromMasterUrl(masterUrl) {
         });
     }
     return result;
+}
+function buildStormQualitiesFromProxyUrl(proxyUrl) {
+    if (!proxyUrl || proxyUrl.indexOf('vodvidl.site') < 0) {
+        return [];
+    }
+    var qIdx = proxyUrl.indexOf('?');
+    var queryString = qIdx >= 0 ? proxyUrl.substring(qIdx) : '';
+    var basePath = qIdx >= 0 ? proxyUrl.substring(0, qIdx) : proxyUrl;
+    basePath = basePath.replace(/\/playlist\.m3u8$/, '');
+    if (basePath.indexOf('/1080/') >= 0 || basePath.indexOf('/720/') >= 0 || basePath.indexOf('/360/') >= 0) {
+        return [{ file: basePath + queryString, quality: 1080 }];
+    }
+    return buildStormVariantFiles(basePath, queryString);
 }
 function getVidlinkState() {
     if (!libs.__vidlinkState) {
@@ -377,8 +394,10 @@ function finishVidlinkEmbed(file, provider, callback, tracks, qualities, headerD
     var sorted = _.orderBy(qualities || [], ['quality'], ['desc']);
     file = sanitizePlayUrl(sorted.length ? sorted[0].file : file);
     if (file.indexOf('.m3u8') < 0 && file.indexOf('vodvidl.site') >= 0) {
-        var masterUrl = file.indexOf('/playlist.m3u8') >= 0 ? file : String(file).replace(/\/?$/, '') + '/playlist.m3u8';
-        var derived = buildStormQualitiesFromMasterUrl(masterUrl);
+        var derived = buildStormQualitiesFromProxyUrl(file);
+        if (!derived.length && file.indexOf('/playlist.m3u8') >= 0) {
+            derived = buildStormQualitiesFromMasterUrl(file);
+        }
         if (derived.length) {
             sorted = _.orderBy(derived, ['quality'], ['desc']);
             file = sorted[0].file;
@@ -398,22 +417,28 @@ function finishVidlinkEmbed(file, provider, callback, tracks, qualities, headerD
     if (playKey) {
         state.played[playKey] = true;
     }
-    console.log('[RN-Fetch][VIDLINK-EMBED-VERSION] v32');
-    console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));
+    console.log('[RN-Fetch][VIDLINK-EMBED-VERSION] v34');
+    console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 200) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));
     libs.embed_callback(file, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, tracks, sorted.length ? sorted : qualities, headerDirect, {
         type: 'm3u8',
     });
 }
 function processVidlinkStream(parseSearch, provider, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
-    var headerDirect, directUrl, tracks, directQuality, qualityIndex, q, qualityItem, parseDirecturl, transformed, stormBase, stormQualities, pack, probeIdx, probeCandidate, probeBody, mappedQualities, parseDirectSize, textDirect, m3u8Data, directQualitySorted;
+    var headerDirect, directUrl, tracks, directQuality, qualityIndex, q, qualityItem, parseDirecturl, transformed, stormBase, stormQualities, pack, probeIdx, probeCandidate, probeBody, mappedQualities, parseDirectSize, textDirect, m3u8Data, directQualitySorted, dedupeKey;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
                 if (!parseSearch || !parseSearch.stream) {
                     return [2];
                 }
-                headerDirect = buildHeaderDirect();
                 directUrl = parseSearch.stream.playlist;
+                if (directUrl && isStormProxyUrl(directUrl)) {
+                    dedupeKey = stormPlaylistDedupeKey(directUrl);
+                    if (dedupeKey && getVidlinkEmbedDoneMap()[dedupeKey]) {
+                        return [2];
+                    }
+                }
+                headerDirect = buildHeaderDirect();
                 tracks = parseTracks(parseSearch.stream.captions);
                 getVidlinkState().pending = {
                     playlist: directUrl,
@@ -516,6 +541,16 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
                     }
                 }
                 if (isStormProxyUrl(directUrl)) {
+                    stormQualities = buildStormQualitiesFromProxyUrl(directUrl);
+                    if (!stormQualities.length) {
+                        stormQualities = buildStormQualitiesFromMasterUrl(directUrl);
+                    }
+                    if (stormQualities.length) {
+                        directQualitySorted = _.orderBy(stormQualities, ['quality'], ['desc']);
+                        console.log('[RN-Fetch][VIDLINK-M3U8] storm-derived=' + stormQualities.length + ' best=' + directQualitySorted[0].quality);
+                        finishVidlinkEmbed(directQualitySorted[0].file, provider, callback, tracks, directQualitySorted, headerDirect, metadata);
+                        return [2];
+                    }
                     finishVidlinkEmbed(directUrl, provider, callback, tracks, [{ file: directUrl, quality: 1080 }], headerDirect, metadata);
                     return [2];
                 }
