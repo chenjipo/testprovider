@@ -216,6 +216,16 @@ libs.__deliverVodBatchLink = function (urlDirect, provider, host, quality, callb
 libs.__resolveVodBatchProvider = function (urlDirect, provider, host) {
     var p = String(provider || '').trim();
     var h = String(host || '').trim();
+    var url = String(urlDirect || '');
+    if (url.indexOf('vodvidl.site') >= 0) {
+        return 'MVidlink';
+    }
+    if (url.indexOf('mediacache.cc') >= 0 || url.indexOf('uniquestream') >= 0) {
+        return 'MUniqueStream';
+    }
+    if (url.indexOf('ployan.me') >= 0) {
+        return 'IYesMovies';
+    }
     if (p === 'MUniqueStream' || p === 'MVidlink' || p === 'IYesMovies') {
         return p;
     }
@@ -226,16 +236,6 @@ libs.__resolveVodBatchProvider = function (urlDirect, provider, host) {
         return 'MUniqueStream';
     }
     if (p === 'yesmovies-embed' || h === 'yesmovies-embed' || p === 'ployan' || h === 'ployan') {
-        return 'IYesMovies';
-    }
-    var url = String(urlDirect || '');
-    if (url.indexOf('vodvidl.site') >= 0) {
-        return 'MVidlink';
-    }
-    if (url.indexOf('mediacache.cc') >= 0 || url.indexOf('uniquestream') >= 0) {
-        return 'MUniqueStream';
-    }
-    if (url.indexOf('ployan.me') >= 0) {
         return 'IYesMovies';
     }
     return p;
@@ -384,11 +384,7 @@ libs.__vodSyncHasProvider = function (provider) {
     return false;
 };
 libs.__shouldSyncVodLinks = function () {
-    var bag = libs.__getVodSyncBag();
-    if (bag.flushed || libs.__vodSyncReleasing) {
-        return false;
-    }
-    return !!bag.startMs;
+    return false;
 };
 libs.__shouldBatchVodLinks = function () {
     return false;
@@ -591,6 +587,12 @@ libs.beginVodLinkSession = function () {
     if (!libs.__embedWebviewSlot) {
         libs.__embedWebviewSlot = { busyUntil: 0, pumping: false, queue: [], multiSourceBatch: false };
     }
+    if (bag.startMs && !bag.flushed) {
+        var activeElapsed = now - bag.startMs;
+        if (activeElapsed < 90000) {
+            return;
+        }
+    }
     var elapsed = bag.startMs ? now - bag.startMs : 999999;
     var needNew = !bag.startMs || (bag.flushed && elapsed > 8000) || elapsed > 90000;
     if (needNew) {
@@ -768,7 +770,7 @@ libs.__installVodBatchDeliverWrap = function () {
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-console.log('[RN-Fetch][EMBED-CFG] sync-v24');
+console.log('[RN-Fetch][EMBED-CFG] direct-v25');
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {
