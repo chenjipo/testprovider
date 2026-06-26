@@ -60,7 +60,7 @@ hosts['yesmovies-embed'] = function (url, movieInfo, provider, config, callback)
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
         };
         beforeLoadScript = buildYesmoviesEmbedScript(mid, eid, sv, epNum);
-        console.log('[RN-Fetch][YESMOVIES-EMBED-HOST] ' + detailUrl.substring(0, 100));
+        console.log('[RN-Fetch][YESMOVIES-EMBED-HOST] v52 ' + detailUrl.substring(0, 100));
         try {
             callback({
                 callback: {

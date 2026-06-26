@@ -265,12 +265,16 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL) {
         return new Promise(function (resolve) {
             var delivered = false;
+            var settled = false;
             var linkCallback = function (data) {
                 callback(data);
                 if (data && data.file && !delivered) {
                     delivered = true;
-                    console.log('[RN-Fetch][YESMOVIES-EMBED] file ok, provider done');
-                    resolve(true);
+                    if (!settled) {
+                        settled = true;
+                        console.log('[RN-Fetch][YESMOVIES-EMBED] file ok, provider done');
+                        resolve(true);
+                    }
                 }
             };
             if (!(LINK_DETAIL && mid && hosts && hosts['yesmovies-embed'])) {
@@ -278,15 +282,30 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 return;
             }
             console.log('[RN-Fetch][YESMOVIES-EMBED] early detail webview');
-            hosts['yesmovies-embed'](LINK_DETAIL, movieInfo || {}, PROVIDER, {
-                detailUrl: LINK_DETAIL,
-                mid: mid,
-                eid: eid,
-                sv: sv,
-                epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
-                yesLoc: 'US',
-                watchUrl: ''
-            }, linkCallback);
+            var task = function () {
+                hosts['yesmovies-embed'](LINK_DETAIL, movieInfo || {}, PROVIDER, {
+                    detailUrl: LINK_DETAIL,
+                    mid: mid,
+                    eid: eid,
+                    sv: sv,
+                    epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
+                    yesLoc: 'US',
+                    watchUrl: ''
+                }, linkCallback);
+            };
+            if (libs.scheduleEmbedWebview) {
+                libs.scheduleEmbedWebview(PROVIDER, task);
+            }
+            else {
+                task();
+            }
+            setTimeout(function () {
+                if (!settled) {
+                    settled = true;
+                    console.log('[RN-Fetch][YESMOVIES-EMBED] webview timeout');
+                    resolve(false);
+                }
+            }, 45000);
         });
     }
     function openPloyanWebView(watchEmbedUrl, urix, mid, eid, sv, movieInfo, callback, streamHeaders, yesDetailUrl, yesLoc) {
@@ -295,15 +314,23 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         console.log('[RN-Fetch][PLOYAN-WEBVIEW] watch=' + watchBase + ' ref=' + yesReferer.substring(0, 80) + ' loc=' + (yesLoc || 'US'));
         if (yesDetailUrl && mid && hosts && hosts['yesmovies-embed']) {
             console.log('[RN-Fetch][YESMOVIES-EMBED] fallback detail page iframe flow');
-            hosts['yesmovies-embed'](yesDetailUrl, movieInfo || {}, PROVIDER, {
-                detailUrl: yesDetailUrl,
-                mid: mid,
-                eid: eid,
-                sv: sv,
-                epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
-                yesLoc: yesLoc || 'US',
-                watchUrl: watchEmbedUrl
-            }, callback);
+            var task = function () {
+                hosts['yesmovies-embed'](yesDetailUrl, movieInfo || {}, PROVIDER, {
+                    detailUrl: yesDetailUrl,
+                    mid: mid,
+                    eid: eid,
+                    sv: sv,
+                    epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
+                    yesLoc: yesLoc || 'US',
+                    watchUrl: watchEmbedUrl
+                }, callback);
+            };
+            if (libs.scheduleEmbedWebview) {
+                libs.scheduleEmbedWebview(PROVIDER, task);
+            }
+            else {
+                task();
+            }
             return;
         }
         if (hosts && hosts['ployan']) {
@@ -413,7 +440,6 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v51');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1068,6 +1094,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
+                console.log('[RN-Fetch][PLOYAN-VERSION] v52');
                 DOMAIN = "https://ww.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
@@ -1187,11 +1214,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('GET_HDR', 'referer=' + LINK_DETAIL.substring(0, 80));
                 debugLog('EP_PARAMS', 'mid=' + mid + ' eid=' + eid + ' sv=' + sv);
                 console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' mid=' + mid + ' eid=' + eid + ' sv=' + sv);
-                debugLog('GET_RN_ONLY', 'skip parallel embed webview');
-                return [3, 7];
+                return [4, openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
             case 4:
-                _b.sent();
-                return [2];
+                if (_b.sent()) {
+                    return [2, true];
+                }
+                console.log('[RN-Fetch][PLOYAN-DIRECT] webview miss, try RN /get/');
+                return [3, 7];
             case 5:
                 yesTraceData = _b.sent();
                 yesLoc = yesTraceData && yesTraceData.loc ? yesTraceData.loc : 'US';
@@ -1215,7 +1244,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('PARSE_URL', 'parseURL=' + parseURL + ' loc=' + (loc || 'EMPTY'));
                 libs.log({ parseURL: parseURL, loc: loc }, PROVIDER, "PARSE URL");
                 if (!parseURL || !loc) {
-                    debugLog('LOC_EMPTY', 'webview pending');
+                    debugLog('LOC_EMPTY', 'webview fallback');
+                    console.log('[RN-Fetch][PLOYAN-FALLBACK] loc empty → yesmovies webview');
+                    openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
                     return [2, true];
                 }
                 hashTs = Math.floor((new Date()).getTime() / 1000);
@@ -1230,7 +1261,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 console.log('[RN-Fetch][PLOYAN-HASH] done len=' + (deHash ? deHash.length : 0));
                 libs.log({ deHash: deHash, loc: loc, sv: sv, mid: mid, eid: eid }, PROVIDER, 'GET HASH');
                 if (!deHash) {
-                    debugLog('HASH_EMPTY', 'webview pending');
+                    debugLog('HASH_EMPTY', 'webview fallback');
+                    console.log('[RN-Fetch][PLOYAN-FALLBACK] hash empty → yesmovies webview');
+                    openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
                     return [2, true];
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
@@ -1252,6 +1285,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [2, true];
                 }
                 debugLog('GET_FALLBACK', 'webview pending');
+                console.log('[RN-Fetch][PLOYAN-FALLBACK] /get/ miss → yesmovies webview');
+                openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
                 return [2, true];
             case 11:
                 e_1 = _b.sent();
