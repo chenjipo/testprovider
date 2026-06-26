@@ -398,7 +398,7 @@ function finishVidlinkEmbed(file, provider, callback, tracks, qualities, headerD
     if (playKey) {
         state.played[playKey] = true;
     }
-    console.log('[RN-Fetch][VIDLINK-EMBED-VERSION] v30');
+    console.log('[RN-Fetch][VIDLINK-EMBED-VERSION] v31');
     console.log('[RN-Fetch][VIDLINK-PLAY] url=' + String(file).substring(0, 140) + ' referer=' + (headerDirect['referer'] || headerDirect['Referer'] || ''));
     libs.embed_callback(file, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, tracks, sorted.length ? sorted : qualities, headerDirect, {
         type: 'm3u8',
@@ -460,7 +460,7 @@ function processVidlinkStream(parseSearch, provider, callback, metadata) { retur
                     if (Object.keys(getVidlinkState().played || {}).length) {
                         return [2];
                     }
-                    return [4, new Promise(function (resolve) { setTimeout(resolve, 1200); })];
+                    return [4, new Promise(function (resolve) { setTimeout(resolve, 400); })];
                 }
                 return [3, 11];
             case 2:
