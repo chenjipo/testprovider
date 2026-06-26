@@ -341,8 +341,8 @@ libs.__batchHasProvider = function (provider) {
 };
 libs.__vodSyncFlushMs = 8000;
 libs.__vodSyncMaxMs = 38000;
-libs.__vodSyncSingleMs = 36000;
-libs.__vodRnWaitMs = 14000;
+libs.__vodSyncSingleMs = 22000;
+libs.__vodRnWaitMs = 12000;
 libs.__vodSyncTargetCount = 3;
 libs.__closeEmbedWebview = function (callback, metadata) {
     try {
@@ -457,15 +457,39 @@ libs.__runDeferredProviderWebviews = function () {
     }
     libs.__vodDeferredWebviews = {};
 };
+libs.__finishSyncSession = function (reason) {
+    if (libs.__vodSyncFlushed) {
+        return;
+    }
+    var items = libs.__vodSyncItems || [];
+    if (items.length) {
+        console.log('[RN-Fetch][SYNC-END] reason=' + reason + ' flush=' + items.length);
+        libs.__flushVodSyncItems();
+        return;
+    }
+    libs.__vodSyncFlushed = true;
+    if (libs.__vodSyncTimer) {
+        clearTimeout(libs.__vodSyncTimer);
+        libs.__vodSyncTimer = null;
+    }
+    console.log('[RN-Fetch][SYNC-END] reason=' + reason + ' queued=0');
+    libs.__runDeferredProviderWebviews();
+};
+libs.__onRnWaitElapsed = function () {
+    var elapsed = libs.__vodSyncStartMs ? Date.now() - libs.__vodSyncStartMs : 0;
+    console.log('[RN-Fetch][SYNC-RN-WAIT] elapsed=' + elapsed + 'ms');
+    libs.__runDeferredProviderWebviews();
+    libs.__scheduleSyncFlush();
+};
 libs.__shouldDeferWebview = function (provider) {
     if (!libs.__shouldSyncVodLinks || !libs.__shouldSyncVodLinks()) {
         return false;
     }
     var elapsed = libs.__vodSyncStartMs ? Date.now() - libs.__vodSyncStartMs : 0;
+    if (elapsed >= libs.__vodRnWaitMs) {
+        return false;
+    }
     if (provider === 'MVidlink') {
-        if (elapsed >= libs.__vodRnWaitMs) {
-            return false;
-        }
         var items = libs.__vodSyncItems || [];
         var rnReady = 0;
         for (var i = 0; i < items.length; i++) {
@@ -493,6 +517,11 @@ libs.__scheduleSyncFlush = function () {
         libs.__flushVodSyncItems();
         return;
     }
+    if (items.length >= 1 && elapsed >= 12000) {
+        console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' reason=single');
+        libs.__flushVodSyncItems();
+        return;
+    }
     if (items.length >= 1 && elapsed >= libs.__vodSyncSingleMs) {
         console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' reason=timeout');
         libs.__flushVodSyncItems();
@@ -510,6 +539,9 @@ libs.__scheduleSyncFlush = function () {
             console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' reason=max');
             libs.__flushVodSyncItems();
         }
+        else {
+            libs.__finishSyncSession('max-empty');
+        }
         return;
     }
     libs.__vodSyncTimer = setTimeout(function () {
@@ -521,7 +553,7 @@ libs.__ensureSyncPoller = function () {
         return;
     }
     libs.__vodSyncPoller = setInterval(function () {
-        if (libs.__shouldSyncVodLinks() && libs.__vodSyncItems && libs.__vodSyncItems.length) {
+        if (libs.__vodSyncStartMs && !libs.__vodSyncFlushed) {
             libs.__scheduleSyncFlush();
         }
     }, 2000);
@@ -544,6 +576,15 @@ libs.beginVodLinkSession = function () {
         libs.__vodSyncItems = [];
     }
     libs.__ensureSyncPoller();
+    libs.__scheduleSyncFlush();
+    if (needNew) {
+        if (libs.__vodRnWaitTimer) {
+            clearTimeout(libs.__vodRnWaitTimer);
+        }
+        libs.__vodRnWaitTimer = setTimeout(function () {
+            libs.__onRnWaitElapsed();
+        }, libs.__vodRnWaitMs);
+    }
 };
 libs.__ensureVodSyncSession = function () {
     if (typeof libs.beginVodLinkSession === 'function') {
@@ -708,7 +749,7 @@ libs.__installVodBatchDeliverWrap = function () {
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-console.log('[RN-Fetch][EMBED-CFG] sync-v21');
+console.log('[RN-Fetch][EMBED-CFG] sync-v22');
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {
