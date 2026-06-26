@@ -342,7 +342,24 @@ libs.__batchHasProvider = function (provider) {
 libs.__vodSyncFlushMs = 8000;
 libs.__vodSyncMaxMs = 38000;
 libs.__vodSyncSingleMs = 36000;
+libs.__vodRnWaitMs = 14000;
 libs.__vodSyncTargetCount = 3;
+libs.__closeEmbedWebview = function (callback, metadata) {
+    try {
+        var raw = libs.__unwrapVodCallback ? libs.__unwrapVodCallback(callback) : callback;
+        if (!raw) {
+            return;
+        }
+        raw({
+            is_end_webview: true,
+            url_webview: metadata && metadata.url_webview ? metadata.url_webview : '',
+        });
+        console.log('[RN-Fetch][EMBED-WV-CLOSE]');
+    }
+    catch (e) {
+        console.log('[RN-Fetch][EMBED-WV-CLOSE-ERR] ' + String(e && e.message ? e.message : e));
+    }
+};
 libs.__vodSyncHasProvider = function (provider) {
     var items = libs.__vodSyncItems || [];
     for (var i = 0; i < items.length; i++) {
@@ -441,21 +458,27 @@ libs.__runDeferredProviderWebviews = function () {
     libs.__vodDeferredWebviews = {};
 };
 libs.__shouldDeferWebview = function (provider) {
-    if (provider === 'MVidlink') {
-        return false;
-    }
     if (!libs.__shouldSyncVodLinks || !libs.__shouldSyncVodLinks()) {
         return false;
     }
-    var items = libs.__vodSyncItems || [];
-    if (items.length >= 1) {
+    var elapsed = libs.__vodSyncStartMs ? Date.now() - libs.__vodSyncStartMs : 0;
+    if (provider === 'MVidlink') {
+        if (elapsed >= libs.__vodRnWaitMs) {
+            return false;
+        }
+        var items = libs.__vodSyncItems || [];
+        var rnReady = 0;
+        for (var i = 0; i < items.length; i++) {
+            if (items[i][1] === 'MUniqueStream' || items[i][1] === 'IYesMovies') {
+                rnReady++;
+            }
+        }
+        if (rnReady >= 2) {
+            return false;
+        }
         return true;
     }
-    var slot = libs.__embedWebviewSlot || {};
-    if (slot.pumping || (slot.queue && slot.queue.length)) {
-        return true;
-    }
-    return false;
+    return true;
 };
 libs.__scheduleSyncFlush = function () {
     var items = libs.__vodSyncItems || [];
@@ -630,6 +653,9 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
         console.log('[RN-Fetch][BATCH-PROVIDER] raw=' + rawProvider + ' resolved=' + provider);
     }
     var isVodStream = libs.__isVodBatchStream(urlDirect, provider);
+    if (isVodStream && libs.__isVodBatchProvider(provider) && typeof libs.__ensureVodSyncSession === 'function') {
+        libs.__ensureVodSyncSession();
+    }
     if (provider === 'MVidlink' && libs.__isVidlinkDuplicate(urlDirect)) {
         console.log('[RN-Fetch][VIDLINK-SKIP-DUP]');
         return;
@@ -639,6 +665,8 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
             if (libs.__tryPushVodSyncLink(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options)) {
                 return;
             }
+            libs.__pushVodSyncItem(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
+            return;
         }
         else if (libs.__vodSyncFlushed) {
             console.log('[RN-Fetch][SYNC-LATE-ADD] provider=' + provider);
@@ -680,7 +708,7 @@ libs.__installVodBatchDeliverWrap = function () {
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-console.log('[RN-Fetch][EMBED-CFG] sync-v20');
+console.log('[RN-Fetch][EMBED-CFG] sync-v21');
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {
