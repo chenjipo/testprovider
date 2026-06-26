@@ -1,5 +1,5 @@
 {
   "providers": [
-	"dist/providers/iyesmovies.js"
+    "dist/providers/muniquestream.js"
   ]
 }
