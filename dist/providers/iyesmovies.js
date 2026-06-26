@@ -413,7 +413,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function fetchTraceText(url, reqHeaders) {
         var traceUrls = [url, 'https://www.cloudflare.com/cdn-cgi/trace'];
         var timeoutMs = 4000;
-        console.log('[RN-Fetch][PLOYAN-VERSION] v50');
+        console.log('[RN-Fetch][PLOYAN-VERSION] v51');
         function tryNext(index) {
             if (index >= traceUrls.length) {
                 console.log('[RN-Fetch][PLOYAN-LOC] loc=MISSING all trace urls failed');
@@ -1187,20 +1187,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('GET_HDR', 'referer=' + LINK_DETAIL.substring(0, 80));
                 debugLog('EP_PARAMS', 'mid=' + mid + ' eid=' + eid + ' sv=' + sv);
                 console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' mid=' + mid + ' eid=' + eid + ' sv=' + sv);
-                debugLog('GET_PARALLEL', 'queue embed + RN /get/');
-                if (hosts && hosts['yesmovies-embed']) {
-                    libs.scheduleEmbedWebview(PROVIDER, function () {
-                        hosts['yesmovies-embed'](LINK_DETAIL, movieInfo || {}, PROVIDER, {
-                            detailUrl: LINK_DETAIL,
-                            mid: mid,
-                            eid: eid,
-                            sv: sv,
-                            epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
-                            yesLoc: 'US',
-                            watchUrl: ''
-                        }, callback);
-                    });
-                }
+                debugLog('GET_RN_ONLY', 'skip parallel embed webview');
                 return [3, 7];
             case 4:
                 _b.sent();

@@ -675,7 +675,7 @@ libs.__installVodBatchDeliverWrap = function () {
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-console.log('[RN-Fetch][EMBED-CFG] sync-v15');
+console.log('[RN-Fetch][EMBED-CFG] sync-v16');
 if (libs.__vodSyncItems && libs.__vodSyncItems.length) {
     console.log('[RN-Fetch][SYNC-RESUME] pending=' + libs.__vodSyncItems.length);
     libs.__scheduleSyncFlush();

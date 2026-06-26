@@ -62,15 +62,6 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                 return [2];
             }
             libs.log({ data: data }, provider, 'PLOYAN WEBVIEW');
-            if (data.responseURL && (data.responseURL.indexOf('.m3u8') != -1 || data.responseURL.indexOf('/hls/') != -1)) {
-                directUrl = data.responseURL;
-                console.log('[RN-Fetch][PLOYAN-HLS-CB] ' + directUrl);
-                libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], {}, {
-                    is_end_webview: true,
-                    url_webview: metadata && metadata.url_webview ? metadata.url_webview : ''
-                });
-                return [2];
-            }
             if (data.responseText && data.responseText.charAt(0) === '{' && (data.source === 'inject' || data.source === 'hook' || data.source === 'xhr' || (data.responseURL && data.responseURL.indexOf('/get/') != -1))) {
                 json = JSON.parse(data.responseText);
                 if (json && json.code === 200 && json.info) {
