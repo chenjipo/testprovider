@@ -339,10 +339,11 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__vodSyncFlushMs = 8000;
-libs.__vodSyncMaxMs = 38000;
+libs.__vodSyncFlushMs = 5000;
+libs.__vodSyncMaxMs = 45000;
 libs.__vodSyncSingleMs = 22000;
-libs.__vodRnWaitMs = 12000;
+libs.__vodSyncCoalesceMs = 5000;
+libs.__vodRnWaitMs = 0;
 libs.__vodSyncTargetCount = 3;
 libs.__closeEmbedWebview = function (callback, metadata) {
     try {
@@ -457,6 +458,10 @@ libs.__runDeferredProviderWebviews = function () {
     }
     libs.__vodDeferredWebviews = {};
 };
+libs.__isWebviewPumping = function () {
+    var slot = libs.__embedWebviewSlot || {};
+    return !!(slot.pumping || (slot.queue && slot.queue.length));
+};
 libs.__finishSyncSession = function (reason) {
     if (libs.__vodSyncFlushed) {
         return;
@@ -467,42 +472,29 @@ libs.__finishSyncSession = function (reason) {
         libs.__flushVodSyncItems();
         return;
     }
+    if (libs.__isWebviewPumping()) {
+        console.log('[RN-Fetch][SYNC-WAIT-WV] reason=' + reason + ' pumping=1');
+        if (libs.__vodSyncTimer) {
+            clearTimeout(libs.__vodSyncTimer);
+        }
+        libs.__vodSyncTimer = setTimeout(function () {
+            libs.__scheduleSyncFlush();
+        }, 3000);
+        return;
+    }
     libs.__vodSyncFlushed = true;
     if (libs.__vodSyncTimer) {
         clearTimeout(libs.__vodSyncTimer);
         libs.__vodSyncTimer = null;
     }
+    if (libs.__vodSyncCoalesceTimer) {
+        clearTimeout(libs.__vodSyncCoalesceTimer);
+        libs.__vodSyncCoalesceTimer = null;
+    }
     console.log('[RN-Fetch][SYNC-END] reason=' + reason + ' queued=0');
-    libs.__runDeferredProviderWebviews();
 };
-libs.__onRnWaitElapsed = function () {
-    var elapsed = libs.__vodSyncStartMs ? Date.now() - libs.__vodSyncStartMs : 0;
-    console.log('[RN-Fetch][SYNC-RN-WAIT] elapsed=' + elapsed + 'ms');
-    libs.__runDeferredProviderWebviews();
-    libs.__scheduleSyncFlush();
-};
-libs.__shouldDeferWebview = function (provider) {
-    if (!libs.__shouldSyncVodLinks || !libs.__shouldSyncVodLinks()) {
-        return false;
-    }
-    var elapsed = libs.__vodSyncStartMs ? Date.now() - libs.__vodSyncStartMs : 0;
-    if (elapsed >= libs.__vodRnWaitMs) {
-        return false;
-    }
-    if (provider === 'MVidlink') {
-        var items = libs.__vodSyncItems || [];
-        var rnReady = 0;
-        for (var i = 0; i < items.length; i++) {
-            if (items[i][1] === 'MUniqueStream' || items[i][1] === 'IYesMovies') {
-                rnReady++;
-            }
-        }
-        if (rnReady >= 2) {
-            return false;
-        }
-        return true;
-    }
-    return true;
+libs.__shouldDeferWebview = function () {
+    return false;
 };
 libs.__scheduleSyncFlush = function () {
     var items = libs.__vodSyncItems || [];
@@ -512,27 +504,10 @@ libs.__scheduleSyncFlush = function () {
         libs.__flushVodSyncItems();
         return;
     }
-    if (items.length >= 2 && elapsed >= 5000) {
+    if (items.length >= 2 && elapsed >= 4000) {
         console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' reason=pair');
         libs.__flushVodSyncItems();
         return;
-    }
-    if (items.length >= 1 && elapsed >= 12000) {
-        console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' reason=single');
-        libs.__flushVodSyncItems();
-        return;
-    }
-    if (items.length >= 1 && elapsed >= libs.__vodSyncSingleMs) {
-        console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' reason=timeout');
-        libs.__flushVodSyncItems();
-        return;
-    }
-    if (libs.__vodSyncTimer) {
-        clearTimeout(libs.__vodSyncTimer);
-    }
-    var waitMs = 600;
-    if (items.length >= 1) {
-        waitMs = Math.max(400, Math.min(1500, libs.__vodSyncSingleMs - elapsed));
     }
     if (elapsed >= libs.__vodSyncMaxMs) {
         if (items.length >= 1) {
@@ -544,9 +519,24 @@ libs.__scheduleSyncFlush = function () {
         }
         return;
     }
+    if (items.length >= 1) {
+        if (libs.__vodSyncCoalesceTimer) {
+            clearTimeout(libs.__vodSyncCoalesceTimer);
+        }
+        libs.__vodSyncCoalesceTimer = setTimeout(function () {
+            var queued = libs.__vodSyncItems || [];
+            if (queued.length && !libs.__vodSyncFlushed) {
+                console.log('[RN-Fetch][SYNC-READY] elapsed=' + (Date.now() - (libs.__vodSyncStartMs || 0)) + 'ms queued=' + queued.length + ' reason=coalesce');
+                libs.__flushVodSyncItems();
+            }
+        }, libs.__vodSyncCoalesceMs);
+    }
+    if (libs.__vodSyncTimer) {
+        clearTimeout(libs.__vodSyncTimer);
+    }
     libs.__vodSyncTimer = setTimeout(function () {
         libs.__scheduleSyncFlush();
-    }, waitMs);
+    }, 1500);
 };
 libs.__ensureSyncPoller = function () {
     if (libs.__vodSyncPoller) {
@@ -577,14 +567,6 @@ libs.beginVodLinkSession = function () {
     }
     libs.__ensureSyncPoller();
     libs.__scheduleSyncFlush();
-    if (needNew) {
-        if (libs.__vodRnWaitTimer) {
-            clearTimeout(libs.__vodRnWaitTimer);
-        }
-        libs.__vodRnWaitTimer = setTimeout(function () {
-            libs.__onRnWaitElapsed();
-        }, libs.__vodRnWaitMs);
-    }
 };
 libs.__ensureVodSyncSession = function () {
     if (typeof libs.beginVodLinkSession === 'function') {
@@ -706,8 +688,6 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
             if (libs.__tryPushVodSyncLink(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options)) {
                 return;
             }
-            libs.__pushVodSyncItem(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
-            return;
         }
         else if (libs.__vodSyncFlushed) {
             console.log('[RN-Fetch][SYNC-LATE-ADD] provider=' + provider);
@@ -749,7 +729,7 @@ libs.__installVodBatchDeliverWrap = function () {
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-console.log('[RN-Fetch][EMBED-CFG] sync-v22');
+console.log('[RN-Fetch][EMBED-CFG] sync-v23');
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {
@@ -784,12 +764,6 @@ libs.__embedWebviewOrder = { 'MVidlink': 0, 'IYesMovies': 1, 'MUniqueStream': 2 
 libs.scheduleEmbedWebview = function (provider, task, slotMs) {
     var slot = libs.__embedWebviewSlot;
     libs.beginVodLinkSession();
-    if (libs.__shouldDeferWebview && libs.__shouldDeferWebview(provider)) {
-        libs.__deferProviderWebview(provider, function () {
-            libs.scheduleEmbedWebview(provider, task, slotMs);
-        });
-        return;
-    }
     var order = libs.__embedWebviewOrder[provider];
     if (typeof order !== 'number') {
         order = 99;
@@ -805,7 +779,7 @@ libs.scheduleEmbedWebview = function (provider, task, slotMs) {
         return;
     }
     slot.pumping = true;
-    var holdMs = slotMs || 10000;
+    var holdMs = slotMs || 12000;
     function runNext() {
         if (!slot.queue.length) {
             slot.pumping = false;

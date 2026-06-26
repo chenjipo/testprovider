@@ -262,15 +262,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             throw err;
         });
     }
-    function scheduleYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL) {
-        var task = function () {
-            return openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
-        };
-        if (libs.__shouldDeferWebview && libs.__shouldDeferWebview('IYesMovies')) {
-            libs.__deferProviderWebview('IYesMovies', task);
-            return Promise.resolve(false);
-        }
-        return task();
+    function openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL) {
+        return openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
     }
     function openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL) {
         return new Promise(function (resolve) {
@@ -1104,7 +1097,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v53');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v54');
                 DOMAIN = "https://ww.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
@@ -1224,11 +1217,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('GET_HDR', 'referer=' + LINK_DETAIL.substring(0, 80));
                 debugLog('EP_PARAMS', 'mid=' + mid + ' eid=' + eid + ' sv=' + sv);
                 console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' mid=' + mid + ' eid=' + eid + ' sv=' + sv);
-                console.log('[RN-Fetch][PLOYAN-DIRECT] RN /get/ first (multi-sync)');
-                return [3, 7];
+                return [4, openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
             case 4:
-                _b.sent();
-                return [2, true];
+                if (_b.sent()) {
+                    return [2, true];
+                }
+                console.log('[RN-Fetch][PLOYAN-DIRECT] webview miss, try RN /get/');
+                return [3, 7];
             case 5:
                 yesTraceData = _b.sent();
                 yesLoc = yesTraceData && yesTraceData.loc ? yesTraceData.loc : 'US';
@@ -1254,7 +1249,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!parseURL || !loc) {
                     debugLog('LOC_EMPTY', 'webview fallback');
                     console.log('[RN-Fetch][PLOYAN-FALLBACK] loc empty → webview deferred');
-                    return [4, scheduleYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
+                    return [4, openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
                 }
                 hashTs = Math.floor((new Date()).getTime() / 1000);
                 debugLog('HASH_TS', String(hashTs));
@@ -1270,7 +1265,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!deHash) {
                     debugLog('HASH_EMPTY', 'webview fallback');
                     console.log('[RN-Fetch][PLOYAN-FALLBACK] hash empty → webview deferred');
-                    return [4, scheduleYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
+                    return [4, openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
                 debugLog('GET_REQ', hashURL.substring(0, 120));
@@ -1292,7 +1287,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 debugLog('GET_FALLBACK', 'webview pending');
                 console.log('[RN-Fetch][PLOYAN-FALLBACK] /get/ miss → webview deferred');
-                return [4, scheduleYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
+                return [4, openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
             case 11:
                 e_1 = _b.sent();
                 debugLog('ERROR', String(e_1 && e_1.message ? e_1.message : e_1));
