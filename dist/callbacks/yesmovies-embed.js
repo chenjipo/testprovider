@@ -63,9 +63,7 @@ callbacksEmbed['yesmovies-embed'] = function (dataCallback, provider, host, call
                 return [2];
             }
             if (data.responseURL && (data.responseURL.indexOf('.m3u8') != -1 || data.responseURL.indexOf('/hls/') != -1)) {
-                directUrl = data.responseURL;
-                console.log('[RN-Fetch][YESMOVIES-EMBED-HLS] ' + directUrl);
-                libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {});
+                console.log('[RN-Fetch][YESMOVIES-EMBED-HLS-BLOCK] ' + data.responseURL.substring(0, 120));
                 return [2];
             }
             if (data.responseText && data.responseText.charAt(0) === '{' && (data.source === 'yes-hook' || data.source === 'yes-xhr')) {
