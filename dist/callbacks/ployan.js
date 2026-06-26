@@ -35,10 +35,17 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
+var VOD_PROVIDER = 'IYesMovies';
 callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
     var data, json, info, directUrl, streamHeaders;
     return __generator(this, function (_a) {
         try {
+            if (libs.__resolveVodBatchProvider) {
+                provider = libs.__resolveVodBatchProvider('', provider, host);
+            }
+            else {
+                provider = VOD_PROVIDER;
+            }
             if (!dataCallback) {
                 return [2];
             }
@@ -58,7 +65,7 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
             if (data.responseURL && (data.responseURL.indexOf('.m3u8') != -1 || data.responseURL.indexOf('/hls/') != -1)) {
                 directUrl = data.responseURL;
                 console.log('[RN-Fetch][PLOYAN-HLS-CB] ' + directUrl);
-                libs.embed_callback(directUrl, provider, provider, 'Hls', callback, 1, [], [{ file: directUrl, quality: 1080 }], {}, {
+                libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], {}, {
                     is_end_webview: true,
                     url_webview: metadata && metadata.url_webview ? metadata.url_webview : ''
                 });
@@ -74,7 +81,7 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                         'Referer': 'https://ployan.me/',
                         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
                     };
-                    libs.embed_callback(directUrl, provider, provider, 'Hls', callback, 1, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {
+                    libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {
                         is_end_webview: true,
                         url_webview: metadata && metadata.url_webview ? metadata.url_webview : ''
                     });

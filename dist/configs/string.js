@@ -51,18 +51,23 @@ libs.string_provider = function (provider, rank) {
         'MUniqueStream': 'UniqueStream',
         'MVidlink': 'Vidlink',
         'IYesMovies': 'YesMovies',
+        'ployan': 'YesMovies',
         'JustHD': 'JustHD',
         'DUniqueStream': 'DUniqueStream',
     };
     if (labels[provider]) {
         return 'Server ' + labels[provider];
     }
+    var normalized = String(provider || '').trim();
+    if (normalized.toLowerCase() === 'iyesmovies' || normalized === 'ployan') {
+        return 'Server YesMovies';
+    }
     if (!rank) {
         return "Server ".concat(provider[0].toUpperCase());
     }
     return "Server ".concat(provider[0].toUpperCase()).concat(rank);
 };
-console.log('[RN-Fetch][STRING-CFG] v2');
+console.log('[RN-Fetch][STRING-CFG] v3');
 libs.string_encrypt_fmovies = function (input) {
     var keytwo = "51wJ0FDq/UVCefLopEcmK3ni4WIQztMjZdSYOsbHr9R2h7PvxBGAuglaN8+kXT6y";
     var output = '';

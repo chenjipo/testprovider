@@ -452,7 +452,17 @@ libs.__ensureSyncPoller = function () {
 };
 libs.beginVodLinkSession = function () {
     var now = Date.now();
-    if (!libs.__vodSyncStartMs || now - libs.__vodSyncStartMs > 120000 || libs.__vodSyncFlushed) {
+    if (!libs.__embedWebviewSlot) {
+        libs.__embedWebviewSlot = { busyUntil: 0, pumping: false, queue: [], multiSourceBatch: false };
+    }
+    var pending = libs.__vodSyncItems ? libs.__vodSyncItems.length : 0;
+    var needNew = !libs.__vodSyncStartMs || libs.__vodSyncFlushed || now - libs.__vodSyncStartMs > 90000;
+    if (!needNew && pending > 0 && libs.__embedWebviewSlot.multiSourceBatch) {
+        libs.__ensureSyncPoller();
+        return;
+    }
+    if (!libs.__vodSyncGateMs || now - libs.__vodSyncGateMs > 2500) {
+        libs.__vodSyncGateMs = now;
         libs.__vodSyncStartMs = now;
         libs.__vodSyncItems = [];
         libs.__vodSyncFlushed = false;
@@ -464,6 +474,11 @@ libs.beginVodLinkSession = function () {
     }
     libs.__embedWebviewSlot.multiSourceBatch = true;
     libs.__ensureSyncPoller();
+};
+libs.__ensureVodSyncSession = function () {
+    if (typeof libs.beginVodLinkSession === 'function') {
+        libs.beginVodLinkSession();
+    }
 };
 libs.__isVodSessionOpen = function () {
     if (!libs.__vodBatchStartMs || libs.__vodBatchReleased) {
@@ -570,14 +585,20 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
     if (rawProvider !== provider) {
         console.log('[RN-Fetch][BATCH-PROVIDER] raw=' + rawProvider + ' resolved=' + provider);
     }
-    if (libs.__tryPushVodSyncLink(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options)) {
-        return;
+    var isVodStream = libs.__isVodBatchStream(urlDirect, provider);
+    if (libs.__isVodBatchProvider(provider) && isVodStream && !libs.__vodSyncReleasing) {
+        if (!libs.__shouldSyncVodLinks()) {
+            libs.__ensureVodSyncSession();
+        }
+        if (libs.__tryPushVodSyncLink(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options)) {
+            return;
+        }
+        console.log('[RN-Fetch][SYNC-MISS] provider=' + provider + ' multi=' + (libs.__embedWebviewSlot && libs.__embedWebviewSlot.multiSourceBatch ? 1 : 0) + ' flushed=' + (libs.__vodSyncFlushed ? 1 : 0));
     }
     if (libs.__tryQueueVodBatch(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options)) {
         return;
     }
-    var isVodStream = libs.__isVodBatchStream(urlDirect, provider);
-    if (libs.__isVodBatchProvider(provider) && isVodStream && libs.__shouldBatchVodLinks()) {
+    if (libs.__isVodBatchProvider(provider) && isVodStream) {
         if (libs.__batchHasProvider(provider)) {
             console.log('[RN-Fetch][BATCH-SKIP-DUP] provider=' + provider);
             return;
@@ -633,8 +654,15 @@ libs.__installVodBatchDeliverWrap = function () {
         if (headers === void 0) { headers = {}; }
         if (options === void 0) { options = {}; }
         callback = libs.__unwrapVodCallback(callback);
-        if (libs.__tryPushVodSyncLink(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options)) {
-            return;
+        provider = libs.__resolveVodBatchProvider(urlDirect, provider, host);
+        host = host || provider;
+        if (!libs.__vodSyncReleasing && libs.__isVodBatchProvider(provider) && libs.__isVodBatchStream(urlDirect, provider)) {
+            if (!libs.__shouldSyncVodLinks()) {
+                libs.__ensureVodSyncSession();
+            }
+            if (libs.__tryPushVodSyncLink(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options)) {
+                return;
+            }
         }
         if (libs.__deliverVodBatchLink(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options)) {
             return;
@@ -647,7 +675,7 @@ libs.__installVodBatchDeliverWrap = function () {
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-console.log('[RN-Fetch][EMBED-CFG] sync-v14');
+console.log('[RN-Fetch][EMBED-CFG] sync-v15');
 if (libs.__vodSyncItems && libs.__vodSyncItems.length) {
     console.log('[RN-Fetch][SYNC-RESUME] pending=' + libs.__vodSyncItems.length);
     libs.__scheduleSyncFlush();
