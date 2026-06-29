@@ -43,7 +43,58 @@ hosts["fstream365"] = function (url, movieInfo, provider, config, callback) { re
         }
         return _0x52f12f;
     }
-    var DOMAIN, HOST, headers, CryptoJSAesJson, _0x1fe5e1, headers_1, parseDetail, textDetail, id, hash, mid, f, encrypted, headerAPI, urlDirect, dataDirect, parseDirect, parseSource, _i, parseSource_1, item, e_1;
+    function parseVConfig(html) {
+        var match = html.match(/window\.vConfig\s*=\s*(\{[\s\S]*?\});/);
+        if (!match) {
+            return null;
+        }
+        try {
+            return JSON.parse(match[1]);
+        }
+        catch (parseErr) {
+            return null;
+        }
+    }
+    function resolveStreamRequest(embedUrl, html) {
+        var vConfig = parseVConfig(html);
+        var srv = (embedUrl.match(/[?&]srv=(\d+)/i) || [])[1] || '';
+        var server = null;
+        var mediaType = 'movie';
+        var tokenId = '';
+        var hash = '';
+        if (vConfig && vConfig.id && vConfig.hash) {
+            tokenId = vConfig.id;
+            hash = vConfig.hash;
+            if (srv && vConfig.servers) {
+                for (var i = 0; i < vConfig.servers.length; i++) {
+                    if (String(vConfig.servers[i].id) === String(srv)) {
+                        server = vConfig.servers[i];
+                        break;
+                    }
+                }
+            }
+            if (!server && vConfig.servers && vConfig.servers.length) {
+                server = vConfig.servers[0];
+                srv = server.id;
+            }
+            mediaType = server && server.type ? server.type : 'movie';
+            return {
+                hash: hash,
+                encryptPayload: JSON.stringify(tokenId + '/' + mediaType + '?srv=' + srv),
+            };
+        }
+        tokenId = (html.match(/\"id\" *\: *\"([^\"]+)/i) || [])[1] || '';
+        hash = (html.match(/\"hash\" *\: *\"([^\"]+)/i) || [])[1] || '';
+        tokenId = tokenId.split('/')[0];
+        if (!tokenId || !hash) {
+            return null;
+        }
+        return {
+            hash: hash,
+            encryptPayload: JSON.stringify(tokenId + '/movie?srv=2'),
+        };
+    }
+    var DOMAIN, HOST, headers, CryptoJSAesJson, _0x1fe5e1, headers_1, parseDetail, textDetail, streamRequest, f, encrypted, headerAPI, urlDirect, dataDirect, parseDirect, parseSource, _i, parseSource_1, item, e_1;
     var _this = this;
     return __generator(this, function (_a) {
         switch (_a.label) {
@@ -102,7 +153,7 @@ hosts["fstream365"] = function (url, movieInfo, provider, config, callback) { re
                     });
                 }); };
                 headers_1 = {
-                    "Referer": DOMAIN,
+                    "Referer": url,
                     "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36",
                     "Cookie": "player_popup=1",
                     "Accept-Language": "en-US,en;q=0.9,vi-VN;q=0.8,vi;q=0.7",
@@ -125,28 +176,27 @@ hosts["fstream365"] = function (url, movieInfo, provider, config, callback) { re
                 return [4, parseDetail.text()];
             case 3:
                 textDetail = _a.sent();
-                id = textDetail.match(/\"id\" *\: *\"([^\"]+)/i);
-                id = id ? id[1] : "";
-                hash = textDetail.match(/\"hash\" *\: *\"([^\"]+)/i);
-                hash = hash ? hash[1] : "";
-                mid = id.split("/")[0];
-                libs.log({ id: id, hash: hash, mid: mid }, HOST, "TOKEN ID");
-                if (!id || !mid || !hash) {
+                streamRequest = resolveStreamRequest(url, textDetail);
+                libs.log({ streamRequest: streamRequest }, HOST, "STREAM REQUEST");
+                console.log('[RN-Fetch][FSTREAM365-PAYLOAD] ' + (streamRequest ? streamRequest.encryptPayload : 'none'));
+                if (!streamRequest || !streamRequest.hash || !streamRequest.encryptPayload) {
+                    console.log('[RN-Fetch][FSTREAM365-SKIP] no-vconfig');
                     return [2];
                 }
                 f = {
                     format: CryptoJSAesJson
                 };
-                encrypted = JSON.parse(cryptoS.AES.encrypt(JSON.stringify(mid + "/movie" + "?srv=2"), hash, f).toString());
+                encrypted = JSON.parse(cryptoS.AES.encrypt(streamRequest.encryptPayload, streamRequest.hash, f).toString());
                 libs.log({ encrypted: encrypted }, HOST, 'ENCRYPT');
                 if (!encrypted) {
                     return [2];
                 }
                 headerAPI = {
-                    "Referer": DOMAIN,
+                    "Referer": url,
                     'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.0.0 Safari/537.36'
                 };
-                urlDirect = "".concat(DOMAIN, "/ajax/getSources/?id=").concat(_0x1af068(encrypted.ct), "&h=").concat(_0x1af068(hash), "&a=").concat(encrypted.iv, "&t=").concat(encrypted.s);
+                urlDirect = "".concat(DOMAIN, "/ajax/getSources/?id=").concat(_0x1af068(encrypted.ct), "&h=").concat(_0x1af068(streamRequest.hash), "&a=").concat(encrypted.iv, "&t=").concat(encrypted.s);
+                console.log('[RN-Fetch][FSTREAM365-SOURCES] ' + urlDirect.substring(0, 120));
                 return [4, fetch(urlDirect, {
                         headers: headerAPI,
                         method: "GET"
@@ -157,23 +207,32 @@ hosts["fstream365"] = function (url, movieInfo, provider, config, callback) { re
             case 5:
                 parseDirect = _a.sent();
                 libs.log({ parseDirect: parseDirect, urlDirect: urlDirect, url: url }, HOST, 'PARSE parseDirect');
+                if (!parseDirect || !parseDirect.sources) {
+                    console.log('[RN-Fetch][FSTREAM365-SKIP] sources-empty');
+                    return [2];
+                }
                 return [4, _0x1fe5e1(parseDirect.sources, encrypted.iv, 0, encrypted.s)];
             case 6:
                 parseSource = _a.sent();
                 libs.log({ parseSource: parseSource }, HOST, 'DECRYPT');
-                libs.log({ parseSource: parseSource }, HOST, 'PARSE parseSource');
+                if (!parseSource || !parseSource.length) {
+                    console.log('[RN-Fetch][FSTREAM365-SKIP] decrypt-empty');
+                    return [2];
+                }
                 for (_i = 0, parseSource_1 = parseSource; _i < parseSource_1.length; _i++) {
                     item = parseSource_1[_i];
                     libs.log({ file: item.file }, HOST, "FILE");
                     if (!item.file) {
                         continue;
                     }
+                    console.log('[RN-Fetch][FSTREAM365-PLAY] ' + String(item.file).substring(0, 120));
                     libs.embed_callback(item.file, provider, HOST, 'Hls', callback, 1, [], [{ file: item.file, quality: 1080 }], headerAPI);
                 }
                 return [3, 8];
             case 7:
                 e_1 = _a.sent();
                 libs.log({ e: e_1 }, HOST, 'ERROR');
+                console.log('[RN-Fetch][FSTREAM365-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 return [3, 8];
             case 8: return [2];
         }
