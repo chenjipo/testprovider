@@ -131,6 +131,116 @@ function resolveLscacheCookie(varyRes) { return __awaiter(_this, void 0, void 0,
         }
     });
 }); }
+function normalizeCacheValue(cache) {
+    if (!cache) {
+        return 'guest_mode:1';
+    }
+    try {
+        return decodeURIComponent(String(cache));
+    }
+    catch (e) {
+        return String(cache);
+    }
+}
+function buildLscacheCookieHeader(cache) {
+    return '_lscache_vary=' + encodeURIComponent(normalizeCacheValue(cache)) + ';';
+}
+function parsePlayerPageMeta(parseSearch) {
+    var scriptNonce = parseSearch('#uniquestream-player-js-extra').text();
+    var playerRaw = scriptNonce.match(/var\s+uniquestreamPlayer\s*=\s*(\{[\s\S]*?\});/);
+    if (playerRaw) {
+        try {
+            var player = JSON.parse(playerRaw[1]);
+            return {
+                postID: player.postId ? String(player.postId) : '',
+                nonce: player.nonce || '',
+                ajaxUrl: player.ajaxUrl || DOMAIN + '/wp-admin/admin-ajax.php',
+            };
+        }
+        catch (e) {
+            libs.log({ e: e }, PROVIDER, 'PLAYER JSON PARSE');
+        }
+    }
+    var nonceMatch = scriptNonce.match(/"nonce"\s*:\s*"([^"]+)/i);
+    return {
+        postID: parseSearch('.server-btn').first().attr('data-post') || '',
+        nonce: nonceMatch ? nonceMatch[1] : '',
+        ajaxUrl: DOMAIN + '/wp-admin/admin-ajax.php',
+    };
+}
+function parseEmbedResponse(data) {
+    if (!data) {
+        return '';
+    }
+    if (typeof data === 'string') {
+        return data;
+    }
+    return data.embed_url || '';
+}
+function requestPlayerEmbed(ajaxUrl, cache, urlSearch, postID, nonce, serverTypes, nume) { return __awaiter(_this, void 0, void 0, function () {
+    var cookieHeader, headers, _i, serverTypes_1, serverType, body, response, text, data, e_2;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                cookieHeader = buildLscacheCookieHeader(cache);
+                headers = {
+                    'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    referer: urlSearch + '/',
+                    origin: DOMAIN,
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'user-agent': USER_AGENT,
+                    Cookie: cookieHeader,
+                };
+                _i = 0, serverTypes_1 = serverTypes;
+                _a.label = 1;
+            case 1:
+                if (!(_i < serverTypes_1.length)) return [3, 6];
+                serverType = serverTypes_1[_i];
+                if (!serverType) {
+                    return [3, 5];
+                }
+                body = qs.stringify({
+                    action: 'uniquestream_player_ajax',
+                    nonce: nonce,
+                    post: postID,
+                    type: serverType,
+                    nume: nume,
+                });
+                _a.label = 2;
+            case 2:
+                _a.trys.push([2, 4, , 5]);
+                return [4, fetch(ajaxUrl, {
+                        method: 'POST',
+                        headers: headers,
+                        body: body,
+                    })];
+            case 3:
+                response = _a.sent();
+                return [4, response.text()];
+            case 4:
+                text = _a.sent();
+                if (!response.ok) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-AJAX] type=' + serverType + ' status=' + response.status + ' body=' + String(text).substring(0, 40));
+                    return [3, 5];
+                }
+                try {
+                    data = JSON.parse(text);
+                }
+                catch (e_2) {
+                    data = text;
+                }
+                if (parseEmbedResponse(data)) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-AJAX] ok type=' + serverType);
+                    return [2, data];
+                }
+                return [3, 5];
+            case 5:
+                _i++;
+                return [3, 1];
+            case 6: return [2, null];
+        }
+    });
+}); }
 function isValidM3u8Body(text) {
     return !!(text && String(text).trim().indexOf('#EXTM3U') === 0);
 }
@@ -285,18 +395,6 @@ function embedMediacacheMaster(playlistUrl, callback, metadata) { return __await
         }
     });
 }); }
-function fireEmbedHostFallback(iframeUrl, movieInfo, callback, pageReferer) {
-    if (!(iframeUrl && hosts && hosts['uniquestream-embed'])) {
-        return;
-    }
-    console.log('[RN-Fetch][UNIQUESTREAM-EMBED] queue webview fallback');
-    libs.scheduleEmbedWebview(PROVIDER, function () {
-        hosts['uniquestream-embed'](iframeUrl, movieInfo || {}, PROVIDER, {
-            embedUrl: iframeUrl,
-            pageReferer: pageReferer,
-        }, callback);
-    });
-}
 function tryRnPrefetchIframe(iframeUrl, pageReferer) { return __awaiter(_this, void 0, void 0, function () {
     var text, directUrl;
     return __generator(this, function (_a) {
@@ -319,11 +417,12 @@ function tryRnPrefetchIframe(iframeUrl, pageReferer) { return __awaiter(_this, v
     });
 }); }
 function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, void 0, function () {
-    var urlSearch, varyRes, cache, parseSearch, postID, scriptNonce, nonce, serverType, btnType, body, parseEmbed, iframeUrl, prefetchUrl;
+    var urlSearch, varyRes, cache, parseSearch, pageMeta, postID, nonce, ajaxUrl, btnType, serverNum, serverTypes, parseEmbed, embedHtml, iframeUrl, prefetchUrl, pageReferer;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
                 urlSearch = buildPageUrl(movieInfo);
+                pageReferer = urlSearch + '/';
                 console.log('[RN-Fetch][UNIQUESTREAM-PAGE] ' + urlSearch);
                 return [4, fetch(DOMAIN + '/wp-content/plugins/litespeed-cache/guest.vary.php', {
                         headers: {
@@ -342,83 +441,85 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
                 return [4, libs.request_get(urlSearch, {
                         'user-agent': USER_AGENT,
                         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                        Cookie: '_lscache_vary=' + cache + ';',
+                        Cookie: buildLscacheCookieHeader(cache),
                     }, true)];
             case 3:
                 parseSearch = _a.sent();
-                postID = parseSearch('.server-btn').first().attr('data-post');
-                serverType = movieInfo.type == 'tv' ? 'tv' : 'mv';
-                btnType = parseSearch('.server-btn').first().attr('data-type');
-                if (movieInfo.type != 'tv' && btnType) {
-                    serverType = btnType;
+                pageMeta = parsePlayerPageMeta(parseSearch);
+                postID = pageMeta.postID;
+                nonce = pageMeta.nonce;
+                ajaxUrl = pageMeta.ajaxUrl;
+                btnType = parseSearch('.server-btn').first().attr('data-type') || 'mv';
+                serverNum = parseSearch('.server-btn').first().attr('data-num') || '1';
+                serverTypes = [];
+                if (btnType) {
+                    serverTypes.push(btnType);
                 }
-                scriptNonce = parseSearch('#uniquestream-player-js-extra').text();
-                nonce = scriptNonce.match(/"nonce"\s*:\s*"([^"]+)/i);
-                nonce = nonce ? nonce[1] : '';
-                libs.log({ postID: postID, nonce: nonce, serverType: serverType }, PROVIDER, 'PAGE META');
+                if (serverTypes.indexOf('mv') === -1) {
+                    serverTypes.push('mv');
+                }
+                if (movieInfo.type == 'tv' && serverTypes.indexOf('tv') === -1) {
+                    serverTypes.push('tv');
+                }
+                libs.log({ postID: postID, nonce: nonce, serverTypes: serverTypes, serverNum: serverNum }, PROVIDER, 'PAGE META');
                 if (!postID || !nonce) {
                     console.log('[RN-Fetch][UNIQUESTREAM-SKIP] page-meta-missing post=' + postID + ' nonce=' + (nonce ? 'ok' : 'empty'));
                     return [2, null];
                 }
-                body = qs.stringify({
-                    action: 'uniquestream_player_ajax',
-                    nonce: nonce,
-                    post: postID,
-                    type: serverType,
-                    nume: 1,
-                });
-                return [4, libs.request_post(DOMAIN + '/wp-admin/admin-ajax.php', {
-                        'content-type': 'application/x-www-form-urlencoded; charset=UTF-8',
-                        referer: urlSearch,
-                        origin: DOMAIN,
-                        'X-Requested-With': 'XMLHttpRequest',
-                        'user-agent': USER_AGENT,
-                        Cookie: '_lscache_vary=' + cache + ';',
-                    }, body, false)];
+                return [4, requestPlayerEmbed(ajaxUrl, cache, urlSearch, postID, nonce, serverTypes, serverNum)];
             case 4:
                 parseEmbed = _a.sent();
                 libs.log({ parseEmbed: parseEmbed }, PROVIDER, 'EMBED INFO');
-                iframeUrl = parseIframeFromEmbedResponse(parseEmbed);
+                embedHtml = parseEmbedResponse(parseEmbed);
+                iframeUrl = parseIframeFromEmbedResponse({ embed_url: embedHtml });
                 if (!iframeUrl) {
-                    console.log('[RN-Fetch][UNIQUESTREAM-SKIP] iframe-empty');
-                    return [2, null];
+                    console.log('[RN-Fetch][UNIQUESTREAM-AJAX] empty, page-webview-fallback');
+                    return [2, {
+                            iframeUrl: '',
+                            pageUrl: urlSearch,
+                            pageReferer: pageReferer,
+                            prefetchUrl: '',
+                        }];
                 }
                 libs.log({ iframeUrl: iframeUrl }, PROVIDER, 'IFRAME URL');
-                return [4, tryRnPrefetchIframe(iframeUrl, urlSearch + '/')];
+                return [4, tryRnPrefetchIframe(iframeUrl, pageReferer)];
             case 5:
                 prefetchUrl = _a.sent();
                 return [2, {
                         iframeUrl: iframeUrl,
-                        pageReferer: urlSearch + '/',
+                        pageUrl: urlSearch,
+                        pageReferer: pageReferer,
                         prefetchUrl: prefetchUrl,
                     }];
         }
     });
 }); }
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var resolved, prefetchUrl, iframeUrl, pageReferer, e_1;
+    var resolved, prefetchUrl, iframeUrl, pageReferer, pageUrl, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                libs.beginVodLinkSession();
-                callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v24');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v26-rn-only');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 4, , 5]);
                 return [4, resolveUniqueStreamIframe(movieInfo)];
             case 2:
                 resolved = _a.sent();
-                if (!resolved || !resolved.iframeUrl) {
+                if (!resolved) {
                     console.log('[RN-Fetch][UNIQUESTREAM-SKIP] resolve-null');
                     return [2];
                 }
                 iframeUrl = resolved.iframeUrl;
                 pageReferer = resolved.pageReferer;
+                pageUrl = resolved.pageUrl || pageReferer;
                 prefetchUrl = resolved.prefetchUrl;
+                if (!iframeUrl) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-SKIP] ajax-empty');
+                    return [2];
+                }
                 if (!prefetchUrl) {
-                    console.log('[RN-Fetch][UNIQUESTREAM-SKIP] prefetch-empty, webview-fallback');
-                    fireEmbedHostFallback(iframeUrl, movieInfo, callback, pageReferer);
+                    console.log('[RN-Fetch][UNIQUESTREAM-SKIP] prefetch-empty');
                     return [2, true];
                 }
                 console.log('[RN-Fetch][UNIQUESTREAM-URL] source=rn-prefetch url=' + prefetchUrl.substring(0, 140));
@@ -426,8 +527,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             case 3:
                 _a.sent();
                 if (!Object.keys(getUniqueStreamState().played || {}).length) {
-                    console.log('[RN-Fetch][UNIQUESTREAM-SKIP] probe-failed, webview-fallback');
-                    fireEmbedHostFallback(iframeUrl, movieInfo, callback, pageReferer);
+                    console.log('[RN-Fetch][UNIQUESTREAM-SKIP] probe-failed');
                 }
                 return [2, true];
             case 5:

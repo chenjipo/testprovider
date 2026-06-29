@@ -1,8 +1,7 @@
 {
   "providers": [
     "dist/providers/xvidsrcvip.js",
-	"dist/providers/iyesmovies.js",
-	"dist/providers/mvidlink.js",
-    "dist/providers/muniquestream.js"
+    "dist/providers/muniquestream.js",
+    "dist/providers/lridomovie.js"
   ]
 }

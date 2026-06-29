@@ -140,7 +140,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
             case 1:
                 _a.trys.push([1, 3, , 4]);
                 return [4, libs.request_get(url, {
-                        Referer: "https://ridomovies.tv/"
+                        Referer: "https://ridomovies.is/"
                     }, true)];
             case 2:
                 parseDetail_1 = _a.sent();
