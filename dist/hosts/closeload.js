@@ -130,7 +130,75 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
         }
         return unmix;
     }
-    var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, parseDetail_1, script_1, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1;
+    function extractPacker(html) {
+        var idx = html.indexOf('eval(function(p,a,c,k,e,d)');
+        if (idx < 0) {
+            return '';
+        }
+        var depth = 0;
+        var started = false;
+        var end = idx;
+        for (var i = idx; i < html.length; i++) {
+            if (html.charAt(i) === '(') {
+                depth++;
+                started = true;
+            }
+            else if (html.charAt(i) === ')') {
+                depth--;
+                if (started && depth === 0) {
+                    end = i + 1;
+                    break;
+                }
+            }
+        }
+        return html.substring(idx, end);
+    }
+    function extractFunction(code, name) {
+        var start = code.indexOf('function ' + name);
+        if (start < 0) {
+            return '';
+        }
+        var brace = code.indexOf('{', start);
+        var depth = 0;
+        for (var i = brace; i < code.length; i++) {
+            if (code.charAt(i) === '{') {
+                depth++;
+            }
+            else if (code.charAt(i) === '}') {
+                depth--;
+                if (depth === 0) {
+                    return code.substring(start, i + 1);
+                }
+            }
+        }
+        return '';
+    }
+    function decodeDynamicSource(html, unpacked) {
+        var fileMatch = html.match(/sources:\s*\[\{file:(s_[A-Za-z0-9]+)\}/);
+        var keyName = fileMatch ? fileMatch[1] : '';
+        if (!keyName || !unpacked) {
+            return '';
+        }
+        var assignMatch = unpacked.match(new RegExp(keyName + '\\s*=\\s*(dc_[A-Za-z0-9]+)\\(([^\\)]*)\\)'));
+        if (!assignMatch) {
+            return '';
+        }
+        var dcName = assignMatch[1];
+        var parts;
+        try {
+            parts = JSON.parse(assignMatch[2]);
+        }
+        catch (parseErr) {
+            return '';
+        }
+        var fnSrc = extractFunction(unpacked, dcName);
+        if (!fnSrc) {
+            return '';
+        }
+        var dc = eval('(' + fnSrc + ')');
+        return dc(parts);
+    }
+    var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -180,46 +248,45 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                     });
                     return [2];
                 }
-                parseDetail_1 = cheerio.load(htmlText);
-                script_1 = '';
-                parseDetail_1('script').each(function (key, item) {
-                    var text = parseDetail_1(item).text();
-                    if (text.indexOf('eval(') != -1 && text.length > script_1.length) {
-                        script_1 = text;
-                    }
-                });
-                console.log('[RN-Fetch][CLOSELOAD-SCRIPT] len=' + (script_1 ? script_1.length : 0));
-                if (!script_1) {
+                packerScript = extractPacker(htmlText);
+                console.log('[RN-Fetch][CLOSELOAD-SCRIPT] len=' + (packerScript ? packerScript.length : 0));
+                if (!packerScript) {
                     console.log('[RN-Fetch][CLOSELOAD-SKIP] no-packer-script');
                     return [2];
                 }
-                unpacker = libs.string_unpacker_v2(script_1);
-                getKey = unpacker.match(/src\:([^\,]+)\,type\:/i);
-                getKey = getKey ? getKey[1] : '';
-                keyName = getKey.replace(/[\s'"]/g, '');
-                console.log('[RN-Fetch][CLOSELOAD-KEY] ' + keyName);
-                if (!keyName) {
-                    console.log('[RN-Fetch][CLOSELOAD-SKIP] no-src-key');
-                    return [2];
+                unpacker = libs.string_unpacker_v2(packerScript);
+                parseDirect = decodeDynamicSource(htmlText, unpacker);
+                if (parseDirect && parseDirect.indexOf('https') != -1) {
+                    console.log('[RN-Fetch][CLOSELOAD-DECODE] ok dynamic');
                 }
-                varName = unpacker.match(new RegExp(keyName + '\\=[A-z0-9]+\\(([^\\)]*)\\)', 'i'));
-                varName = varName ? varName[1] : '';
-                try {
-                    varName = JSON.parse(varName);
-                }
-                catch (parseErr) {
-                    console.log('[RN-Fetch][CLOSELOAD-SKIP] json-parse-failed');
-                    return [2];
-                }
-                libs.log({ varName: varName }, provider, 'VarName_1');
-                decoders = [dc_08bClqn1Nt2, dc_o55npDX9dLL, dc_hDbCyi9R5V2, dc_o55npDX9dLL2, dc_o55npDX9dLL3, dc_AEtIE9ASRaK];
-                parseDirect = '';
-                for (_i = 0; _i < decoders.length; _i++) {
-                    decoder = decoders[_i];
-                    parseDirect = decoder(varName);
-                    if (parseDirect && parseDirect.indexOf('https') != -1) {
-                        console.log('[RN-Fetch][CLOSELOAD-DECODE] ok decoder=' + _i);
-                        break;
+                else {
+                    getKey = unpacker.match(/src\:([^\,]+)\,type\:/i);
+                    getKey = getKey ? getKey[1] : '';
+                    keyName = getKey.replace(/[\s'"]/g, '');
+                    console.log('[RN-Fetch][CLOSELOAD-KEY] ' + keyName);
+                    if (!keyName) {
+                        console.log('[RN-Fetch][CLOSELOAD-SKIP] no-src-key');
+                        return [2];
+                    }
+                    varName = unpacker.match(new RegExp(keyName + '\\=[A-z0-9]+\\(([^\\)]*)\\)', 'i'));
+                    varName = varName ? varName[1] : '';
+                    try {
+                        varName = JSON.parse(varName);
+                    }
+                    catch (parseErr) {
+                        console.log('[RN-Fetch][CLOSELOAD-SKIP] json-parse-failed');
+                        return [2];
+                    }
+                    libs.log({ varName: varName }, provider, 'VarName_1');
+                    decoders = [dc_08bClqn1Nt2, dc_o55npDX9dLL, dc_hDbCyi9R5V2, dc_o55npDX9dLL2, dc_o55npDX9dLL3, dc_AEtIE9ASRaK];
+                    parseDirect = '';
+                    for (_i = 0; _i < decoders.length; _i++) {
+                        decoder = decoders[_i];
+                        parseDirect = decoder(varName);
+                        if (parseDirect && parseDirect.indexOf('https') != -1) {
+                            console.log('[RN-Fetch][CLOSELOAD-DECODE] ok decoder=' + _i);
+                            break;
+                        }
                     }
                 }
                 libs.log({ parseDirect: parseDirect }, provider, 'ParseDirect');
