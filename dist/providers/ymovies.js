@@ -35,93 +35,170 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
+var PROVIDER = 'YMovies';
+var DOMAIN = 'https://ww.ymovies.vip';
+var USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+function buildSiteHeaders(referer) {
+    return {
+        'user-agent': USER_AGENT,
+        referer: referer || DOMAIN + '/',
+        origin: DOMAIN,
+        Accept: 'text/html,application/json,*/*',
+        'x-requested-with': 'XMLHttpRequest',
+    };
+}
+function normalizeDetailUrl(href) {
+    if (!href) {
+        return '';
+    }
+    if (href.indexOf('http') === 0) {
+        return href;
+    }
+    if (href.indexOf('/') === 0) {
+        return DOMAIN + href;
+    }
+    return DOMAIN + '/' + href;
+}
+function extractFilmId(linkDetail) {
+    var path = String(linkDetail).replace(/\/+$/, '');
+    var slug = path.split('/').pop() || '';
+    var parts = slug.split('-');
+    return parts[parts.length - 1] || '';
+}
+function fetchHtml(url, referer) {
+    return fetch(url, {
+        headers: buildSiteHeaders(referer),
+        method: 'GET',
+    }).then(function (response) {
+        return response.text();
+    });
+}
+function fetchJson(url, referer) {
+    return fetch(url, {
+        headers: buildSiteHeaders(referer),
+        method: 'GET',
+    }).then(function (response) {
+        return response.json();
+    });
+}
+function parseServerTokens(html) {
+    var tokens = [];
+    var parseEpisode = cheerio.load(html || '');
+    parseEpisode('.link-item').each(function (key, item) {
+        var dataId = parseEpisode(item).attr('data-id');
+        var dataName = parseEpisode(item).attr('data-name');
+        if (!dataId || !dataName) {
+            return;
+        }
+        var exists = false;
+        for (var i = 0; i < tokens.length; i++) {
+            if (tokens[i].id === dataId && tokens[i].name === dataName) {
+                exists = true;
+                break;
+            }
+        }
+        if (!exists) {
+            tokens.push({
+                id: dataId,
+                name: dataName,
+            });
+        }
+    });
+    return tokens;
+}
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, DOMAIN, urlSearch, headers, parseSearch_1, LINK_DETAIL_1, id, hrefEpisode, dataEpisode, parseEpisode_1, tokens_2, _i, tokens_1, item, urlEmbed, dataEmbed, e_1;
+    var urlSearch, searchHtml, parseSearch_1, linkDetail, filmId, hrefEpisode, dataEpisode, tokens_2, streamHeaders, _i, tokens_1, item, urlEmbed, dataEmbed, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                PROVIDER = 'YMovies';
-                DOMAIN = "https://ymovies.vip";
+                console.log('[RN-Fetch][YMOVIES-VERSION] v2-rn-only');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 9, , 10]);
-                urlSearch = "https://ymovies.vip/movie/search/".concat(libs.url_slug_search(movieInfo, '+'));
-                headers = {};
-                return [4, libs.request_get(urlSearch, headers, true)];
+                urlSearch = DOMAIN + '/movie/search/' + libs.url_slug_search(movieInfo, '+');
+                console.log('[RN-Fetch][YMOVIES-SEARCH] ' + urlSearch);
+                return [4, fetchHtml(urlSearch)];
             case 2:
-                parseSearch_1 = _a.sent();
-                libs.log({ parseSearch: parseSearch_1 }, PROVIDER, 'DATA SEARCH');
-                LINK_DETAIL_1 = "";
+                searchHtml = _a.sent();
+                if (!searchHtml) {
+                    console.log('[RN-Fetch][YMOVIES-SKIP] search-empty');
+                    return [2];
+                }
+                parseSearch_1 = cheerio.load(searchHtml);
+                linkDetail = '';
                 parseSearch_1('.ml-item').each(function (key, item) {
-                    var title = parseSearch_1(item).find('.mi-name a').text();
+                    var title = parseSearch_1(item).find('.mi-name a').text().trim();
                     var href = parseSearch_1(item).find('.mi-name a').attr('href');
-                    var year = parseSearch_1(item).find('.mi-meta span').first().text();
-                    var type = parseSearch_1(item).find('.mim-type').text();
-                    libs.log({ title: title, href: href, year: year, type: type }, PROVIDER, 'SEARCH ITEM');
-                    if (title && href && type && !LINK_DETAIL_1) {
-                        if (libs.string_matching_title(movieInfo, title, false)) {
-                            if (movieInfo.type == 'movie' && type.toLowerCase() == 'movie' && movieInfo.year == year) {
-                                LINK_DETAIL_1 = _.startsWith(href, '/') ? "".concat(DOMAIN).concat(href) : href;
-                            }
-                            if (movieInfo.type == 'tv' && type.toLowerCase() == 'tv') {
-                                LINK_DETAIL_1 = _.startsWith(href, '/') ? "".concat(DOMAIN).concat(href) : href;
-                            }
-                        }
+                    var year = parseSearch_1(item).find('.mi-meta span').first().text().trim();
+                    var type = parseSearch_1(item).find('.mim-type').text().trim().toLowerCase();
+                    if (!title || !href || !type || linkDetail) {
+                        return;
+                    }
+                    if (!libs.string_matching_title(movieInfo, title, false)) {
+                        return;
+                    }
+                    if (movieInfo.type == 'movie' && type == 'movie' && String(movieInfo.year) == String(year)) {
+                        linkDetail = normalizeDetailUrl(href);
+                    }
+                    if (movieInfo.type == 'tv' && type == 'tv') {
+                        linkDetail = normalizeDetailUrl(href);
                     }
                 });
-                libs.log({ LINK_DETAIL: LINK_DETAIL_1 }, PROVIDER, 'LINK DETAIL');
-                if (!LINK_DETAIL_1) {
+                libs.log({ linkDetail: linkDetail }, PROVIDER, 'LINK DETAIL');
+                console.log('[RN-Fetch][YMOVIES-DETAIL] ' + (linkDetail || 'none'));
+                if (!linkDetail) {
+                    console.log('[RN-Fetch][YMOVIES-SKIP] no-match');
                     return [2];
                 }
-                id = LINK_DETAIL_1.split('-');
-                id = id[id.length - 1];
-                libs.log({ id: id }, PROVIDER, 'ID');
-                if (!id) {
+                filmId = extractFilmId(linkDetail);
+                libs.log({ filmId: filmId }, PROVIDER, 'FILM ID');
+                console.log('[RN-Fetch][YMOVIES-ID] ' + filmId);
+                if (!filmId) {
+                    console.log('[RN-Fetch][YMOVIES-SKIP] no-id');
                     return [2];
                 }
-                hrefEpisode = "";
-                if (movieInfo.type == "movie") {
-                    hrefEpisode = "https://ymovies.vip/ajax/movie/episode/servers/".concat(id, "_1_full");
+                hrefEpisode = '';
+                if (movieInfo.type == 'movie') {
+                    hrefEpisode = DOMAIN + '/ajax/movie/episode/servers/' + filmId + '_1_full';
                 }
                 else {
-                    hrefEpisode = "https://ymovies.vip/ajax/movie/episode/servers/".concat(id, "_").concat(movieInfo.season, "_").concat(movieInfo.episode);
+                    hrefEpisode = DOMAIN + '/ajax/movie/episode/servers/' + filmId + '_' + movieInfo.season + '_' + movieInfo.episode;
                 }
-                return [4, libs.request_get(hrefEpisode)];
+                console.log('[RN-Fetch][YMOVIES-SERVERS] ' + hrefEpisode);
+                return [4, fetchJson(hrefEpisode, linkDetail)];
             case 3:
                 dataEpisode = _a.sent();
                 libs.log({ dataEpisode: dataEpisode }, PROVIDER, 'DATA EPISODE');
-                if (!dataEpisode.status) {
+                if (!dataEpisode || !dataEpisode.status || !dataEpisode.html) {
+                    console.log('[RN-Fetch][YMOVIES-SKIP] servers-empty');
                     return [2];
                 }
-                parseEpisode_1 = cheerio.load(dataEpisode.html);
-                tokens_2 = [];
-                parseEpisode_1('.link-item').each(function (key, item) {
-                    var dataId = parseEpisode_1(item).attr('data-id');
-                    var dataName = parseEpisode_1(item).attr('data-name');
-                    if (dataId && tokens_2.length == 0) {
-                        tokens_2.push({
-                            id: dataId,
-                            name: dataName
-                        });
-                    }
-                });
+                tokens_2 = parseServerTokens(dataEpisode.html);
                 libs.log({ tokens: tokens_2 }, PROVIDER, 'TOKENS');
+                console.log('[RN-Fetch][YMOVIES-TOKENS] count=' + tokens_2.length);
                 if (!tokens_2.length) {
+                    console.log('[RN-Fetch][YMOVIES-SKIP] no-servers');
                     return [2];
                 }
+                streamHeaders = {
+                    referer: linkDetail,
+                    'user-agent': USER_AGENT,
+                };
                 _i = 0, tokens_1 = tokens_2;
                 _a.label = 4;
             case 4:
                 if (!(_i < tokens_1.length)) return [3, 8];
                 item = tokens_1[_i];
-                urlEmbed = "".concat(DOMAIN, "/ajax/movie/episode/server/sources/").concat(item.id, "_").concat(item.name);
-                return [4, libs.request_get(urlEmbed)];
+                urlEmbed = DOMAIN + '/ajax/movie/episode/server/sources/' + item.id + '_' + item.name;
+                console.log('[RN-Fetch][YMOVIES-SOURCE] ' + item.name);
+                return [4, fetchJson(urlEmbed, linkDetail)];
             case 5:
                 dataEmbed = _a.sent();
-                if (!dataEmbed.status || !dataEmbed.src) {
-                    return [2];
+                if (!dataEmbed || !dataEmbed.status || !dataEmbed.src) {
+                    return [3, 7];
                 }
-                return [4, libs.embed_redirect(dataEmbed.src, '', movieInfo, PROVIDER, callback, '')];
+                console.log('[RN-Fetch][YMOVIES-EMBED] ' + String(dataEmbed.src).substring(0, 120));
+                return [4, libs.embed_redirect(dataEmbed.src, '', movieInfo, PROVIDER, callback, PROVIDER, [], { link_detail: linkDetail }, streamHeaders)];
             case 6:
                 _a.sent();
                 _a.label = 7;
@@ -131,7 +208,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             case 8: return [3, 10];
             case 9:
                 e_1 = _a.sent();
-                libs.log({ e: e_1 }, PROVIDER);
+                libs.log({ e: e_1 }, PROVIDER, 'ERROR');
+                console.log('[RN-Fetch][YMOVIES-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 return [3, 10];
             case 10: return [2, true];
         }
