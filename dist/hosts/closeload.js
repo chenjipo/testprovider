@@ -174,31 +174,45 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
         return '';
     }
     function decodeDynamicSource(html, unpacked) {
-        var fileMatch = html.match(/sources:\s*\[\{file:(s_[A-Za-z0-9]+)\}/);
+        var fileMatch = html.match(/sources:\s*\[\{file:\s*(s_[A-Za-z0-9]+)/i);
         var keyName = fileMatch ? fileMatch[1] : '';
-        if (!keyName || !unpacked) {
+        if (!keyName) {
             return '';
         }
-        var assignMatch = unpacked.match(new RegExp(keyName + '\\s*=\\s*(dc_[A-Za-z0-9]+)\\(([^\\)]*)\\)'));
-        if (!assignMatch) {
+        var searchBodies = [html];
+        if (unpacked) {
+            searchBodies.push(unpacked);
+        }
+        var assignMatch = null;
+        var dcName = '';
+        var parts = null;
+        var bodyIdx = 0;
+        for (bodyIdx = 0; bodyIdx < searchBodies.length; bodyIdx++) {
+            assignMatch = searchBodies[bodyIdx].match(new RegExp(keyName + '\\s*=\\s*(dc_[A-Za-z0-9]+)\\(([^\\)]*)\\)'));
+            if (assignMatch) {
+                dcName = assignMatch[1];
+                try {
+                    parts = JSON.parse(assignMatch[2]);
+                    break;
+                }
+                catch (parseErr) {
+                    assignMatch = null;
+                }
+            }
+        }
+        if (!assignMatch || !parts) {
             return '';
         }
-        var dcName = assignMatch[1];
-        var parts;
-        try {
-            parts = JSON.parse(assignMatch[2]);
+        var fnSrc = extractFunction(html, dcName);
+        if (!fnSrc && unpacked) {
+            fnSrc = extractFunction(unpacked, dcName);
         }
-        catch (parseErr) {
-            return '';
-        }
-        var fnSrc = extractFunction(unpacked, dcName);
         if (!fnSrc) {
             return '';
         }
-        var decoded = '';
-        var decodeEnv = { atob: libs.string_atob };
-        eval('with(decodeEnv){ var dc = (' + fnSrc + '); decoded = dc(parts); }');
-        return decoded;
+        fnSrc = fnSrc.replace(/\batob\(/g, 'libs.string_atob(');
+        var dc = eval('(' + fnSrc + ')');
+        return dc(parts);
     }
     var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1;
     return __generator(this, function (_a) {
@@ -251,15 +265,15 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                     return [2];
                 }
                 packerScript = extractPacker(htmlText);
+                unpacker = packerScript ? libs.string_unpacker_v2(packerScript) : '';
                 console.log('[RN-Fetch][CLOSELOAD-SCRIPT] len=' + (packerScript ? packerScript.length : 0));
-                if (!packerScript) {
-                    console.log('[RN-Fetch][CLOSELOAD-SKIP] no-packer-script');
-                    return [2];
-                }
-                unpacker = libs.string_unpacker_v2(packerScript);
                 parseDirect = decodeDynamicSource(htmlText, unpacker);
                 if (parseDirect && parseDirect.indexOf('https') != -1) {
                     console.log('[RN-Fetch][CLOSELOAD-DECODE] ok dynamic');
+                }
+                else if (!packerScript) {
+                    console.log('[RN-Fetch][CLOSELOAD-SKIP] no-packer-script');
+                    return [2];
                 }
                 else {
                     getKey = unpacker.match(/src\:([^\,]+)\,type\:/i);
