@@ -130,90 +130,117 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
         }
         return unmix;
     }
-    var DOMAIN, HOST, parseDetail_1, script_1, unpacker, getKey, keyName, varName, parseDirect, e_1;
+    var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, parseDetail_1, script_1, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
                 DOMAIN = 'https://closeload.top';
                 HOST = 'closeload';
+                pageReferer = config && config.pageReferer ? config.pageReferer : 'https://ridomovies.is/';
+                embedHeaders = {
+                    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    referer: pageReferer,
+                    origin: 'https://ridomovies.is',
+                    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                };
+                callbackHost = provider === 'LRIDOMOVIE' ? provider : HOST;
+                console.log('[RN-Fetch][CLOSELOAD-URL] ' + String(url).substring(0, 140));
                 _a.label = 1;
             case 1:
-                _a.trys.push([1, 3, , 4]);
-                return [4, libs.request_get(url, {
-                        Referer: "https://ridomovies.is/"
-                    }, true)];
+                _a.trys.push([1, 4, , 5]);
+                return [4, fetch(url, {
+                        headers: embedHeaders,
+                        method: 'GET',
+                    })];
             case 2:
-                parseDetail_1 = _a.sent();
-                script_1 = "";
-                parseDetail_1("script").each(function (key, item) {
+                response = _a.sent();
+                return [4, response.text()];
+            case 3:
+                htmlText = _a.sent();
+                console.log('[RN-Fetch][CLOSELOAD-FETCH] status=' + response.status + ' len=' + (htmlText ? htmlText.length : 0));
+                if (!htmlText || response.status >= 400) {
+                    console.log('[RN-Fetch][CLOSELOAD-SKIP] fetch-failed');
+                    return [2];
+                }
+                directUrl = htmlText.match(/https?:\/\/[^"'\s\\]+\.m3u8[^"'\s\\]*/i);
+                directUrl = directUrl ? directUrl[0].replace(/\\/g, '') : '';
+                if (!directUrl) {
+                    directUrl = (htmlText.match(/let\s+url\s*=\s*['"]([^'"]+)/i) || [])[1] || '';
+                }
+                if (!directUrl) {
+                    directUrl = (htmlText.match(/file\s*:\s*['"](https?:[^'"]+)/i) || [])[1] || '';
+                }
+                if (directUrl && directUrl.indexOf('http') === 0) {
+                    console.log('[RN-Fetch][CLOSELOAD-DIRECT] ' + directUrl.substring(0, 120));
+                    libs.embed_callback(directUrl, provider, callbackHost, 'Hls', callback, 1, [], [{ file: directUrl, quality: 1080 }], {
+                        referer: url,
+                        'user-agent': embedHeaders['user-agent'],
+                    }, {
+                        type: 'm3u8',
+                    });
+                    return [2];
+                }
+                parseDetail_1 = cheerio.load(htmlText);
+                script_1 = '';
+                parseDetail_1('script').each(function (key, item) {
                     var text = parseDetail_1(item).text();
-                    if (text.indexOf("eval(") != -1) {
+                    if (text.indexOf('eval(') != -1 && text.length > script_1.length) {
                         script_1 = text;
                     }
                 });
-                libs.log({ script: script_1 }, provider, 'SCRIPT');
+                console.log('[RN-Fetch][CLOSELOAD-SCRIPT] len=' + (script_1 ? script_1.length : 0));
                 if (!script_1) {
+                    console.log('[RN-Fetch][CLOSELOAD-SKIP] no-packer-script');
                     return [2];
                 }
                 unpacker = libs.string_unpacker_v2(script_1);
                 getKey = unpacker.match(/src\:([^\,]+)\,type\:/i);
                 getKey = getKey ? getKey[1] : '';
-                libs.log({ getKey: getKey }, provider, 'GetKey');
                 keyName = getKey.replace(/[\s'"]/g, '');
+                console.log('[RN-Fetch][CLOSELOAD-KEY] ' + keyName);
+                if (!keyName) {
+                    console.log('[RN-Fetch][CLOSELOAD-SKIP] no-src-key');
+                    return [2];
+                }
                 varName = unpacker.match(new RegExp(keyName + '\\=[A-z0-9]+\\(([^\\)]*)\\)', 'i'));
                 varName = varName ? varName[1] : '';
-                varName = JSON.parse(varName);
+                try {
+                    varName = JSON.parse(varName);
+                }
+                catch (parseErr) {
+                    console.log('[RN-Fetch][CLOSELOAD-SKIP] json-parse-failed');
+                    return [2];
+                }
                 libs.log({ varName: varName }, provider, 'VarName_1');
-                if (!varName) {
-                    return [2];
+                decoders = [dc_08bClqn1Nt2, dc_o55npDX9dLL, dc_hDbCyi9R5V2, dc_o55npDX9dLL2, dc_o55npDX9dLL3, dc_AEtIE9ASRaK];
+                parseDirect = '';
+                for (_i = 0; _i < decoders.length; _i++) {
+                    decoder = decoders[_i];
+                    parseDirect = decoder(varName);
+                    if (parseDirect && parseDirect.indexOf('https') != -1) {
+                        console.log('[RN-Fetch][CLOSELOAD-DECODE] ok decoder=' + _i);
+                        break;
+                    }
                 }
-                parseDirect = dc_08bClqn1Nt2(varName);
                 libs.log({ parseDirect: parseDirect }, provider, 'ParseDirect');
-                if (!parseDirect) {
+                if (!parseDirect || parseDirect.indexOf('https') == -1) {
+                    console.log('[RN-Fetch][CLOSELOAD-SKIP] decode-failed');
                     return [2];
                 }
-                if (parseDirect.indexOf("https") == -1) {
-                    parseDirect = dc_hDbCyi9R5V2(varName);
-                    libs.log({ parseDirect: parseDirect }, provider, 'ParseDirect');
-                    if (!parseDirect) {
-                        return [2];
-                    }
-                }
-                if (parseDirect.indexOf("https") == -1) {
-                    parseDirect = dc_o55npDX9dLL2(varName);
-                    libs.log({ parseDirect: parseDirect }, provider, 'ParseDirect');
-                    if (!parseDirect) {
-                        return [2];
-                    }
-                }
-                if (parseDirect.indexOf("https") == -1) {
-                    parseDirect = dc_o55npDX9dLL3(varName);
-                    libs.log({ parseDirect: parseDirect }, provider, 'ParseDirect');
-                    if (!parseDirect) {
-                        return [2];
-                    }
-                }
-                if (parseDirect.indexOf("https") == -1) {
-                    parseDirect = dc_AEtIE9ASRaK(varName);
-                    libs.log({ parseDirect: parseDirect }, provider, 'ParseDirect');
-                    if (!parseDirect) {
-                        return [2];
-                    }
-                }
-                if (parseDirect.indexOf("https") == -1) {
-                    return [2];
-                }
-                libs.embed_callback(parseDirect, provider, HOST, 'Hls', callback, 1, [], [{ file: parseDirect, quality: 1080 }], {
-                    Referer: url,
+                console.log('[RN-Fetch][CLOSELOAD-PLAY] ' + parseDirect.substring(0, 120));
+                libs.embed_callback(parseDirect, provider, callbackHost, 'Hls', callback, 1, [], [{ file: parseDirect, quality: 1080 }], {
+                    referer: url,
+                    'user-agent': embedHeaders['user-agent'],
                 }, {
-                    type: "m3u8",
+                    type: 'm3u8',
                 });
-                return [3, 4];
-            case 3:
+                return [3, 5];
+            case 4:
                 e_1 = _a.sent();
-                libs.log({ e: e_1 }, HOST, "ERROR");
-                return [3, 4];
-            case 4: return [2];
+                libs.log({ e: e_1 }, HOST, 'ERROR');
+                console.log('[RN-Fetch][CLOSELOAD-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
+                return [3, 5];
+            case 5: return [2];
         }
     });
 }); };

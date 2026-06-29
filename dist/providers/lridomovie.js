@@ -72,6 +72,20 @@ function extractIframeUrl(embedHtml) {
     }
     return iframeUrl;
 }
+function extractStreamFromText(text) {
+    if (!text) {
+        return '';
+    }
+    var match = text.match(/https?:\/\/[^"'\s\\]+\.m3u8[^"'\s\\]*/i);
+    if (match) {
+        return match[0].replace(/\\/g, '');
+    }
+    match = text.match(/let\s+url\s*=\s*['"]([^'"]+)/i);
+    if (match && match[1].indexOf('http') === 0) {
+        return match[1];
+    }
+    return '';
+}
 function resolveCloseloadHandler(iframeUrl) {
     var hostKey = libs.url_get_host(iframeUrl);
     if (hosts && hosts[hostKey]) {
@@ -83,15 +97,15 @@ function resolveCloseloadHandler(iframeUrl) {
     return null;
 }
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var headers, slugDetail, url, parseSearch, _i, _a, item, detailUrl, parseDetail, iframe, iframeUrl, streamHeaders, closeloadHandler, e_1;
+    var headers, slugDetail, url, parseSearch, _i, _a, item, detailUrl, pageHtml, pageStream, parseDetail, iframe, iframeUrl, streamHeaders, closeloadHandler, e_1;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                console.log('[RN-Fetch][RIDO-VERSION] v3');
+                console.log('[RN-Fetch][RIDO-VERSION] v4');
                 headers = buildSiteHeaders(DOMAIN + '/');
                 _b.label = 1;
             case 1:
-                _b.trys.push([1, 5, , 6]);
+                _b.trys.push([1, 6, , 7]);
                 slugDetail = '';
                 url = DOMAIN + '/api/search?q=' + encodeURIComponent(libs.url_slug_search(movieInfo, ' '));
                 console.log('[RN-Fetch][RIDO-SEARCH] ' + url);
@@ -120,9 +134,23 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     detailUrl = DOMAIN + '/tv/' + slugDetail + '/season-' + movieInfo.season + '/episode-' + movieInfo.episode;
                 }
                 console.log('[RN-Fetch][RIDO-PAGE] ' + detailUrl);
-                return [4, libs.request_get(detailUrl, buildSiteHeaders(detailUrl + '/'), true)];
+                return [4, fetch(detailUrl, {
+                        headers: buildSiteHeaders(detailUrl + '/'),
+                        method: 'GET',
+                    })];
             case 3:
-                parseDetail = _b.sent();
+                pageHtml = _b.sent();
+                return [4, pageHtml.text()];
+            case 4:
+                pageHtml = _b.sent();
+                pageStream = extractStreamFromText(pageHtml);
+                if (pageStream) {
+                    console.log('[RN-Fetch][RIDO-DIRECT] page m3u8');
+                    streamHeaders = buildSiteHeaders(detailUrl + '/');
+                    libs.embed_callback(pageStream, PROVIDER, PROVIDER, 'Hls', callback, 0, [], [{ file: pageStream, quality: 1080 }], streamHeaders, { type: 'm3u8' });
+                    return [2, true];
+                }
+                parseDetail = cheerio.load(pageHtml);
                 iframe = parseDetail('#player-cover').attr('data-embed');
                 libs.log({ iframe: iframe }, PROVIDER, 'IFRAME HTML');
                 if (!iframe) {
@@ -144,18 +172,22 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 closeloadHandler = resolveCloseloadHandler(iframeUrl);
                 console.log('[RN-Fetch][RIDO-REDIRECT] host=' + libs.url_get_host(iframeUrl) + ' handler=' + (closeloadHandler ? 'closeload' : 'embed_redirect'));
                 if (closeloadHandler) {
-                    return [4, closeloadHandler(iframeUrl, movieInfo, PROVIDER, { subs: [] }, callback)];
+                    return [4, closeloadHandler(iframeUrl, movieInfo, PROVIDER, {
+                            subs: [],
+                            pageReferer: detailUrl + '/',
+                            streamHeaders: streamHeaders,
+                        }, callback)];
                 }
                 return [4, libs.embed_redirect(iframeUrl, '', movieInfo, PROVIDER, callback, PROVIDER, [], {}, streamHeaders)];
-            case 4:
-                _b.sent();
-                return [3, 6];
             case 5:
+                _b.sent();
+                return [3, 7];
+            case 6:
                 e_1 = _b.sent();
                 libs.log({ e: e_1 }, PROVIDER, 'ERROR');
                 console.log('[RN-Fetch][RIDO-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
-                return [3, 6];
-            case 6: return [2, true];
+                return [3, 7];
+            case 7: return [2, true];
         }
     });
 }); };
