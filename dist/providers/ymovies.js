@@ -111,7 +111,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][YMOVIES-VERSION] v2-rn-only');
+                console.log('[RN-Fetch][YMOVIES-VERSION] v2-rn-only-slugfix');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 9, , 10]);

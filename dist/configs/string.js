@@ -1,7 +1,13 @@
 libs.string_matching_title = function (movieInfo, titleSearch, regex, replacement) {
     if (regex === void 0) { regex = true; }
     if (replacement === void 0) { replacement = '+'; }
-    var matching = slugify(movieInfo.title, { lower: true, replacement: replacement, remove: /[*+~.()'"!:@-]/g }) == slugify(titleSearch, { lower: true, replacement: replacement, remove: /[*+~.()'"!:@-]/g });
+    var slugFn = libs.slugify || function (text, options) {
+        var opts = options || {};
+        var rep = opts.replacement !== undefined ? opts.replacement : '-';
+        var remove = opts.remove || /[*+~.()'"!:@-]/g;
+        return String(text || '').toLowerCase().replace(remove, '').trim().replace(/\s+/g, rep);
+    };
+    var matching = slugFn(movieInfo.title, { lower: true, replacement: replacement, remove: /[*+~.()'"!:@-]/g }) == slugFn(titleSearch, { lower: true, replacement: replacement, remove: /[*+~.()'"!:@-]/g });
     if (matching) {
         return true;
     }

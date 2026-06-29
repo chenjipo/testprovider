@@ -1,3 +1,9 @@
+libs.slugify = libs.slugify || function (text, options) {
+    var opts = options || {};
+    var replacement = opts.replacement !== undefined ? opts.replacement : '-';
+    var remove = opts.remove || /[*+~.()'"!:?@]/g;
+    return String(text || '').toLowerCase().replace(remove, '').trim().replace(/\s+/g, replacement);
+};
 libs.url_get_host = function (url) {
     var hostName = url.match(/^:?\/\/|https?:\/\/([^/]*@)?(.+?)(:\d{2,5})?([/?].*)?$/i);
     if (!hostName || hostName.length == 0) {
@@ -12,9 +18,9 @@ libs.url_slug_search = function (movieInfo, replacement, isConcatYear, minConcat
     if (isConcatYear === void 0) { isConcatYear = false; }
     if (minConcat === void 0) { minConcat = 3; }
     if (isConcatYear && movieInfo.title.length < minConcat) {
-        return slugify("".concat(movieInfo.title).concat(replacement).concat(movieInfo.year), { lower: true, replacement: replacement, remove: /[*+~.()'"!:?@]/g });
+        return libs.slugify("".concat(movieInfo.title).concat(replacement).concat(movieInfo.year), { lower: true, replacement: replacement, remove: /[*+~.()'"!:?@]/g });
     }
-    return slugify(movieInfo.title, { lower: true, replacement: replacement, remove: /[*+~.()'"!:?@]/g });
+    return libs.slugify(movieInfo.title, { lower: true, replacement: replacement, remove: /[*+~.()'"!:?@]/g });
 };
 libs.url_extractHostname = function (url) {
     var hostname;
