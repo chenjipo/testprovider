@@ -195,8 +195,10 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
         if (!fnSrc) {
             return '';
         }
-        var dc = eval('(' + fnSrc + ')');
-        return dc(parts);
+        var decoded = '';
+        var decodeEnv = { atob: libs.string_atob };
+        eval('with(decodeEnv){ var dc = (' + fnSrc + '); decoded = dc(parts); }');
+        return decoded;
     }
     var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1;
     return __generator(this, function (_a) {
