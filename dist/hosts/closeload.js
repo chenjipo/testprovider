@@ -217,3 +217,4 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
         }
     });
 }); };
+hosts['ridorapid'] = hosts['closeload'];

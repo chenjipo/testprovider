@@ -72,6 +72,9 @@ libs.embed_redirect = function (embed_1, quality_1, movieInfo_1, provider_1, cal
                     }
                     hostname = libs.url_get_host(embed);
                     libs.log({ hostname: hostname, embed: embed }, provider, 'EMBED HOST');
+                    if (!hosts[hostname] && embed.indexOf('closeload') != -1 && hosts && hosts['closeload']) {
+                        hostname = 'closeload';
+                    }
                     if (embed.indexOf('.m3u8') != -1 || embed.indexOf('.hls') != -1) {
                         libs.embed_callback(embed, provider, host ? host : hostname.toUpperCase(), 'Hls', callback, 1, subs, [], headers);
                         return [2];

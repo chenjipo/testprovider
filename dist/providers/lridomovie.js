@@ -72,12 +72,22 @@ function extractIframeUrl(embedHtml) {
     }
     return iframeUrl;
 }
+function resolveCloseloadHandler(iframeUrl) {
+    var hostKey = libs.url_get_host(iframeUrl);
+    if (hosts && hosts[hostKey]) {
+        return hosts[hostKey];
+    }
+    if (hosts && hosts['closeload'] && iframeUrl.indexOf('closeload') != -1) {
+        return hosts['closeload'];
+    }
+    return null;
+}
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var headers, slugDetail, url, parseSearch, _i, _a, item, detailUrl, parseDetail, iframe, iframeUrl, streamHeaders, e_1;
+    var headers, slugDetail, url, parseSearch, _i, _a, item, detailUrl, parseDetail, iframe, iframeUrl, streamHeaders, closeloadHandler, e_1;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                console.log('[RN-Fetch][RIDO-VERSION] v2');
+                console.log('[RN-Fetch][RIDO-VERSION] v3');
                 headers = buildSiteHeaders(DOMAIN + '/');
                 _b.label = 1;
             case 1:
@@ -131,7 +141,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [2, true];
                 }
                 streamHeaders = buildSiteHeaders(detailUrl + '/');
-                console.log('[RN-Fetch][RIDO-REDIRECT] host=' + libs.url_get_host(iframeUrl));
+                closeloadHandler = resolveCloseloadHandler(iframeUrl);
+                console.log('[RN-Fetch][RIDO-REDIRECT] host=' + libs.url_get_host(iframeUrl) + ' handler=' + (closeloadHandler ? 'closeload' : 'embed_redirect'));
+                if (closeloadHandler) {
+                    return [4, closeloadHandler(iframeUrl, movieInfo, PROVIDER, { subs: [] }, callback)];
+                }
                 return [4, libs.embed_redirect(iframeUrl, '', movieInfo, PROVIDER, callback, PROVIDER, [], {}, streamHeaders)];
             case 4:
                 _b.sent();
