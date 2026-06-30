@@ -36,8 +36,12 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var XVIP_KEY = 'x7k9mPqT2rWvY8zA5bC3nF6hJ2lK4mN9';
-var __xvipAesSingleton = null;
-var __xvipEncCache = {};
+function xvidsrcvipGetEncCache() {
+    if (!libs.__xvipEncCache) {
+        libs.__xvipEncCache = {};
+    }
+    return libs.__xvipEncCache;
+}
 function xvidsrcvipSleep(ms) {
     return new Promise(function (resolve) {
         setTimeout(resolve, ms);
@@ -104,10 +108,10 @@ function xvidsrcvipEncryptWithWebCrypto(movieInfo) {
     });
 }
 function xvidsrcvipGetAesJs() {
-    if (__xvipAesSingleton && __xvipAesSingleton.ModeOfOperation) {
-        return __xvipAesSingleton;
+    if (libs.__xvipAesSingleton && libs.__xvipAesSingleton.ModeOfOperation) {
+        return libs.__xvipAesSingleton;
     }
-    __xvipAesSingleton = /*! MIT License. Copyright 2015-2018 Richard Moore <me@ricmoo.com>. See LICENSE.txt. */
+    libs.__xvipAesSingleton = /*! MIT License. Copyright 2015-2018 Richard Moore <me@ricmoo.com>. See LICENSE.txt. */
 (function(root) {
     "use strict";
 
@@ -910,7 +914,7 @@ function xvidsrcvipGetAesJs() {
 
 
 return aesjs;})(typeof globalThis !== "undefined" ? globalThis : this);
-    return __xvipAesSingleton;
+    return libs.__xvipAesSingleton;
 }
 function xvidsrcvipEncryptPure(movieInfo) {
     var aesjs = xvidsrcvipGetAesJs();
@@ -926,9 +930,14 @@ function xvidsrcvipBuildCacheKey(movieInfo) {
     return String(movieInfo.tmdb_id) + '|' + String(movieInfo.type) + '|' + String(movieInfo.season || '') + '|' + String(movieInfo.episode || '');
 }
 function xvidsrcvipResolveEnc(movieInfo) {
+    if (!movieInfo || movieInfo.tmdb_id === undefined || movieInfo.tmdb_id === null || movieInfo.tmdb_id === '') {
+        console.log('[RN-Fetch][XVIP-SKIP] movieinfo-empty tmdb=' + String(movieInfo && movieInfo.tmdb_id));
+        return '';
+    }
+    var cache = xvidsrcvipGetEncCache();
     var cacheKey = xvidsrcvipBuildCacheKey(movieInfo);
-    if (__xvipEncCache[cacheKey]) {
-        return __xvipEncCache[cacheKey];
+    if (cache[cacheKey]) {
+        return cache[cacheKey];
     }
     var enc = '';
     try {
@@ -944,7 +953,10 @@ function xvidsrcvipResolveEnc(movieInfo) {
         }
     }
     if (enc) {
-        __xvipEncCache[cacheKey] = enc;
+        cache[cacheKey] = enc;
+    }
+    else {
+        console.log('[RN-Fetch][XVIP-SKIP] enc-empty key=' + cacheKey);
     }
     return enc;
 }
@@ -953,8 +965,8 @@ function xvidsrcvipBuildEnc(movieInfo) {
 }
 (function xvidsrcvipWarmAesModule() {
     try {
-        __xvipAesSingleton = xvidsrcvipGetAesJs();
-        console.log('[RN-Fetch][XVIP-AES] warm-ok singleton=' + (__xvipAesSingleton && __xvipAesSingleton.ModeOfOperation ? 'yes' : 'no'));
+        libs.__xvipAesSingleton = xvidsrcvipGetAesJs();
+        console.log('[RN-Fetch][XVIP-AES] warm-ok singleton=' + (libs.__xvipAesSingleton && libs.__xvipAesSingleton.ModeOfOperation ? 'yes' : 'no'));
     }
     catch (warmErr) {
         console.log('[RN-Fetch][XVIP-AES-WARM] ' + String(warmErr && warmErr.message ? warmErr.message : warmErr));
@@ -972,13 +984,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v5-rn-enc-cache');
+                console.log('[RN-Fetch][XVIP-VERSION] v6-rn-libs-global');
                 _g.label = 1;
             case 1:
-                _g.trys.push([1, 15, , 16]);
-                return [4, xvidsrcvipBuildEnc(movieInfo)];
-            case 2:
-                enc = _g.sent();
+                _g.trys.push([1, 13, , 14]);
+                enc = xvidsrcvipResolveEnc(movieInfo);
                 if (!enc) {
                     console.log('[RN-Fetch][XVIP-SKIP] crypto-not-ready');
                     libs.log({ e: 'crypto not ready' }, PROVIDER, 'ERROR');
@@ -990,13 +1000,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ urlovo: urlovo }, PROVIDER, "URL");
                 rank = 0;
                 return [4, fetch(urlovo)];
-            case 3:
+            case 2:
                 response = _g.sent();
                 if (!response.ok) {
                     return [2];
                 }
                 return [4, response.json()];
-            case 4:
+            case 3:
                 json = _g.sent();
                 libs.log({ json: json }, PROVIDER, "JSON");
                 _a = json;
@@ -1006,7 +1016,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 _i = 0;
                 _g.label = 5;
             case 5:
-                if (!(_i < _b.length)) return [3, 14];
+                if (!(_i < _b.length)) return [3, 15];
                 _c = _b[_i];
                 if (!(_c in _a)) return [3, 13];
                 item = _c;
@@ -1089,13 +1099,12 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             case 13:
                 _i++;
                 return [3, 5];
-            case 14: return [3, 16];
-            case 15:
+            case 14:
                 e_1 = _g.sent();
                 libs.log({ e: e_1 }, PROVIDER, "ERROR");
                 console.log('[RN-Fetch][XVIP-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
-                return [3, 16];
-            case 16: return [2];
+                return [3, 15];
+            case 15: return [2];
         }
     });
 }); };
