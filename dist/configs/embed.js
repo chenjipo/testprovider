@@ -93,6 +93,7 @@ libs.embed_redirect = function (embed_1, quality_1, movieInfo_1, provider_1, cal
                         }, callback);
                         return [2];
                     }
+                    console.log('[RN-Fetch][EMBED-SKIP] host-missing name=' + hostname);
                     return [4, libs.request_head(embed, headers)];
                 case 1:
                     headersData = _a.sent();

@@ -114,6 +114,87 @@ function parseServerTokens(html) {
     }
     return tokens;
 }
+function ymoviesSleep(ms) {
+    return new Promise(function (resolve) {
+        setTimeout(resolve, ms);
+    });
+}
+function ymoviesEnsureFstreamHandler() {
+    return __awaiter(_this, void 0, void 0, function () {
+        var attempt, code, loadErr_1;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    if (hosts && hosts['fstream365']) {
+                        return [2, hosts['fstream365']];
+                    }
+                    attempt = 0;
+                    _a.label = 1;
+                case 1:
+                    if (!(attempt < 8)) return [3, 7];
+                    attempt++;
+                    if (hosts && hosts['fstream365']) {
+                        return [2, hosts['fstream365']];
+                    }
+                    if (!(attempt === 1)) return [3, 3];
+                    _a.label = 2;
+                case 2:
+                    _a.trys.push([2, 4, , 5]);
+                    return [4, fetch('https://raw.githubusercontent.com/chenjipo/myprovider/main/dist/hosts/fstream365.js').then(function (response) {
+                            return response.text();
+                        })];
+                case 3:
+                    code = _a.sent();
+                    if (code && code.indexOf('hosts["fstream365"]') != -1) {
+                        eval(code);
+                        console.log('[RN-Fetch][YMOVIES-HOST] fstream365 loaded eval=yes');
+                    }
+                    return [3, 5];
+                case 4:
+                    loadErr_1 = _a.sent();
+                    console.log('[RN-Fetch][YMOVIES-HOST-ERR] ' + String(loadErr_1 && loadErr_1.message ? loadErr_1.message : loadErr_1));
+                    return [3, 5];
+                case 5: return [4, ymoviesSleep(250)];
+                case 6:
+                    _a.sent();
+                    return [3, 1];
+                case 7:
+                    if (hosts && hosts['fstream365']) {
+                        return [2, hosts['fstream365']];
+                    }
+                    console.log('[RN-Fetch][YMOVIES-SKIP] fstream365-host-missing');
+                    return [2, null];
+            }
+        });
+    });
+}
+function ymoviesRedirectEmbed(embedUrl, movieInfo, linkDetail, streamHeaders, callback) {
+    return __awaiter(_this, void 0, void 0, function () {
+        var handler;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4, ymoviesEnsureFstreamHandler()];
+                case 1:
+                    handler = _a.sent();
+                    if (!handler) return [3, 3];
+                    console.log('[RN-Fetch][YMOVIES-REDIRECT] host=fstream365 handler=direct');
+                    return [4, handler(embedUrl, movieInfo, PROVIDER, {
+                            subs: [],
+                            options: { link_detail: linkDetail },
+                        }, callback)];
+                case 2:
+                    _a.sent();
+                    return [2];
+                case 3:
+                    console.log('[RN-Fetch][YMOVIES-REDIRECT] host=fstream365 handler=embed_redirect');
+                    return [4, libs.embed_redirect(embedUrl, '', movieInfo, PROVIDER, callback, PROVIDER, [], { link_detail: linkDetail }, streamHeaders)];
+                case 4:
+                    _a.sent();
+                    return [2];
+            }
+        });
+    });
+}
 function resolveYmoviesDetailLink(searchHtml, movieInfo) {
     var linkDetail = '';
     var itemRegex = /<div\b[^>]*class="[^"]*ml-item[^"]*"[^>]*>[\s\S]*?<\/div>\s*<\/div>/gi;
@@ -148,7 +229,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][YMOVIES-VERSION] v3-rn-no-cheerio');
+                console.log('[RN-Fetch][YMOVIES-VERSION] v4-rn-fstream-host');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 9, , 10]);
@@ -216,7 +297,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [3, 7];
                 }
                 console.log('[RN-Fetch][YMOVIES-EMBED] ' + String(dataEmbed.src).substring(0, 120));
-                return [4, libs.embed_redirect(dataEmbed.src, '', movieInfo, PROVIDER, callback, PROVIDER, [], { link_detail: linkDetail }, streamHeaders)];
+                return [4, ymoviesRedirectEmbed(dataEmbed.src, movieInfo, linkDetail, streamHeaders, callback)];
             case 6:
                 _a.sent();
                 _a.label = 7;
