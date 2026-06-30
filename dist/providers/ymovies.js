@@ -119,12 +119,66 @@ function ymoviesSleep(ms) {
         setTimeout(resolve, ms);
     });
 }
-function ymoviesEnsureFstreamHandler() {
+function ymoviesEnsureCrypto() {
     return __awaiter(_this, void 0, void 0, function () {
-        var attempt, code, loadErr_1;
+        var lib, code, loadErr_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
+                    if (libs && libs.__fstreamCrypto && libs.__fstreamCrypto.AES && libs.__fstreamCrypto.enc) {
+                        return [2, libs.__fstreamCrypto];
+                    }
+                    lib = null;
+                    if (typeof cryptoS !== 'undefined' && cryptoS && cryptoS.AES && cryptoS.enc) {
+                        lib = cryptoS;
+                    }
+                    else if (typeof CryptoJS !== 'undefined' && CryptoJS && CryptoJS.AES && CryptoJS.enc) {
+                        lib = CryptoJS;
+                    }
+                    if (lib) {
+                        libs.__fstreamCrypto = lib;
+                        console.log('[RN-Fetch][YMOVIES-CRYPTO] global-ok');
+                        return [2, lib];
+                    }
+                    _a.label = 1;
+                case 1:
+                    _a.trys.push([1, 3, , 4]);
+                    return [4, fetch('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js').then(function (response) {
+                            return response.text();
+                        })];
+                case 2:
+                    code = _a.sent();
+                    if (code && code.length > 1000) {
+                        eval(code);
+                        if (typeof CryptoJS !== 'undefined' && CryptoJS && CryptoJS.AES && CryptoJS.enc) {
+                            libs.__fstreamCrypto = CryptoJS;
+                            console.log('[RN-Fetch][YMOVIES-CRYPTO] cdn-loaded');
+                            return [2, CryptoJS];
+                        }
+                    }
+                    return [3, 4];
+                case 3:
+                    loadErr_1 = _a.sent();
+                    console.log('[RN-Fetch][YMOVIES-CRYPTO-ERR] ' + String(loadErr_1 && loadErr_1.message ? loadErr_1.message : loadErr_1));
+                    return [3, 4];
+                case 4:
+                    console.log('[RN-Fetch][YMOVIES-SKIP] crypto-unavailable');
+                    return [2, null];
+            }
+        });
+    });
+}
+function ymoviesEnsureFstreamHandler() {
+    return __awaiter(_this, void 0, void 0, function () {
+        var attempt, code, loadErr_1, cryptoReady;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0: return [4, ymoviesEnsureCrypto()];
+                case 1:
+                    cryptoReady = _a.sent();
+                    if (!cryptoReady) {
+                        return [2, null];
+                    }
                     if (hosts && hosts['fstream365']) {
                         return [2, hosts['fstream365']];
                     }
@@ -229,7 +283,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][YMOVIES-VERSION] v4-rn-fstream-host');
+                console.log('[RN-Fetch][YMOVIES-VERSION] v5-rn-crypto-persist');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 9, , 10]);
