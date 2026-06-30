@@ -922,44 +922,46 @@ function xvidsrcvipEncryptPure(movieInfo) {
 }
 function xvidsrcvipBuildEnc(movieInfo) {
     return __awaiter(_this, void 0, void 0, function () {
-        var startedAt, lib, webEnc;
+        var lib, pureEnc, webEnc;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    startedAt = Date.now();
-                    _a.label = 1;
-                case 1:
+                    pureEnc = '';
+                    try {
+                        pureEnc = xvidsrcvipEncryptPure(movieInfo);
+                    }
+                    catch (pureErr) {
+                        console.log('[RN-Fetch][XVIP-PURE-ERR] ' + String(pureErr && pureErr.message ? pureErr.message : pureErr));
+                    }
+                    if (pureEnc) {
+                        return [2, pureEnc];
+                    }
                     lib = xvidsrcvipGetCryptoLib();
                     if (lib) {
                         return [2, xvidsrcvipEncryptWithLib(lib, movieInfo)];
                     }
-                    try {
-                        return [2, xvidsrcvipEncryptPure(movieInfo)];
-                    }
-                    catch (pureErr) {
-                        libs.log({ pureErr: pureErr }, "XVidsrcVip", "PURE-AES-ERR");
-                    }
-                    if (!(typeof crypto !== 'undefined' && crypto.subtle)) return [3, 3];
+                    if (!(typeof crypto !== 'undefined' && crypto.subtle)) return [3, 2];
                     return [4, xvidsrcvipEncryptWithWebCrypto(movieInfo)];
-                case 2:
+                case 1:
                     webEnc = _a.sent();
                     if (webEnc) {
                         return [2, webEnc];
                     }
-                    _a.label = 3;
-                case 3:
-                    if (Date.now() - startedAt >= 15000) {
-                        return [2, ''];
-                    }
-                    return [4, xvidsrcvipSleep(100)];
-                case 4:
-                    _a.sent();
-                    return [3, 1];
-                case 5: return [2];
+                    _a.label = 2;
+                case 2: return [2, ''];
             }
         });
     });
 }
+(function xvidsrcvipWarmAesModule() {
+    try {
+        xvidsrcvipGetAesJs();
+        console.log('[RN-Fetch][XVIP-AES] warm-ok');
+    }
+    catch (warmErr) {
+        console.log('[RN-Fetch][XVIP-AES-WARM] ' + String(warmErr && warmErr.message ? warmErr.message : warmErr));
+    }
+})();
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
     var PROVIDER, DOMAIN, headers, enc, urlovo, response, json, _a, _b, _c, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, e_1;
     return __generator(this, function (_g) {
@@ -972,7 +974,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v3-rn-pure-aes');
+                console.log('[RN-Fetch][XVIP-VERSION] v4-rn-pure-first');
                 _g.label = 1;
             case 1:
                 _g.trys.push([1, 15, , 16]);

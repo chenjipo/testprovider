@@ -40,9 +40,19 @@ var DOMAIN = 'https://uniquestream.net';
 var USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
 function getUniqueStreamState() {
     if (!libs.__uniquestreamState) {
-        libs.__uniquestreamState = { played: {}, embedDone: {} };
+        libs.__uniquestreamState = { played: {}, embedDone: {}, sessionKey: '' };
     }
     return libs.__uniquestreamState;
+}
+function beginUniqueStreamSession(movieInfo) {
+    var sessionKey = String(movieInfo.tmdb_id) + '_' + String(movieInfo.season || 0) + '_' + String(movieInfo.episode || 0);
+    var state = getUniqueStreamState();
+    if (state.sessionKey !== sessionKey) {
+        state.sessionKey = sessionKey;
+        state.played = {};
+        state.embedDone = {};
+        console.log('[RN-Fetch][UNIQUESTREAM-SESSION] reset ' + sessionKey);
+    }
 }
 function buildPageUrl(movieInfo) {
     if (movieInfo.type == 'tv') {
@@ -178,7 +188,7 @@ function parseEmbedResponse(data) {
     return data.embed_url || '';
 }
 function requestPlayerEmbed(ajaxUrl, cache, urlSearch, postID, nonce, serverTypes, nume) { return __awaiter(_this, void 0, void 0, function () {
-    var cookieHeader, headers, _i, serverTypes_1, serverType, body, data, text;
+    var cookieHeader, headers, _i, serverTypes_1, serverType, body, data, text, rawText;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -194,32 +204,52 @@ function requestPlayerEmbed(ajaxUrl, cache, urlSearch, postID, nonce, serverType
                 _i = 0, serverTypes_1 = serverTypes;
                 _a.label = 1;
             case 1:
-                if (!(_i < serverTypes_1.length)) return [3, 4];
+                if (!(_i < serverTypes_1.length)) return [3, 7];
                 serverType = serverTypes_1[_i];
                 if (!serverType) {
-                    return [3, 3];
+                    return [3, 6];
                 }
                 body = qs.stringify({
                     action: 'uniquestream_player_ajax',
                     nonce: nonce,
                     post: postID,
                     type: serverType,
-                    nume: nume,
+                    nume: String(nume || '1'),
                 });
                 return [4, libs.request_post(ajaxUrl, headers, body, false)];
             case 2:
                 data = _a.sent();
-                text = typeof data === 'string' ? data : JSON.stringify(data || '');
-                if (!parseEmbedResponse(data)) {
-                    console.log('[RN-Fetch][UNIQUESTREAM-AJAX] type=' + serverType + ' body=' + String(text).substring(0, 40));
-                    return [3, 3];
+                if (parseEmbedResponse(data)) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-AJAX] ok type=' + serverType + ' via=request_post');
+                    return [2, data];
                 }
-                console.log('[RN-Fetch][UNIQUESTREAM-AJAX] ok type=' + serverType);
-                return [2, data];
+                return [4, fetch(ajaxUrl, {
+                        method: 'POST',
+                        headers: headers,
+                        body: body,
+                    })];
             case 3:
+                rawText = _a.sent();
+                return [4, rawText.text()];
+            case 4:
+                text = _a.sent();
+                try {
+                    data = JSON.parse(text);
+                }
+                catch (parseErr) {
+                    data = text;
+                }
+                if (parseEmbedResponse(data)) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-AJAX] ok type=' + serverType + ' via=fetch');
+                    return [2, data];
+                }
+                console.log('[RN-Fetch][UNIQUESTREAM-AJAX] type=' + serverType + ' body=' + String(text).substring(0, 40));
+                _a.label = 5;
+            case 5:
+            case 6:
                 _i++;
                 return [3, 1];
-            case 4: return [2, null];
+            case 7: return [2, null];
         }
     });
 }); }
@@ -503,7 +533,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v27-rn-post-webview');
+                beginUniqueStreamSession(movieInfo);
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v28-rn-session-reset');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 4, , 5]);
