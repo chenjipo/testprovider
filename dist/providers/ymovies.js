@@ -81,14 +81,22 @@ function fetchJson(url, referer) {
         return response.json();
     });
 }
+function parseAttrFromTag(tag, attrName) {
+    var pattern = new RegExp(attrName + '\\s*=\\s*["\']([^"\']+)', 'i');
+    var match = tag.match(pattern);
+    return match ? match[1] : '';
+}
 function parseServerTokens(html) {
     var tokens = [];
-    var parseEpisode = cheerio.load(html || '');
-    parseEpisode('.link-item').each(function (key, item) {
-        var dataId = parseEpisode(item).attr('data-id');
-        var dataName = parseEpisode(item).attr('data-name');
+    var source = html || '';
+    var tagRegex = /<a\b[^>]*class="[^"]*link-item[^"]*"[^>]*>/gi;
+    var tagMatch;
+    while ((tagMatch = tagRegex.exec(source)) !== null) {
+        var tag = tagMatch[0];
+        var dataId = parseAttrFromTag(tag, 'data-id');
+        var dataName = parseAttrFromTag(tag, 'data-name');
         if (!dataId || !dataName) {
-            return;
+            continue;
         }
         var exists = false;
         for (var i = 0; i < tokens.length; i++) {
@@ -103,15 +111,44 @@ function parseServerTokens(html) {
                 name: dataName,
             });
         }
-    });
+    }
     return tokens;
 }
+function resolveYmoviesDetailLink(searchHtml, movieInfo) {
+    var linkDetail = '';
+    var itemRegex = /<div\b[^>]*class="[^"]*ml-item[^"]*"[^>]*>[\s\S]*?<\/div>\s*<\/div>/gi;
+    var itemMatch;
+    while ((itemMatch = itemRegex.exec(searchHtml)) !== null) {
+        var block = itemMatch[0];
+        var titleMatch = block.match(/class="[^"]*mi-name[^"]*"[^>]*>[\s\S]*?<a[^>]*>([^<]+)<\/a>/i);
+        var hrefMatch = block.match(/class="[^"]*mi-name[^"]*"[^>]*>[\s\S]*?<a[^>]+href="([^"]+)"/i);
+        var yearMatch = block.match(/class="[^"]*mi-meta[^"]*"[^>]*>[\s\S]*?<span[^>]*>([^<]+)<\/span>/i);
+        var typeMatch = block.match(/class="[^"]*mim-type[^"]*"[^>]*>([^<]+)</i);
+        var title = titleMatch ? titleMatch[1].trim() : '';
+        var href = hrefMatch ? hrefMatch[1].trim() : '';
+        var year = yearMatch ? yearMatch[1].trim() : '';
+        var type = typeMatch ? typeMatch[1].trim().toLowerCase() : '';
+        if (!title || !href || !type || linkDetail) {
+            continue;
+        }
+        if (!libs.string_matching_title(movieInfo, title, false)) {
+            continue;
+        }
+        if (movieInfo.type == 'movie' && type == 'movie' && String(movieInfo.year) == String(year)) {
+            linkDetail = normalizeDetailUrl(href);
+        }
+        if (movieInfo.type == 'tv' && type == 'tv') {
+            linkDetail = normalizeDetailUrl(href);
+        }
+    }
+    return linkDetail;
+}
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var urlSearch, searchHtml, parseSearch_1, linkDetail, filmId, hrefEpisode, dataEpisode, tokens_2, streamHeaders, _i, tokens_1, item, urlEmbed, dataEmbed, e_1;
+    var urlSearch, searchHtml, linkDetail, filmId, hrefEpisode, dataEpisode, tokens_2, streamHeaders, _i, tokens_1, item, urlEmbed, dataEmbed, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][YMOVIES-VERSION] v2-rn-only-slugfix');
+                console.log('[RN-Fetch][YMOVIES-VERSION] v3-rn-no-cheerio');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 9, , 10]);
@@ -124,26 +161,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     console.log('[RN-Fetch][YMOVIES-SKIP] search-empty');
                     return [2];
                 }
-                parseSearch_1 = cheerio.load(searchHtml);
-                linkDetail = '';
-                parseSearch_1('.ml-item').each(function (key, item) {
-                    var title = parseSearch_1(item).find('.mi-name a').text().trim();
-                    var href = parseSearch_1(item).find('.mi-name a').attr('href');
-                    var year = parseSearch_1(item).find('.mi-meta span').first().text().trim();
-                    var type = parseSearch_1(item).find('.mim-type').text().trim().toLowerCase();
-                    if (!title || !href || !type || linkDetail) {
-                        return;
-                    }
-                    if (!libs.string_matching_title(movieInfo, title, false)) {
-                        return;
-                    }
-                    if (movieInfo.type == 'movie' && type == 'movie' && String(movieInfo.year) == String(year)) {
-                        linkDetail = normalizeDetailUrl(href);
-                    }
-                    if (movieInfo.type == 'tv' && type == 'tv') {
-                        linkDetail = normalizeDetailUrl(href);
-                    }
-                });
+                linkDetail = resolveYmoviesDetailLink(searchHtml, movieInfo);
                 libs.log({ linkDetail: linkDetail }, PROVIDER, 'LINK DETAIL');
                 console.log('[RN-Fetch][YMOVIES-DETAIL] ' + (linkDetail || 'none'));
                 if (!linkDetail) {
