@@ -41,6 +41,14 @@ var QHEXA_DEC_URL = 'https://enc-dec.app/api/dec-hexa';
 var QHEXA_REFERER = 'https://hexa.su/';
 var QHEXA_PROVIDER = 'QHexaWatch';
 var QHEXA_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+var QHEXA_CAP_CACHE_MS = 50 * 60 * 1000;
+var QHEXA_TOKEN_RETRY_MAX = 4;
+var QHEXA_TOKEN_RETRY_MS = 3000;
+function qhexaSleep(ms) {
+    return new Promise(function (resolve) {
+        setTimeout(resolve, ms);
+    });
+}
 function qhexaGetRandomKey() {
     var out = '';
     for (var i = 0; i < 32; i++) {
@@ -63,41 +71,166 @@ function qhexaIsValidCipherText(text) {
     }
     return true;
 }
-source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var urlData, tokenResponse, tokenJson, capToken, apiKey, headers, apiResponse, cipherText, decryptResponse, decryptJson, sources, playHeaders, rank, _i, sources_1, item, serverName, e_1;
+function qhexaGetCachedToken() {
+    var cache = libs.__qhexaCapCache;
+    if (cache && cache.token && cache.expiresAt > Date.now()) {
+        return cache.token;
+    }
+    return '';
+}
+function qhexaSetCachedToken(token) {
+    libs.__qhexaCapCache = {
+        token: token,
+        expiresAt: Date.now() + QHEXA_CAP_CACHE_MS,
+    };
+}
+function qhexaExtractTokenFromJson(json) {
+    if (!json) {
+        return '';
+    }
+    if (json.result && json.result.token) {
+        return String(json.result.token);
+    }
+    if (json.token) {
+        return String(json.token);
+    }
+    return '';
+}
+function qhexaFetchEncToken(method) {
+    return fetch(QHEXA_ENC_TOKEN_URL, {
+        method: method,
+        headers: {
+            'user-agent': QHEXA_USER_AGENT,
+            'content-type': 'application/json',
+        },
+        body: method == 'POST' ? '{}' : undefined,
+    }).then(function (response) {
+        return response.json().then(function (json) {
+            return {
+                status: response.status,
+                json: json,
+            };
+        }).catch(function () {
+            return {
+                status: response.status,
+                json: null,
+            };
+        });
+    });
+}
+function qhexaFetchCapToken() { return __awaiter(_this, void 0, void 0, function () {
+    var cached, attempt, methodNames, methodIndex, methodName, result, capToken, lastError, lastHint;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][QHEXA-VERSION] v2-enc-hexa');
+                cached = qhexaGetCachedToken();
+                if (cached) {
+                    console.log('[RN-Fetch][QHEXA-TOKEN] source=cache ' + cached.substring(0, 40) + '...');
+                    return [2, { token: cached, source: 'cache' }];
+                }
+                if (!libs.__qhexaTokenPromise) {
+                    libs.__qhexaTokenPromise = qhexaFetchCapTokenInner().finally(function () {
+                        libs.__qhexaTokenPromise = null;
+                    });
+                }
+                return [4, libs.__qhexaTokenPromise];
+            case 1: return [2, _a.sent()];
+        }
+    });
+}); }
+function qhexaFetchCapTokenInner() { return __awaiter(_this, void 0, void 0, function () {
+    var cached, attempt, methodNames, methodIndex, methodName, result, capToken, lastError, lastHint;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                cached = qhexaGetCachedToken();
+                if (cached) {
+                    console.log('[RN-Fetch][QHEXA-TOKEN] source=cache ' + cached.substring(0, 40) + '...');
+                    return [2, { token: cached, source: 'cache' }];
+                }
+                attempt = 0;
+                lastError = '';
+                lastHint = '';
+                _a.label = 1;
+            case 1:
+                if (!(attempt < QHEXA_TOKEN_RETRY_MAX)) return [3, 10];
+                attempt++;
+                methodNames = ['GET', 'POST'];
+                methodIndex = 0;
+                _a.label = 2;
+            case 2:
+                if (!(methodIndex < methodNames.length)) return [3, 8];
+                methodName = methodNames[methodIndex];
+                _a.label = 3;
+            case 3:
+                _a.trys.push([3, 5, , 6]);
+                return [4, qhexaFetchEncToken(methodName)];
+            case 4:
+                result = _a.sent();
+                console.log('[RN-Fetch][QHEXA-TOKEN-HTTP] ' + result.status + ' attempt=' + attempt + ' method=' + methodName);
+                if (result.json && result.json.error) {
+                    lastError = String(result.json.error);
+                    console.log('[RN-Fetch][QHEXA-TOKEN-ERR] ' + lastError);
+                }
+                if (result.json && result.json.hint) {
+                    lastHint = String(result.json.hint);
+                    console.log('[RN-Fetch][QHEXA-TOKEN-HINT] ' + lastHint);
+                }
+                capToken = qhexaExtractTokenFromJson(result.json);
+                if (result.status == 200 && capToken) {
+                    qhexaSetCachedToken(capToken);
+                    console.log('[RN-Fetch][QHEXA-TOKEN] source=enc-hexa ' + capToken.substring(0, 40) + '...');
+                    return [2, { token: capToken, source: 'enc-hexa' }];
+                }
+                return [3, 6];
+            case 5:
+                _a.sent();
+                console.log('[RN-Fetch][QHEXA-TOKEN-ERR] fetch-failed');
+                return [3, 6];
+            case 6:
+                methodIndex++;
+                return [3, 2];
+            case 7: return [3, 10];
+            case 8:
+                if (!(attempt < QHEXA_TOKEN_RETRY_MAX)) return [3, 10];
+                return [4, qhexaSleep(QHEXA_TOKEN_RETRY_MS)];
+            case 9:
+                _a.sent();
+                return [3, 1];
+            case 10:
+                if (lastError) {
+                    console.log('[RN-Fetch][QHEXA-SKIP] token-failed ' + lastError);
+                }
+                else {
+                    console.log('[RN-Fetch][QHEXA-SKIP] token-empty');
+                }
+                if (lastHint) {
+                    console.log('[RN-Fetch][QHEXA-SKIP-HINT] ' + lastHint);
+                }
+                return [2, { token: '', source: 'failed' }];
+        }
+    });
+}); }
+source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
+    var urlData, tokenResult, capToken, apiKey, headers, apiResponse, cipherText, decryptResponse, decryptJson, sources, playHeaders, rank, _i, sources_1, item, serverName, e_1;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                console.log('[RN-Fetch][QHEXA-VERSION] v3-enc-retry-cache');
                 console.log('[RN-Fetch][QHEXA-TMDB] type=' + movieInfo.type + ' id=' + movieInfo.tmdb_id + (movieInfo.type == 'tv' ? ' s' + movieInfo.season + 'e' + movieInfo.episode : ''));
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 11, , 12]);
                 urlData = qhexaBuildApiUrl(movieInfo);
                 console.log('[RN-Fetch][QHEXA-API] ' + urlData);
-                return [4, fetch(QHEXA_ENC_TOKEN_URL, {
-                        method: 'GET',
-                        headers: {
-                            'user-agent': QHEXA_USER_AGENT,
-                        },
-                    })];
+                return [4, qhexaFetchCapToken()];
             case 2:
-                tokenResponse = _a.sent();
-                console.log('[RN-Fetch][QHEXA-TOKEN-HTTP] ' + tokenResponse.status);
-                if (!tokenResponse.ok) {
-                    console.log('[RN-Fetch][QHEXA-SKIP] token-http-' + tokenResponse.status);
-                    return [2];
-                }
-                return [4, tokenResponse.json()];
-            case 3:
-                tokenJson = _a.sent();
-                capToken = tokenJson && tokenJson.result ? tokenJson.result.token : '';
-                libs.log({ tokenJson: tokenJson, urlData: urlData }, QHEXA_PROVIDER, 'TOKEN');
-                console.log('[RN-Fetch][QHEXA-TOKEN] ' + (capToken ? String(capToken).substring(0, 40) + '...' : 'empty'));
+                tokenResult = _a.sent();
+                capToken = tokenResult && tokenResult.token ? tokenResult.token : '';
                 if (!capToken) {
-                    console.log('[RN-Fetch][QHEXA-SKIP] token-empty');
                     return [2];
                 }
+                libs.log({ tokenSource: tokenResult.source, urlData: urlData }, QHEXA_PROVIDER, 'TOKEN');
                 apiKey = qhexaGetRandomKey();
                 headers = {
                     'user-agent': QHEXA_USER_AGENT,
@@ -111,7 +244,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         method: 'GET',
                         headers: headers,
                     })];
-            case 4:
+            case 3:
                 apiResponse = _a.sent();
                 console.log('[RN-Fetch][QHEXA-CIPHER-HTTP] ' + apiResponse.status);
                 if (!apiResponse.ok) {
@@ -119,7 +252,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [2];
                 }
                 return [4, apiResponse.text()];
-            case 5:
+            case 4:
                 cipherText = _a.sent();
                 libs.log({ cipherLen: cipherText ? cipherText.length : 0, apiKey: apiKey }, QHEXA_PROVIDER, 'CIPHER');
                 console.log('[RN-Fetch][QHEXA-CIPHER] len=' + (cipherText ? cipherText.length : 0));
@@ -137,7 +270,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                             key: apiKey,
                         }),
                     })];
-            case 6:
+            case 5:
                 decryptResponse = _a.sent();
                 console.log('[RN-Fetch][QHEXA-DECRYPT-HTTP] ' + decryptResponse.status);
                 if (!decryptResponse.ok) {
@@ -145,7 +278,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [2];
                 }
                 return [4, decryptResponse.json()];
-            case 7:
+            case 6:
                 decryptJson = _a.sent();
                 libs.log({ decryptJson: decryptJson }, QHEXA_PROVIDER, 'DECRYPT');
                 sources = decryptJson && decryptJson.result && decryptJson.result.sources ? decryptJson.result.sources : [];
@@ -161,24 +294,21 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 };
                 rank = 1;
                 _i = 0, sources_1 = sources;
-                _a.label = 8;
-            case 8:
-                if (!(_i < sources_1.length)) return [3, 12];
+                _a.label = 7;
+            case 7:
+                if (!(_i < sources_1.length)) return [3, 10];
                 item = sources_1[_i];
-                if (!item || !item.url) {
-                    return [3, 9];
+                if (item && item.url) {
+                    serverName = item.server ? String(item.server) : 'server' + rank;
+                    libs.log({ server: serverName, file: item.url }, QHEXA_PROVIDER, 'FILE');
+                    console.log('[RN-Fetch][QHEXA-PLAY] ' + serverName + ' ' + String(item.url).substring(0, 120));
+                    libs.embed_callback(item.url, QHEXA_PROVIDER, QHEXA_PROVIDER + '-' + serverName, 'Hls', callback, rank, [], [{ file: item.url, quality: 1080 }], playHeaders, {
+                        type: 'm3u8',
+                    });
+                    rank++;
                 }
-                serverName = item.server ? String(item.server) : 'server' + rank;
-                libs.log({ server: serverName, file: item.url }, QHEXA_PROVIDER, 'FILE');
-                console.log('[RN-Fetch][QHEXA-PLAY] ' + serverName + ' ' + String(item.url).substring(0, 120));
-                libs.embed_callback(item.url, QHEXA_PROVIDER, QHEXA_PROVIDER + '-' + serverName, 'Hls', callback, rank, [], [{ file: item.url, quality: 1080 }], playHeaders, {
-                    type: 'm3u8',
-                });
-                rank++;
-                _a.label = 9;
-            case 9:
                 _i++;
-                return [3, 8];
+                return [3, 7];
             case 10: return [3, 12];
             case 11:
                 e_1 = _a.sent();

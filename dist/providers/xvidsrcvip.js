@@ -35,8 +35,25 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
+function xvidsrcvipWaitCrypto(maxWaitMs) {
+    return new Promise(function (resolve) {
+        var startedAt = Date.now();
+        function checkCryptoReady() {
+            if (typeof cryptoS !== 'undefined' && cryptoS && cryptoS.enc && cryptoS.AES) {
+                resolve(true);
+                return;
+            }
+            if (Date.now() - startedAt >= maxWaitMs) {
+                resolve(false);
+                return;
+            }
+            setTimeout(checkCryptoReady, 50);
+        }
+        checkCryptoReady();
+    });
+}
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, DOMAIN, headers, qw_1, RL, enc, urlovo, response, json, _a, _b, _c, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, e_1;
+    var PROVIDER, DOMAIN, headers, qw_1, RL, enc, urlovo, response, json, _a, _b, _c, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, cryptoReady, e_1;
     return __generator(this, function (_g) {
         switch (_g.label) {
             case 0:
@@ -47,9 +64,17 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                _g.label = 1;
+                return [4, xvidsrcvipWaitCrypto(3000)];
             case 1:
-                _g.trys.push([1, 14, , 15]);
+                cryptoReady = _g.sent();
+                if (!cryptoReady) {
+                    console.log('[RN-Fetch][XVIP-SKIP] crypto-not-ready');
+                    libs.log({ e: 'cryptoS not ready' }, PROVIDER, 'ERROR');
+                    return [2];
+                }
+                _g.label = 2;
+            case 2:
+                _g.trys.push([2, 15, , 16]);
                 qw_1 = "x7k9mPqT2rWvY8zA5bC3nF6hJ2lK4mN9";
                 RL = function (r, e, t, n) {
                     var s = e === "tv" ? "".concat(r, "_").concat(t, "_").concat(n) : r, i = cryptoS.enc.Utf8.parse(qw_1), a = cryptoS.enc.Utf8.parse(qw_1.substring(0, 16));

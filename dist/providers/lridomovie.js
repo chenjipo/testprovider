@@ -96,34 +96,120 @@ function resolveCloseloadHandler(iframeUrl) {
     }
     return null;
 }
+function lridomovieSleep(ms) {
+    return new Promise(function (resolve) {
+        setTimeout(resolve, ms);
+    });
+}
+function lridomovieBuildSlugFallback(movieInfo) {
+    return libs.url_slug_search(movieInfo, '-');
+}
+function lridomovieFetchSearch(url, headers, attempt) {
+    return __awaiter(_this, void 0, void 0, function () {
+        var response, text, json, e_2;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    _a.trys.push([0, 4, , 6]);
+                    return [4, fetch(url, {
+                            method: 'GET',
+                            headers: headers,
+                        })];
+                case 1:
+                    response = _a.sent();
+                    console.log('[RN-Fetch][RIDO-SEARCH-HTTP] attempt=' + attempt + ' status=' + response.status);
+                    if (!response.ok) {
+                        if (attempt < 3) {
+                            return [4, lridomovieSleep(800 * attempt)];
+                        }
+                        return [2, null];
+                    }
+                    return [4, response.text()];
+                case 2:
+                    text = _a.sent();
+                    if (!text || text.indexOf('<html') >= 0 || text.indexOf('Just a moment') >= 0) {
+                        console.log('[RN-Fetch][RIDO-SEARCH-BLOCK] cf-challenge');
+                        if (attempt < 3) {
+                            return [4, lridomovieSleep(800 * attempt)];
+                        }
+                        return [2, null];
+                    }
+                    try {
+                        json = JSON.parse(text);
+                    }
+                    catch (parseError) {
+                        console.log('[RN-Fetch][RIDO-SEARCH-BLOCK] json-parse-failed');
+                        if (attempt < 3) {
+                            return [4, lridomovieSleep(800 * attempt)];
+                        }
+                        return [2, null];
+                    }
+                    return [2, json];
+                case 3:
+                    _a.sent();
+                    return [2, lridomovieFetchSearch(url, headers, attempt + 1)];
+                case 4:
+                    e_2 = _a.sent();
+                    if (!(attempt < 3)) return [3, 6];
+                    return [4, lridomovieSleep(800 * attempt)];
+                case 5:
+                    _a.sent();
+                    return [2, lridomovieFetchSearch(url, headers, attempt + 1)];
+                case 6: return [2, null];
+            }
+        });
+    });
+}
+function lridomovieResolveSlug(movieInfo, parseSearch) {
+    var slugDetail = '';
+    var titleSlug = lridomovieBuildSlugFallback(movieInfo);
+    var _i, _a, item;
+    if (parseSearch && parseSearch.data && parseSearch.data.length) {
+        for (_i = 0, _a = parseSearch.data; _i < _a.length; _i++) {
+            item = _a[_i];
+            if (String(item.tmdb_id) == String(movieInfo.tmdb_id)) {
+                slugDetail = item.slug;
+                break;
+            }
+        }
+        if (!slugDetail) {
+            for (_i = 0, _a = parseSearch.data; _i < _a.length; _i++) {
+                item = _a[_i];
+                if (item.slug && String(item.slug).indexOf(titleSlug) === 0) {
+                    slugDetail = item.slug;
+                    console.log('[RN-Fetch][RIDO-SLUG] title-prefix-match ' + slugDetail);
+                    break;
+                }
+            }
+        }
+        if (!slugDetail && parseSearch.data[0] && parseSearch.data[0].slug) {
+            slugDetail = parseSearch.data[0].slug;
+            console.log('[RN-Fetch][RIDO-SLUG] first-result-fallback ' + slugDetail);
+        }
+    }
+    if (!slugDetail) {
+        slugDetail = titleSlug;
+        console.log('[RN-Fetch][RIDO-SLUG] direct-fallback ' + slugDetail);
+    }
+    return slugDetail;
+}
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var headers, slugDetail, url, parseSearch, _i, _a, item, detailUrl, pageHtml, pageStream, parseDetail, iframe, iframeUrl, streamHeaders, closeloadHandler, e_1;
+    var headers, slugDetail, url, parseSearch, detailUrl, pageHtml, pageStream, parseDetail, iframe, iframeUrl, streamHeaders, closeloadHandler, e_1;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                console.log('[RN-Fetch][RIDO-VERSION] v4');
+                console.log('[RN-Fetch][RIDO-VERSION] v5-search-fallback');
                 headers = buildSiteHeaders(DOMAIN + '/');
                 _b.label = 1;
             case 1:
                 _b.trys.push([1, 6, , 7]);
-                slugDetail = '';
                 url = DOMAIN + '/api/search?q=' + encodeURIComponent(libs.url_slug_search(movieInfo, ' '));
                 console.log('[RN-Fetch][RIDO-SEARCH] ' + url);
-                return [4, libs.request_get(url, headers)];
+                return [4, lridomovieFetchSearch(url, headers, 1)];
             case 2:
                 parseSearch = _b.sent();
                 libs.log({ parseSearch: parseSearch }, PROVIDER, 'PARSE SEARCH');
-                if (!parseSearch || !parseSearch.data || !parseSearch.data.length) {
-                    console.log('[RN-Fetch][RIDO-SKIP] search-empty');
-                    return [2];
-                }
-                for (_i = 0, _a = parseSearch.data; _i < _a.length; _i++) {
-                    item = _a[_i];
-                    if (String(item.tmdb_id) == String(movieInfo.tmdb_id)) {
-                        slugDetail = item.slug;
-                        break;
-                    }
-                }
+                slugDetail = lridomovieResolveSlug(movieInfo, parseSearch);
                 libs.log({ slugDetail: slugDetail }, PROVIDER, 'SLUG_DETAIL');
                 if (!slugDetail) {
                     console.log('[RN-Fetch][RIDO-SKIP] slug-not-found');
