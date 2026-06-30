@@ -35,108 +35,8 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-var XVIP_KEY = 'x7k9mPqT2rWvY8zA5bC3nF6hJ2lK4mN9';
-function xvidsrcvipSleep(ms) {
-    return new Promise(function (resolve) {
-        setTimeout(resolve, ms);
-    });
-}
-function xvidsrcvipGetCryptoLib() {
-    if (typeof cryptoS !== 'undefined' && cryptoS && cryptoS.enc && cryptoS.AES) {
-        return cryptoS;
-    }
-    if (typeof CryptoJS !== 'undefined' && CryptoJS && CryptoJS.enc && CryptoJS.AES) {
-        return CryptoJS;
-    }
-    return null;
-}
-function xvidsrcvipPlainText(movieInfo) {
-    if (movieInfo.type == 'tv') {
-        return String(movieInfo.tmdb_id) + '_' + movieInfo.season + '_' + movieInfo.episode;
-    }
-    return String(movieInfo.tmdb_id);
-}
-function xvidsrcvipEncryptWithLib(lib, movieInfo) {
-    var plain = xvidsrcvipPlainText(movieInfo);
-    var key = lib.enc.Utf8.parse(XVIP_KEY);
-    var iv = lib.enc.Utf8.parse(XVIP_KEY.substring(0, 16));
-    var enc = lib.AES.encrypt(plain, key, { iv: iv }).ciphertext.toString(lib.enc.Base64);
-    return enc.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-function xvidsrcvipBytesToBase64(bytes) {
-    var binary = '';
-    for (var i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
-    }
-    if (typeof btoa === 'function') {
-        return btoa(binary);
-    }
-    if (typeof global !== 'undefined' && global.Buffer) {
-        return global.Buffer.from(bytes).toString('base64');
-    }
-    return '';
-}
-function xvidsrcvipEncryptWithWebCrypto(movieInfo) {
-    return __awaiter(_this, void 0, void 0, function () {
-        var plain, keyBytes, ivBytes, dataBytes, cryptoKey, encrypted, enc;
-        return __generator(this, function (_a) {
-            switch (_a.label) {
-                case 0:
-                    if (!(typeof crypto !== 'undefined' && crypto.subtle)) {
-                        return [2, ''];
-                    }
-                    plain = xvidsrcvipPlainText(movieInfo);
-                    keyBytes = new TextEncoder().encode(XVIP_KEY);
-                    ivBytes = new TextEncoder().encode(XVIP_KEY.substring(0, 16));
-                    dataBytes = new TextEncoder().encode(plain);
-                    return [4, crypto.subtle.importKey('raw', keyBytes, { name: 'AES-CBC' }, false, ['encrypt'])];
-                case 1:
-                    cryptoKey = _a.sent();
-                    return [4, crypto.subtle.encrypt({ name: 'AES-CBC', iv: ivBytes }, cryptoKey, dataBytes)];
-                case 2:
-                    encrypted = _a.sent();
-                    enc = xvidsrcvipBytesToBase64(new Uint8Array(encrypted));
-                    return [2, enc.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')];
-            }
-        });
-    });
-}
-function xvidsrcvipBuildEnc(movieInfo) {
-    return __awaiter(_this, void 0, void 0, function () {
-        var startedAt, lib, webEnc;
-        return __generator(this, function (_a) {
-            switch (_a.label) {
-                case 0:
-                    startedAt = Date.now();
-                    _a.label = 1;
-                case 1:
-                    lib = xvidsrcvipGetCryptoLib();
-                    if (lib) {
-                        return [2, xvidsrcvipEncryptWithLib(lib, movieInfo)];
-                    }
-                    if (!(typeof crypto !== 'undefined' && crypto.subtle)) return [3, 3];
-                    return [4, xvidsrcvipEncryptWithWebCrypto(movieInfo)];
-                case 2:
-                    webEnc = _a.sent();
-                    if (webEnc) {
-                        return [2, webEnc];
-                    }
-                    _a.label = 3;
-                case 3:
-                    if (Date.now() - startedAt >= 15000) {
-                        return [2, ''];
-                    }
-                    return [4, xvidsrcvipSleep(100)];
-                case 4:
-                    _a.sent();
-                    return [3, 1];
-                case 5: return [2];
-            }
-        });
-    });
-}
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, DOMAIN, headers, enc, urlovo, response, json, _a, _b, _c, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, e_1;
+    var PROVIDER, DOMAIN, headers, qw_1, RL, enc, urlovo, response, json, _a, _b, _c, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, e_1;
     return __generator(this, function (_g) {
         switch (_g.label) {
             case 0:
@@ -147,31 +47,32 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v2-rn-crypto');
                 _g.label = 1;
             case 1:
-                _g.trys.push([1, 15, , 16]);
-                return [4, xvidsrcvipBuildEnc(movieInfo)];
-            case 2:
-                enc = _g.sent();
-                if (!enc) {
-                    console.log('[RN-Fetch][XVIP-SKIP] crypto-not-ready');
-                    libs.log({ e: 'crypto not ready' }, PROVIDER, 'ERROR');
-                    return [2];
-                }
-                console.log('[RN-Fetch][XVIP-ENC] ' + enc);
+                _g.trys.push([1, 14, , 15]);
+                qw_1 = "x7k9mPqT2rWvY8zA5bC3nF6hJ2lK4mN9";
+                RL = function (r, e, t, n) {
+                    var s = e === "tv" ? "".concat(r, "_").concat(t, "_").concat(n) : r, i = cryptoS.enc.Utf8.parse(qw_1), a = cryptoS.enc.Utf8.parse(qw_1.substring(0, 16));
+                    libs.log({ s: s, i: i, a: a }, PROVIDER, "ENCRYPTION INPUTS");
+                    var c = cryptoS.AES.encrypt(s, i, {
+                        iv: a
+                    }).ciphertext.toString(cryptoS.enc.Base64);
+                    c = c.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+                    return c;
+                };
+                enc = RL(String(movieInfo.tmdb_id), movieInfo.type, movieInfo.season, movieInfo.episode);
                 libs.log({ enc: enc }, PROVIDER, "ENCODED");
                 urlovo = "".concat(DOMAIN, "/api/").concat(movieInfo.type, "/").concat(encodeURIComponent(enc));
                 libs.log({ urlovo: urlovo }, PROVIDER, "URL");
                 rank = 0;
                 return [4, fetch(urlovo)];
-            case 3:
+            case 2:
                 response = _g.sent();
                 if (!response.ok) {
                     return [2];
                 }
                 return [4, response.json()];
-            case 4:
+            case 3:
                 json = _g.sent();
                 libs.log({ json: json }, PROVIDER, "JSON");
                 _a = json;
@@ -179,22 +80,22 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 for (_c in _a)
                     _b.push(_c);
                 _i = 0;
+                _g.label = 4;
+            case 4:
+                if (!(_i < _b.length)) return [3, 13];
+                _c = _b[_i];
+                if (!(_c in _a)) return [3, 12];
+                item = _c;
                 _g.label = 5;
             case 5:
-                if (!(_i < _b.length)) return [3, 14];
-                _c = _b[_i];
-                if (!(_c in _a)) return [3, 13];
-                item = _c;
-                _g.label = 6;
-            case 6:
-                _g.trys.push([6, 12, , 13]);
+                _g.trys.push([5, 11, , 12]);
                 source = json[item];
                 if (!source.url) {
-                    return [3, 13];
+                    return [3, 12];
                 }
-                if (!(source.url.indexOf("vdrk.site") != -1)) return [3, 8];
+                if (!(source.url.indexOf("vdrk.site") != -1)) return [3, 7];
                 return [4, libs.request_get(source.url, headers)];
-            case 7:
+            case 6:
                 qualityData = _g.sent();
                 libs.log({ qualityData: qualityData }, PROVIDER, "QUALITY DATA");
                 directQuality = [];
@@ -213,22 +114,22 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     directQuality = _.orderBy(directQuality, ['quality'], ['desc']);
                     libs.embed_callback(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank++, [], directQuality, headers);
                 }
-                return [3, 13];
-            case 8:
-                if (!(source.url.indexOf("/playlist.m3u8") != -1)) return [3, 11];
+                return [3, 12];
+            case 7:
+                if (!(source.url.indexOf("/playlist.m3u8") != -1)) return [3, 10];
                 return [4, fetch(source.url, {
                         headers: headers,
                         method: "GET"
                     })];
-            case 9:
+            case 8:
                 dataQuality = _g.sent();
                 return [4, dataQuality.text()];
-            case 10:
+            case 9:
                 textQuality = _g.sent();
                 textQuality = textQuality.split("\n").filter(function (line) { return line.indexOf("/playlist.m3u8") != -1; });
                 libs.log({ textQuality: textQuality }, PROVIDER, "TEXT QUALITY");
                 if (!textQuality) {
-                    return [3, 13];
+                    return [3, 12];
                 }
                 directQuality = [];
                 for (_f = 0, textQuality_1 = textQuality; _f < textQuality_1.length; _f++) {
@@ -245,32 +146,31 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 libs.log({ directQuality: directQuality }, PROVIDER, "DIRECT QUALITY");
                 if (!directQuality || directQuality.length == 0) {
-                    return [3, 13];
+                    return [3, 12];
                 }
                 directQuality = _.orderBy(directQuality, ['quality'], ['desc']);
                 libs.log({ directQuality: directQuality }, PROVIDER, "ORDERED DIRECT QUALITY");
                 libs.embed_callback(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank++, [], directQuality, headers, {
                     "type": "m3u8"
                 });
-                return [3, 13];
-            case 11:
+                return [3, 12];
+            case 10:
                 libs.embed_callback(source.url, PROVIDER, item, 'Hls', callback, rank++, [], [{ file: source.url, quality: 1080 }], headers, source.url.indexOf(".m3u8") != -1 ? {
                     type: "m3u8"
                 } : {});
-                return [3, 13];
-            case 12:
+                return [3, 12];
+            case 11:
                 errorRequest_1 = _g.sent();
-                return [3, 13];
-            case 13:
+                return [3, 12];
+            case 12:
                 _i++;
-                return [3, 5];
-            case 14: return [3, 16];
-            case 15:
+                return [3, 4];
+            case 13: return [3, 15];
+            case 14:
                 e_1 = _g.sent();
                 libs.log({ e: e_1 }, PROVIDER, "ERROR");
-                console.log('[RN-Fetch][XVIP-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
-                return [3, 16];
-            case 16: return [2];
+                return [3, 15];
+            case 15: return [2];
         }
     });
 }); };
