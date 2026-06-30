@@ -35,91 +35,157 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    function getRandomBytes(size) {
-        return Array.from({ length: size }, function () {
-            return Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
-        }).join('');
+var QHEXA_DOMAIN = 'https://theemoviedb.hexa.su';
+var QHEXA_ENC_TOKEN_URL = 'https://enc-dec.app/api/enc-hexa';
+var QHEXA_DEC_URL = 'https://enc-dec.app/api/dec-hexa';
+var QHEXA_REFERER = 'https://hexa.su/';
+var QHEXA_PROVIDER = 'QHexaWatch';
+var QHEXA_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
+function qhexaGetRandomKey() {
+    var out = '';
+    for (var i = 0; i < 32; i++) {
+        out += Math.floor(Math.random() * 256).toString(16).padStart(2, '0');
     }
-    var DOMAIN, PROVIDER, urlData, keyCap, dataCap, key, headers, directEncrypt, dataDirectEncrypt, decrypt, dataDecrypt, _i, _a, item, e_1;
-    return __generator(this, function (_b) {
-        switch (_b.label) {
+    return out;
+}
+function qhexaBuildApiUrl(movieInfo) {
+    if (movieInfo.type == 'tv') {
+        return QHEXA_DOMAIN + '/api/tmdb/tv/' + movieInfo.tmdb_id + '/season/' + movieInfo.season + '/episode/' + movieInfo.episode + '/images';
+    }
+    return QHEXA_DOMAIN + '/api/tmdb/movie/' + movieInfo.tmdb_id + '/images';
+}
+function qhexaIsValidCipherText(text) {
+    if (!text || text.length < 20) {
+        return false;
+    }
+    if (text.indexOf('<html') >= 0 || text.indexOf('<!DOCTYPE') >= 0) {
+        return false;
+    }
+    return true;
+}
+source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
+    var urlData, tokenResponse, tokenJson, capToken, apiKey, headers, apiResponse, cipherText, decryptResponse, decryptJson, sources, playHeaders, rank, _i, sources_1, item, serverName, e_1;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
             case 0:
-                DOMAIN = "https://theemoviedb.hexa.su";
-                PROVIDER = 'QHexaWatch';
-                _b.label = 1;
+                console.log('[RN-Fetch][QHEXA-VERSION] v2-enc-hexa');
+                console.log('[RN-Fetch][QHEXA-TMDB] type=' + movieInfo.type + ' id=' + movieInfo.tmdb_id + (movieInfo.type == 'tv' ? ' s' + movieInfo.season + 'e' + movieInfo.episode : ''));
+                _a.label = 1;
             case 1:
-                _b.trys.push([1, 8, , 9]);
-                urlData = "".concat(DOMAIN, "/api/tmdb/movie/").concat(movieInfo.tmdb_id, "/images");
-                if (movieInfo.type == 'tv') {
-                    urlData = "".concat(DOMAIN, "/api/tmdb/tv/").concat(movieInfo.tmdb_id, "/season/").concat(movieInfo.season, "/episode/").concat(movieInfo.episode, "/images");
-                }
-                return [4, fetch("https://raw.githubusercontent.com/lulunnqqq/mv/refs/heads/main/def.txt")];
+                _a.trys.push([1, 11, , 12]);
+                urlData = qhexaBuildApiUrl(movieInfo);
+                console.log('[RN-Fetch][QHEXA-API] ' + urlData);
+                return [4, fetch(QHEXA_ENC_TOKEN_URL, {
+                        method: 'GET',
+                        headers: {
+                            'user-agent': QHEXA_USER_AGENT,
+                        },
+                    })];
             case 2:
-                keyCap = _b.sent();
-                return [4, keyCap.json()];
-            case 3:
-                dataCap = _b.sent();
-                libs.log({ dataCap: dataCap, urlData: urlData }, PROVIDER, 'KEY CAP');
-                if (!dataCap || !dataCap.token) {
+                tokenResponse = _a.sent();
+                console.log('[RN-Fetch][QHEXA-TOKEN-HTTP] ' + tokenResponse.status);
+                if (!tokenResponse.ok) {
+                    console.log('[RN-Fetch][QHEXA-SKIP] token-http-' + tokenResponse.status);
                     return [2];
                 }
-                key = getRandomBytes(32);
+                return [4, tokenResponse.json()];
+            case 3:
+                tokenJson = _a.sent();
+                capToken = tokenJson && tokenJson.result ? tokenJson.result.token : '';
+                libs.log({ tokenJson: tokenJson, urlData: urlData }, QHEXA_PROVIDER, 'TOKEN');
+                console.log('[RN-Fetch][QHEXA-TOKEN] ' + (capToken ? String(capToken).substring(0, 40) + '...' : 'empty'));
+                if (!capToken) {
+                    console.log('[RN-Fetch][QHEXA-SKIP] token-empty');
+                    return [2];
+                }
+                apiKey = qhexaGetRandomKey();
                 headers = {
-                    "user-agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36",
-                    "Referer": "https://hexa.su/",
-                    "Accept": "plain/text",
-                    "X-Api-Key": key,
-                    "X-Fingerprint-Lite": "e9136c41504646444",
-                    "x-cap-token": dataCap.token,
-                    "x-server": "alpha"
+                    'user-agent': QHEXA_USER_AGENT,
+                    Referer: QHEXA_REFERER,
+                    Accept: 'plain/text',
+                    'X-Api-Key': apiKey,
+                    'X-Fingerprint-Lite': 'e9136c41504646444',
+                    'x-cap-token': capToken,
                 };
                 return [4, fetch(urlData, {
-                        method: "GET",
-                        headers: headers
+                        method: 'GET',
+                        headers: headers,
                     })];
             case 4:
-                directEncrypt = _b.sent();
-                return [4, directEncrypt.text()];
-            case 5:
-                dataDirectEncrypt = _b.sent();
-                libs.log({ dataDirectEncrypt: dataDirectEncrypt, key: key }, PROVIDER, 'DATA ENCRYPT');
-                return [4, fetch('https://enc-dec.app/api/dec-hexa', {
-                        headers: {
-                            "content-type": "application/json",
-                        },
-                        method: "POST",
-                        body: JSON.stringify({
-                            text: dataDirectEncrypt,
-                            key: key
-                        })
-                    })];
-            case 6:
-                decrypt = _b.sent();
-                return [4, decrypt.json()];
-            case 7:
-                dataDecrypt = _b.sent();
-                libs.log({ dataDecrypt: dataDecrypt }, PROVIDER, 'DATA DECRYPT');
-                if (dataDecrypt.status != 200 || !dataDecrypt.result || !dataDecrypt.result.sources.length) {
+                apiResponse = _a.sent();
+                console.log('[RN-Fetch][QHEXA-CIPHER-HTTP] ' + apiResponse.status);
+                if (!apiResponse.ok) {
+                    console.log('[RN-Fetch][QHEXA-SKIP] cipher-http-' + apiResponse.status);
                     return [2];
                 }
-                for (_i = 0, _a = dataDecrypt.result.sources; _i < _a.length; _i++) {
-                    item = _a[_i];
-                    libs.embed_callback(item.url, PROVIDER, PROVIDER, 'Hls', callback, 1, [], [{ file: item.url, quality: 1080 }], {
-                        "Referer": "https://hexa.su/",
-                        "Origin": "https://hexa.su",
-                        "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
-                    }, {
-                        type: "m3u8",
-                    });
-                    break;
+                return [4, apiResponse.text()];
+            case 5:
+                cipherText = _a.sent();
+                libs.log({ cipherLen: cipherText ? cipherText.length : 0, apiKey: apiKey }, QHEXA_PROVIDER, 'CIPHER');
+                console.log('[RN-Fetch][QHEXA-CIPHER] len=' + (cipherText ? cipherText.length : 0));
+                if (!qhexaIsValidCipherText(cipherText)) {
+                    console.log('[RN-Fetch][QHEXA-SKIP] cipher-invalid');
+                    return [2];
                 }
-                return [3, 9];
+                return [4, fetch(QHEXA_DEC_URL, {
+                        method: 'POST',
+                        headers: {
+                            'content-type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            text: cipherText,
+                            key: apiKey,
+                        }),
+                    })];
+            case 6:
+                decryptResponse = _a.sent();
+                console.log('[RN-Fetch][QHEXA-DECRYPT-HTTP] ' + decryptResponse.status);
+                if (!decryptResponse.ok) {
+                    console.log('[RN-Fetch][QHEXA-SKIP] decrypt-http-' + decryptResponse.status);
+                    return [2];
+                }
+                return [4, decryptResponse.json()];
+            case 7:
+                decryptJson = _a.sent();
+                libs.log({ decryptJson: decryptJson }, QHEXA_PROVIDER, 'DECRYPT');
+                sources = decryptJson && decryptJson.result && decryptJson.result.sources ? decryptJson.result.sources : [];
+                console.log('[RN-Fetch][QHEXA-SOURCES] count=' + sources.length);
+                if (!sources.length) {
+                    console.log('[RN-Fetch][QHEXA-SKIP] sources-empty');
+                    return [2];
+                }
+                playHeaders = {
+                    Referer: QHEXA_REFERER,
+                    Origin: 'https://hexa.su',
+                    'user-agent': QHEXA_USER_AGENT,
+                };
+                rank = 1;
+                _i = 0, sources_1 = sources;
+                _a.label = 8;
             case 8:
-                e_1 = _b.sent();
-                libs.log(e_1, PROVIDER, 'ERROR');
-                return [3, 9];
-            case 9: return [2, true];
+                if (!(_i < sources_1.length)) return [3, 12];
+                item = sources_1[_i];
+                if (!item || !item.url) {
+                    return [3, 9];
+                }
+                serverName = item.server ? String(item.server) : 'server' + rank;
+                libs.log({ server: serverName, file: item.url }, QHEXA_PROVIDER, 'FILE');
+                console.log('[RN-Fetch][QHEXA-PLAY] ' + serverName + ' ' + String(item.url).substring(0, 120));
+                libs.embed_callback(item.url, QHEXA_PROVIDER, QHEXA_PROVIDER + '-' + serverName, 'Hls', callback, rank, [], [{ file: item.url, quality: 1080 }], playHeaders, {
+                    type: 'm3u8',
+                });
+                rank++;
+                _a.label = 9;
+            case 9:
+                _i++;
+                return [3, 8];
+            case 10: return [3, 12];
+            case 11:
+                e_1 = _a.sent();
+                libs.log({ e: e_1 }, QHEXA_PROVIDER, 'ERROR');
+                console.log('[RN-Fetch][QHEXA-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
+                return [3, 12];
+            case 12: return [2, true];
         }
     });
 }); };
