@@ -70,17 +70,23 @@ function xvidsrcvipEncryptWithLib(lib, movieInfo) {
     return enc.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 function xvidsrcvipBytesToBase64(bytes) {
-    var binary = '';
-    for (var i = 0; i < bytes.length; i++) {
-        binary += String.fromCharCode(bytes[i]);
+    var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+    var result = '';
+    var i = 0;
+    var len = bytes.length;
+    while (i < len) {
+        var byte1 = bytes[i++] & 255;
+        var hasByte2 = i < len;
+        var byte2 = hasByte2 ? bytes[i++] & 255 : 0;
+        var hasByte3 = i < len;
+        var byte3 = hasByte3 ? bytes[i++] & 255 : 0;
+        var triplet = (byte1 << 16) | (byte2 << 8) | byte3;
+        result += chars.charAt((triplet >> 18) & 63);
+        result += chars.charAt((triplet >> 12) & 63);
+        result += hasByte2 ? chars.charAt((triplet >> 6) & 63) : '=';
+        result += hasByte3 ? chars.charAt(triplet & 63) : '=';
     }
-    if (typeof btoa === 'function') {
-        return btoa(binary);
-    }
-    if (typeof global !== 'undefined' && global.Buffer) {
-        return global.Buffer.from(bytes).toString('base64');
-    }
-    return '';
+    return result;
 }
 function xvidsrcvipEncryptWithWebCrypto(movieInfo) {
     return __awaiter(_this, void 0, void 0, function () {
@@ -111,7 +117,12 @@ function xvidsrcvipGetAesJs() {
     if (libs.__xvipAesSingleton && libs.__xvipAesSingleton.ModeOfOperation) {
         return libs.__xvipAesSingleton;
     }
-    libs.__xvipAesSingleton = /*! MIT License. Copyright 2015-2018 Richard Moore <me@ricmoo.com>. See LICENSE.txt. */
+    if (libs.__xvipAesLoading) {
+        return libs.__xvipAesSingleton || null;
+    }
+    libs.__xvipAesLoading = true;
+    try {
+        libs.__xvipAesSingleton = /*! MIT License. Copyright 2015-2018 Richard Moore <me@ricmoo.com>. See LICENSE.txt. */
 (function(root) {
     "use strict";
 
@@ -914,17 +925,33 @@ function xvidsrcvipGetAesJs() {
 
 
 return aesjs;})(typeof globalThis !== "undefined" ? globalThis : this);
+    }
+    finally {
+        libs.__xvipAesLoading = false;
+    }
     return libs.__xvipAesSingleton;
 }
 function xvidsrcvipEncryptPure(movieInfo) {
     var aesjs = xvidsrcvipGetAesJs();
+    if (!aesjs || !aesjs.ModeOfOperation || !aesjs.utils || !aesjs.padding) {
+        console.log('[RN-Fetch][XVIP-PURE] aes-missing');
+        return '';
+    }
     var plain = xvidsrcvipPlainText(movieInfo);
     var keyBytes = aesjs.utils.utf8.toBytes(XVIP_KEY);
     var ivBytes = aesjs.utils.utf8.toBytes(XVIP_KEY.substring(0, 16));
     var plainBytes = aesjs.utils.utf8.toBytes(plain);
     var aesCbc = new aesjs.ModeOfOperation.cbc(keyBytes, ivBytes);
     var encryptedBytes = aesCbc.encrypt(aesjs.padding.pkcs7.pad(plainBytes));
-    return xvidsrcvipBytesToBase64(encryptedBytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    if (!encryptedBytes || !encryptedBytes.length) {
+        console.log('[RN-Fetch][XVIP-PURE] cipher-empty plain=' + plain);
+        return '';
+    }
+    var enc = xvidsrcvipBytesToBase64(encryptedBytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    if (!enc) {
+        console.log('[RN-Fetch][XVIP-PURE] b64-empty len=' + encryptedBytes.length);
+    }
+    return enc;
 }
 function xvidsrcvipBuildCacheKey(movieInfo) {
     return String(movieInfo.tmdb_id) + '|' + String(movieInfo.type) + '|' + String(movieInfo.season || '') + '|' + String(movieInfo.episode || '');
@@ -940,11 +967,18 @@ function xvidsrcvipResolveEnc(movieInfo) {
         return cache[cacheKey];
     }
     var enc = '';
-    try {
-        enc = xvidsrcvipEncryptPure(movieInfo);
-    }
-    catch (pureErr) {
-        console.log('[RN-Fetch][XVIP-PURE-ERR] ' + String(pureErr && pureErr.message ? pureErr.message : pureErr));
+    var attempt = 0;
+    while (attempt < 3 && !enc) {
+        attempt++;
+        try {
+            enc = xvidsrcvipEncryptPure(movieInfo);
+        }
+        catch (pureErr) {
+            console.log('[RN-Fetch][XVIP-PURE-ERR] attempt=' + attempt + ' ' + String(pureErr && pureErr.message ? pureErr.message : pureErr));
+        }
+        if (!enc && attempt < 3) {
+            xvidsrcvipGetAesJs();
+        }
     }
     if (!enc) {
         var lib = xvidsrcvipGetCryptoLib();
@@ -962,6 +996,33 @@ function xvidsrcvipResolveEnc(movieInfo) {
 }
 function xvidsrcvipBuildEnc(movieInfo) {
     return Promise.resolve(xvidsrcvipResolveEnc(movieInfo));
+}
+function xvidsrcvipBuildEncWithRetry(movieInfo) {
+    return __awaiter(_this, void 0, void 0, function () {
+        var enc, attempt;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    enc = '';
+                    attempt = 0;
+                    _a.label = 1;
+                case 1:
+                    if (!(attempt < 5 && !enc)) return [3, 4];
+                    attempt++;
+                    enc = xvidsrcvipResolveEnc(movieInfo);
+                    if (!(!enc && attempt < 5)) return [3, 3];
+                    console.log('[RN-Fetch][XVIP-RETRY] attempt=' + attempt);
+                    return [4, xvidsrcvipSleep(40)];
+                case 2:
+                    _a.sent();
+                    _a.label = 3;
+                case 3:
+                    return [3, 1];
+                case 4:
+                    return [2, enc];
+            }
+        });
+    });
 }
 (function xvidsrcvipWarmAesModule() {
     try {
@@ -984,11 +1045,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v6-rn-libs-global');
+                console.log('[RN-Fetch][XVIP-VERSION] v7-rn-b64-fallback');
                 _g.label = 1;
             case 1:
-                _g.trys.push([1, 13, , 14]);
-                enc = xvidsrcvipResolveEnc(movieInfo);
+                _g.trys.push([1, 14, , 15]);
+                return [4, xvidsrcvipBuildEncWithRetry(movieInfo)];
+            case 2:
+                enc = _g.sent();
                 if (!enc) {
                     console.log('[RN-Fetch][XVIP-SKIP] crypto-not-ready');
                     libs.log({ e: 'crypto not ready' }, PROVIDER, 'ERROR');
@@ -1000,13 +1063,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ urlovo: urlovo }, PROVIDER, "URL");
                 rank = 0;
                 return [4, fetch(urlovo)];
-            case 2:
+            case 3:
                 response = _g.sent();
                 if (!response.ok) {
                     return [2];
                 }
                 return [4, response.json()];
-            case 3:
+            case 4:
                 json = _g.sent();
                 libs.log({ json: json }, PROVIDER, "JSON");
                 _a = json;
