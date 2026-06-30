@@ -72,6 +72,28 @@ function extractIframeUrl(embedHtml) {
     }
     return iframeUrl;
 }
+function extractPlayerEmbed(html) {
+    if (!html) {
+        return '';
+    }
+    var match = html.match(/id\s*=\s*["']player-cover["'][^>]*data-embed\s*=\s*["']([^"']+)/i);
+    if (match) {
+        return decodeHtmlEntities(match[1]);
+    }
+    match = html.match(/data-embed\s*=\s*["']([^"']+)["'][^>]*id\s*=\s*["']player-cover["']/i);
+    if (match) {
+        return decodeHtmlEntities(match[1]);
+    }
+    match = html.match(/data-embed\s*=\s*["']([^"']+)["']/i);
+    if (match) {
+        return decodeHtmlEntities(match[1]);
+    }
+    match = html.match(/<iframe[^>]+src\s*=\s*["']([^"']+)["']/i);
+    if (match) {
+        return '<iframe src="' + decodeHtmlEntities(match[1]) + '"></iframe>';
+    }
+    return '';
+}
 function extractStreamFromText(text) {
     if (!text) {
         return '';
@@ -194,11 +216,11 @@ function lridomovieResolveSlug(movieInfo, parseSearch) {
     return slugDetail;
 }
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var headers, slugDetail, url, parseSearch, detailUrl, pageHtml, pageStream, parseDetail, iframe, iframeUrl, streamHeaders, closeloadHandler, e_1;
+    var headers, slugDetail, url, parseSearch, detailUrl, pageHtml, pageStream, iframe, iframeUrl, streamHeaders, closeloadHandler, e_1;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                console.log('[RN-Fetch][RIDO-VERSION] v5-search-fallback');
+                console.log('[RN-Fetch][RIDO-VERSION] v6-rn-no-cheerio');
                 headers = buildSiteHeaders(DOMAIN + '/');
                 _b.label = 1;
             case 1:
@@ -236,8 +258,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     libs.embed_callback(pageStream, PROVIDER, PROVIDER, 'Hls', callback, 0, [], [{ file: pageStream, quality: 1080 }], streamHeaders, { type: 'm3u8' });
                     return [2, true];
                 }
-                parseDetail = cheerio.load(pageHtml);
-                iframe = parseDetail('#player-cover').attr('data-embed');
+                iframe = extractPlayerEmbed(pageHtml);
                 libs.log({ iframe: iframe }, PROVIDER, 'IFRAME HTML');
                 if (!iframe) {
                     console.log('[RN-Fetch][RIDO-SKIP] embed-empty');
