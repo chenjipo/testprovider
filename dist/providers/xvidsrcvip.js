@@ -36,6 +36,8 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var XVIP_KEY = 'x7k9mPqT2rWvY8zA5bC3nF6hJ2lK4mN9';
+var __xvipAesSingleton = null;
+var __xvipEncCache = {};
 function xvidsrcvipSleep(ms) {
     return new Promise(function (resolve) {
         setTimeout(resolve, ms);
@@ -102,10 +104,10 @@ function xvidsrcvipEncryptWithWebCrypto(movieInfo) {
     });
 }
 function xvidsrcvipGetAesJs() {
-    if (libs.__xvAesJs) {
-        return libs.__xvAesJs;
+    if (__xvipAesSingleton && __xvipAesSingleton.ModeOfOperation) {
+        return __xvipAesSingleton;
     }
-    libs.__xvAesJs = /*! MIT License. Copyright 2015-2018 Richard Moore <me@ricmoo.com>. See LICENSE.txt. */
+    __xvipAesSingleton = /*! MIT License. Copyright 2015-2018 Richard Moore <me@ricmoo.com>. See LICENSE.txt. */
 (function(root) {
     "use strict";
 
@@ -907,8 +909,8 @@ function xvidsrcvipGetAesJs() {
     }
 
 
-return aesjs;})(typeof globalThis !== "undefined" ? globalThis : this);;
-    return libs.__xvAesJs;
+return aesjs;})(typeof globalThis !== "undefined" ? globalThis : this);
+    return __xvipAesSingleton;
 }
 function xvidsrcvipEncryptPure(movieInfo) {
     var aesjs = xvidsrcvipGetAesJs();
@@ -920,43 +922,39 @@ function xvidsrcvipEncryptPure(movieInfo) {
     var encryptedBytes = aesCbc.encrypt(aesjs.padding.pkcs7.pad(plainBytes));
     return xvidsrcvipBytesToBase64(encryptedBytes).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
+function xvidsrcvipBuildCacheKey(movieInfo) {
+    return String(movieInfo.tmdb_id) + '|' + String(movieInfo.type) + '|' + String(movieInfo.season || '') + '|' + String(movieInfo.episode || '');
+}
+function xvidsrcvipResolveEnc(movieInfo) {
+    var cacheKey = xvidsrcvipBuildCacheKey(movieInfo);
+    if (__xvipEncCache[cacheKey]) {
+        return __xvipEncCache[cacheKey];
+    }
+    var enc = '';
+    try {
+        enc = xvidsrcvipEncryptPure(movieInfo);
+    }
+    catch (pureErr) {
+        console.log('[RN-Fetch][XVIP-PURE-ERR] ' + String(pureErr && pureErr.message ? pureErr.message : pureErr));
+    }
+    if (!enc) {
+        var lib = xvidsrcvipGetCryptoLib();
+        if (lib) {
+            enc = xvidsrcvipEncryptWithLib(lib, movieInfo);
+        }
+    }
+    if (enc) {
+        __xvipEncCache[cacheKey] = enc;
+    }
+    return enc;
+}
 function xvidsrcvipBuildEnc(movieInfo) {
-    return __awaiter(_this, void 0, void 0, function () {
-        var lib, pureEnc, webEnc;
-        return __generator(this, function (_a) {
-            switch (_a.label) {
-                case 0:
-                    pureEnc = '';
-                    try {
-                        pureEnc = xvidsrcvipEncryptPure(movieInfo);
-                    }
-                    catch (pureErr) {
-                        console.log('[RN-Fetch][XVIP-PURE-ERR] ' + String(pureErr && pureErr.message ? pureErr.message : pureErr));
-                    }
-                    if (pureEnc) {
-                        return [2, pureEnc];
-                    }
-                    lib = xvidsrcvipGetCryptoLib();
-                    if (lib) {
-                        return [2, xvidsrcvipEncryptWithLib(lib, movieInfo)];
-                    }
-                    if (!(typeof crypto !== 'undefined' && crypto.subtle)) return [3, 2];
-                    return [4, xvidsrcvipEncryptWithWebCrypto(movieInfo)];
-                case 1:
-                    webEnc = _a.sent();
-                    if (webEnc) {
-                        return [2, webEnc];
-                    }
-                    _a.label = 2;
-                case 2: return [2, ''];
-            }
-        });
-    });
+    return Promise.resolve(xvidsrcvipResolveEnc(movieInfo));
 }
 (function xvidsrcvipWarmAesModule() {
     try {
-        xvidsrcvipGetAesJs();
-        console.log('[RN-Fetch][XVIP-AES] warm-ok');
+        __xvipAesSingleton = xvidsrcvipGetAesJs();
+        console.log('[RN-Fetch][XVIP-AES] warm-ok singleton=' + (__xvipAesSingleton && __xvipAesSingleton.ModeOfOperation ? 'yes' : 'no'));
     }
     catch (warmErr) {
         console.log('[RN-Fetch][XVIP-AES-WARM] ' + String(warmErr && warmErr.message ? warmErr.message : warmErr));
@@ -974,7 +972,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v4-rn-pure-first');
+                console.log('[RN-Fetch][XVIP-VERSION] v5-rn-enc-cache');
                 _g.label = 1;
             case 1:
                 _g.trys.push([1, 15, , 16]);
