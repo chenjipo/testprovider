@@ -119,27 +119,115 @@ function ymoviesSleep(ms) {
         setTimeout(resolve, ms);
     });
 }
+function ymoviesGetGlobalRoot() {
+    if (typeof globalThis !== 'undefined') {
+        return globalThis;
+    }
+    if (typeof global !== 'undefined') {
+        return global;
+    }
+    return {};
+}
+function ymoviesIsCryptoLib(lib) {
+    return !!(lib && lib.AES && lib.enc && lib.enc.Base64 && lib.lib);
+}
+function ymoviesSaveCrypto(lib) {
+    if (!ymoviesIsCryptoLib(lib)) {
+        return;
+    }
+    if (typeof libs !== 'undefined' && libs) {
+        libs.__fstreamCrypto = lib;
+    }
+    ymoviesGetGlobalRoot().__fstreamCrypto = lib;
+}
+function ymoviesLoadCryptoFromCache() {
+    if (typeof libs !== 'undefined' && libs && ymoviesIsCryptoLib(libs.__fstreamCrypto)) {
+        return libs.__fstreamCrypto;
+    }
+    var root = ymoviesGetGlobalRoot();
+    if (ymoviesIsCryptoLib(root.__fstreamCrypto)) {
+        ymoviesSaveCrypto(root.__fstreamCrypto);
+        console.log('[RN-Fetch][YMOVIES-CRYPTO] global-cache');
+        return root.__fstreamCrypto;
+    }
+    return null;
+}
+function ymoviesResolveGlobalCrypto() {
+    var root = ymoviesGetGlobalRoot();
+    var candidates = [];
+    if (typeof cryptoS !== 'undefined') {
+        candidates.push(cryptoS);
+    }
+    if (root.cryptoS) {
+        candidates.push(root.cryptoS);
+    }
+    if (typeof CryptoJS !== 'undefined') {
+        candidates.push(CryptoJS);
+    }
+    if (root.CryptoJS) {
+        candidates.push(root.CryptoJS);
+    }
+    for (var i = 0; i < candidates.length; i++) {
+        if (ymoviesIsCryptoLib(candidates[i])) {
+            return candidates[i];
+        }
+    }
+    return null;
+}
+function ymoviesEnsureRnCryptoPolyfill() {
+    var root = ymoviesGetGlobalRoot();
+    if (root.crypto && typeof root.crypto.getRandomValues === 'function') {
+        return;
+    }
+    var polyfill = {
+        getRandomValues: function (arr) {
+            for (var i = 0; i < arr.length; i++) {
+                arr[i] = Math.floor(Math.random() * 256);
+            }
+            return arr;
+        },
+    };
+    root.crypto = polyfill;
+    if (typeof global !== 'undefined' && !global.crypto) {
+        global.crypto = polyfill;
+    }
+}
+function ymoviesPatchCryptoJsRandom(lib) {
+    if (!lib || !lib.lib || !lib.lib.WordArray) {
+        return;
+    }
+    lib.lib.WordArray.random = function (nBytes) {
+        var words = [];
+        for (var i = 0; i < nBytes; i += 4) {
+            words.push((Math.random() * 0x100000000) | 0);
+        }
+        return lib.lib.WordArray.create(words, nBytes);
+    };
+    if (lib.lib.SecureRandom && lib.lib.SecureRandom.prototype) {
+        lib.lib.SecureRandom.prototype.nextBytes = function (words) {
+            for (var i = 0; i < words.length; i += 4) {
+                words[i] = (Math.random() * 0x100000000) | 0;
+            }
+        };
+    }
+}
 function ymoviesEnsureCrypto() {
     return __awaiter(_this, void 0, void 0, function () {
-        var lib, code, loadErr_1;
+        var cached, lib, code, loadErr_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    if (libs && libs.__fstreamCrypto && libs.__fstreamCrypto.AES && libs.__fstreamCrypto.enc) {
-                        return [2, libs.__fstreamCrypto];
+                    cached = ymoviesLoadCryptoFromCache();
+                    if (cached) {
+                        return [2, cached];
                     }
-                    lib = null;
-                    if (typeof cryptoS !== 'undefined' && cryptoS && cryptoS.AES && cryptoS.enc) {
-                        lib = cryptoS;
-                    }
-                    else if (typeof CryptoJS !== 'undefined' && CryptoJS && CryptoJS.AES && CryptoJS.enc) {
-                        lib = CryptoJS;
-                    }
+                    lib = ymoviesResolveGlobalCrypto();
                     if (lib) {
-                        libs.__fstreamCrypto = lib;
+                        ymoviesSaveCrypto(lib);
                         console.log('[RN-Fetch][YMOVIES-CRYPTO] global-ok');
                         return [2, lib];
                     }
+                    ymoviesEnsureRnCryptoPolyfill();
                     _a.label = 1;
                 case 1:
                     _a.trys.push([1, 3, , 4]);
@@ -150,9 +238,10 @@ function ymoviesEnsureCrypto() {
                     code = _a.sent();
                     if (code && code.length > 1000) {
                         eval(code);
-                        if (typeof CryptoJS !== 'undefined' && CryptoJS && CryptoJS.AES && CryptoJS.enc) {
-                            libs.__fstreamCrypto = CryptoJS;
-                            console.log('[RN-Fetch][YMOVIES-CRYPTO] cdn-loaded');
+                        if (typeof CryptoJS !== 'undefined' && ymoviesIsCryptoLib(CryptoJS)) {
+                            ymoviesPatchCryptoJsRandom(CryptoJS);
+                            ymoviesSaveCrypto(CryptoJS);
+                            console.log('[RN-Fetch][YMOVIES-CRYPTO] cdn-patched');
                             return [2, CryptoJS];
                         }
                     }
@@ -283,7 +372,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][YMOVIES-VERSION] v5-rn-crypto-persist');
+                console.log('[RN-Fetch][YMOVIES-VERSION] v6-rn-crypto-global');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 9, , 10]);

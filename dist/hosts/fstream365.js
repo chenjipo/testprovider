@@ -1276,18 +1276,46 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
  }
 };
 function fstream365GetCrypto() {
-    if (typeof libs !== 'undefined' && libs && libs.__fstreamCrypto && libs.__fstreamCrypto.AES && libs.__fstreamCrypto.enc) {
+    function fstream365IsCryptoLib(lib) {
+        return !!(lib && lib.AES && lib.enc && lib.enc.Base64 && lib.lib);
+    }
+    function fstream365GetRoot() {
+        if (typeof globalThis !== 'undefined') {
+            return globalThis;
+        }
+        if (typeof global !== 'undefined') {
+            return global;
+        }
+        return {};
+    }
+    var root = fstream365GetRoot();
+    if (typeof libs !== 'undefined' && libs && fstream365IsCryptoLib(libs.__fstreamCrypto)) {
         return libs.__fstreamCrypto;
     }
+    if (fstream365IsCryptoLib(root.__fstreamCrypto)) {
+        if (typeof libs !== 'undefined' && libs) {
+            libs.__fstreamCrypto = root.__fstreamCrypto;
+        }
+        return root.__fstreamCrypto;
+    }
     var lib = null;
-    if (typeof cryptoS !== 'undefined' && cryptoS && cryptoS.AES && cryptoS.enc) {
+    if (typeof cryptoS !== 'undefined' && fstream365IsCryptoLib(cryptoS)) {
         lib = cryptoS;
     }
-    else if (typeof CryptoJS !== 'undefined' && CryptoJS && CryptoJS.AES && CryptoJS.enc) {
+    else if (root.cryptoS && fstream365IsCryptoLib(root.cryptoS)) {
+        lib = root.cryptoS;
+    }
+    else if (typeof CryptoJS !== 'undefined' && fstream365IsCryptoLib(CryptoJS)) {
         lib = CryptoJS;
     }
-    if (lib && typeof libs !== 'undefined' && libs) {
-        libs.__fstreamCrypto = lib;
+    else if (root.CryptoJS && fstream365IsCryptoLib(root.CryptoJS)) {
+        lib = root.CryptoJS;
+    }
+    if (lib) {
+        if (typeof libs !== 'undefined' && libs) {
+            libs.__fstreamCrypto = lib;
+        }
+        root.__fstreamCrypto = lib;
     }
     return lib;
 }
@@ -1370,7 +1398,7 @@ hosts["fstream365"] = function (url, movieInfo, provider, config, callback) { re
  console.log('[RN-Fetch][FSTREAM365-SKIP] crypto-missing');
  return [2];
  }
- console.log('[RN-Fetch][FSTREAM365-VERSION] v9-crypto-cache');
+ console.log('[RN-Fetch][FSTREAM365-VERSION] v10-rn-random-fix');
  CryptoJSAesJson = {
  stringify: function (_0x475ee0) {
  var _0xefa3d6 = {
