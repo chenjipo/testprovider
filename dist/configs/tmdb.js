@@ -35,39 +35,64 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-libs.tmdb_movie_info = function (id, lang) { return __awaiter(_this, void 0, void 0, function () {
-    var configData, API_KEY, url, result;
+libs.TMDB_API_KEYS = [
+    '4e44c9029b1270a41c75c666510b46f5',
+    '4219e299c89411838049ab0dab19ebd5',
+];
+function tmdbRequestGet(path, lang) { return __awaiter(_this, void 0, void 0, function () {
+    var keyIndex, apiKey, url, result;
     return __generator(this, function (_a) {
         switch (_a.label) {
-            case 0: return [4, libs.request_get("https://raw.githubusercontent.com/lulunnqqq/configs/main/data.json")];
+            case 0:
+                keyIndex = 0;
+                _a.label = 1;
             case 1:
-                configData = _a.sent();
-                API_KEY = configData.tmdb_apikey.web_key;
-                url = "https://api.themoviedb.org/3/movie/".concat(id, "?api_key=").concat(API_KEY, "&language=").concat(lang);
-                return [4, libs.request_get(url)];
+                if (!(keyIndex < libs.TMDB_API_KEYS.length)) return [3, 6];
+                apiKey = libs.TMDB_API_KEYS[keyIndex];
+                url = 'https://api.themoviedb.org/3/' + path + (path.indexOf('?') >= 0 ? '&' : '?') + 'api_key=' + encodeURIComponent(apiKey) + (lang ? '&language=' + encodeURIComponent(lang) : '');
+                _a.label = 2;
             case 2:
+                _a.trys.push([2, 4, , 5]);
+                return [4, libs.request_get(url)];
+            case 3:
+                result = _a.sent();
+                if (result && !result.status_code) {
+                    return [2, result];
+                }
+                return [3, 5];
+            case 4:
+                _a.sent();
+                return [3, 5];
+            case 5:
+                keyIndex++;
+                return [3, 1];
+            case 6: return [2, null];
+        }
+    });
+}); }
+libs.tmdb_movie_info = function (id, lang) { return __awaiter(_this, void 0, void 0, function () {
+    var result;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0: return [4, tmdbRequestGet('movie/' + id, lang)];
+            case 1:
                 result = _a.sent();
                 return [2, {
-                        title: result.title,
+                        title: result && result.title ? result.title : '',
                     }];
         }
     });
 }); };
 libs.tmdb_tv_info = function (id, lang) { return __awaiter(_this, void 0, void 0, function () {
-    var configData, API_KEY, url, result;
+    var result;
     return __generator(this, function (_a) {
         switch (_a.label) {
-            case 0: return [4, libs.request_get("https://raw.githubusercontent.com/lulunnqqq/configs/main/data.json")];
+            case 0: return [4, tmdbRequestGet('tv/' + id, lang)];
             case 1:
-                configData = _a.sent();
-                API_KEY = configData.tmdb_apikey.web_key;
-                url = "https://api.themoviedb.org/3/tv/".concat(id, "?api_key=").concat(API_KEY, "&language=").concat(lang);
-                return [4, libs.request_get(url)];
-            case 2:
                 result = _a.sent();
                 console.log({ result: result }, 'tmdb_tv_info');
                 return [2, {
-                        title: result.name,
+                        title: result && result.name ? result.name : '',
                     }];
         }
     });

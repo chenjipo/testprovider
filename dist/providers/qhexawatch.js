@@ -44,6 +44,17 @@ var QHEXA_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWeb
 var QHEXA_CAP_CACHE_MS = 50 * 60 * 1000;
 var QHEXA_TOKEN_RETRY_MAX = 4;
 var QHEXA_TOKEN_RETRY_MS = 3000;
+var QHEXA_TMDB_API_KEYS = libs.TMDB_API_KEYS || [
+    '4e44c9029b1270a41c75c666510b46f5',
+    '4219e299c89411838049ab0dab19ebd5',
+];
+function qhexaFetchTmdbFind(imdbId, apiKey) {
+    var findUrl = 'https://api.themoviedb.org/3/find/' + encodeURIComponent(imdbId) + '?external_source=imdb_id&api_key=' + encodeURIComponent(apiKey);
+    return libs.request_get(findUrl);
+}
+function qhexaListTmdbApiKeys() {
+    return Promise.resolve(QHEXA_TMDB_API_KEYS.slice());
+}
 function qhexaSleep(ms) {
     return new Promise(function (resolve) {
         setTimeout(resolve, ms);
@@ -56,14 +67,129 @@ function qhexaGetRandomKey() {
     }
     return out;
 }
-function qhexaBuildApiUrl(movieInfo) {
+function qhexaBuildApiUrl(movieInfo, tmdbId) {
+    var id = tmdbId !== undefined && tmdbId !== null && tmdbId !== '' ? tmdbId : movieInfo.tmdb_id;
     if (movieInfo.type == 'tv') {
-        return QHEXA_DOMAIN + '/api/tmdb/tv/' + movieInfo.tmdb_id + '/season/' + movieInfo.season + '/episode/' + movieInfo.episode + '/images';
+        return QHEXA_DOMAIN + '/api/tmdb/tv/' + id + '/season/' + movieInfo.season + '/episode/' + movieInfo.episode + '/images';
     }
-    return QHEXA_DOMAIN + '/api/tmdb/movie/' + movieInfo.tmdb_id + '/images';
+    return QHEXA_DOMAIN + '/api/tmdb/movie/' + id + '/images';
 }
+function qhexaNormalizeImdbNumeric(raw) {
+    if (!raw) {
+        return '';
+    }
+    return String(raw).replace(/^tt/i, '').trim();
+}
+function qhexaLooksLikeImdbNumeric(raw) {
+    var value = qhexaNormalizeImdbNumeric(raw);
+    if (!value || !/^\d+$/.test(value)) {
+        return false;
+    }
+    if (value.length >= 7 && Number(value) >= 900000) {
+        return true;
+    }
+    return false;
+}
+function qhexaNeedsTmdbResolve(movieInfo) {
+    var rawTmdb = String(movieInfo && movieInfo.tmdb_id !== undefined && movieInfo.tmdb_id !== null ? movieInfo.tmdb_id : '');
+    var imdbNumeric = qhexaNormalizeImdbNumeric(movieInfo && movieInfo.imdb_id ? movieInfo.imdb_id : '');
+    if (!rawTmdb) {
+        return imdbNumeric ? 'tt' + imdbNumeric : '';
+    }
+    if (/^tt/i.test(rawTmdb)) {
+        return 'tt' + qhexaNormalizeImdbNumeric(rawTmdb);
+    }
+    if (imdbNumeric && rawTmdb === imdbNumeric) {
+        return 'tt' + imdbNumeric;
+    }
+    if (!imdbNumeric && qhexaLooksLikeImdbNumeric(rawTmdb)) {
+        return 'tt' + qhexaNormalizeImdbNumeric(rawTmdb);
+    }
+    return '';
+}
+function qhexaGetCachedTmdbId(cacheKey) {
+    var cache = libs.__qhexaTmdbCache;
+    if (cache && cache[cacheKey]) {
+        return cache[cacheKey];
+    }
+    return '';
+}
+function qhexaSetCachedTmdbId(cacheKey, tmdbId) {
+    if (!libs.__qhexaTmdbCache) {
+        libs.__qhexaTmdbCache = {};
+    }
+    libs.__qhexaTmdbCache[cacheKey] = tmdbId;
+}
+function qhexaResolveTmdbId(movieInfo) { return __awaiter(_this, void 0, void 0, function () {
+    var imdbId, cacheKey, cached, apiKeys, keyIndex, apiKey, findResult, resolved, e_1;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                imdbId = qhexaNeedsTmdbResolve(movieInfo);
+                if (!imdbId) {
+                    return [2, String(movieInfo.tmdb_id || '')];
+                }
+                cacheKey = imdbId + '|' + String(movieInfo.type || 'movie');
+                cached = qhexaGetCachedTmdbId(cacheKey);
+                if (cached) {
+                    console.log('[RN-Fetch][QHEXA-TMDB-RESOLVE] source=cache imdb=' + imdbId + ' tmdb=' + cached);
+                    return [2, cached];
+                }
+                _a.label = 1;
+            case 1:
+                _a.trys.push([1, 9, , 10]);
+                return [4, qhexaListTmdbApiKeys()];
+            case 2:
+                apiKeys = _a.sent();
+                if (!apiKeys.length) {
+                    console.log('[RN-Fetch][QHEXA-TMDB-RESOLVE] skip apikey-missing imdb=' + imdbId);
+                    return [2, String(movieInfo.tmdb_id || '')];
+                }
+                keyIndex = 0;
+                _a.label = 3;
+            case 3:
+                if (!(keyIndex < apiKeys.length)) return [3, 8];
+                apiKey = apiKeys[keyIndex];
+                console.log('[RN-Fetch][QHEXA-TMDB-KEY] try=' + (keyIndex + 1) + '/' + apiKeys.length);
+                return [4, qhexaFetchTmdbFind(imdbId, apiKey)];
+            case 4:
+                findResult = _a.sent();
+                resolved = '';
+                if (movieInfo.type == 'tv' && findResult && findResult.tv_results && findResult.tv_results.length) {
+                    resolved = String(findResult.tv_results[0].id);
+                }
+                else if (movieInfo.type != 'tv' && findResult && findResult.movie_results && findResult.movie_results.length) {
+                    resolved = String(findResult.movie_results[0].id);
+                }
+                else if (findResult && findResult.tv_results && findResult.tv_results.length) {
+                    resolved = String(findResult.tv_results[0].id);
+                }
+                else if (findResult && findResult.movie_results && findResult.movie_results.length) {
+                    resolved = String(findResult.movie_results[0].id);
+                }
+                if (!resolved) return [3, 6];
+                qhexaSetCachedTmdbId(cacheKey, resolved);
+                console.log('[RN-Fetch][QHEXA-TMDB-RESOLVE] imdb=' + imdbId + ' tmdb=' + resolved + ' key=' + (keyIndex + 1));
+                return [2, resolved];
+            case 6:
+                keyIndex++;
+                return [3, 3];
+            case 8:
+                console.log('[RN-Fetch][QHEXA-TMDB-RESOLVE] miss imdb=' + imdbId);
+                return [2, String(movieInfo.tmdb_id || '')];
+            case 9:
+                e_1 = _a.sent();
+                console.log('[RN-Fetch][QHEXA-TMDB-RESOLVE-ERR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
+                return [2, String(movieInfo.tmdb_id || '')];
+            case 10: return [2];
+        }
+    });
+}); }
 function qhexaIsValidCipherText(text) {
     if (!text || text.length < 20) {
+        return false;
+    }
+    if (text.charAt(0) === '{' || text.charAt(0) === '[') {
         return false;
     }
     if (text.indexOf('<html') >= 0 || text.indexOf('<!DOCTYPE') >= 0) {
@@ -71,6 +197,75 @@ function qhexaIsValidCipherText(text) {
     }
     return true;
 }
+function qhexaFetchCipherAndSources(urlData, capToken) { return __awaiter(_this, void 0, void 0, function () {
+    var apiKey, headers, apiResponse, cipherText, decryptResponse, decryptJson, sources;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                apiKey = qhexaGetRandomKey();
+                headers = {
+                    'user-agent': QHEXA_USER_AGENT,
+                    Referer: QHEXA_REFERER,
+                    Accept: 'text/plain',
+                    'X-Api-Key': apiKey,
+                    'X-Fingerprint-Lite': 'e9136c41504646444',
+                    'x-cap-token': capToken,
+                };
+                return [4, fetch(urlData, {
+                        method: 'GET',
+                        headers: headers,
+                    })];
+            case 1:
+                apiResponse = _a.sent();
+                console.log('[RN-Fetch][QHEXA-CIPHER-HTTP] ' + apiResponse.status + ' ' + urlData);
+                if (!apiResponse.ok) {
+                    return [4, apiResponse.text().catch(function () { return ''; })];
+                }
+                return [3, 3];
+            case 2:
+                cipherText = _a.sent();
+                console.log('[RN-Fetch][QHEXA-SKIP] cipher-http-' + apiResponse.status + ' body=' + String(cipherText).substring(0, 80));
+                return [2, { sources: [], reason: 'cipher-http-' + apiResponse.status }];
+            case 3: return [4, apiResponse.text()];
+            case 4:
+                cipherText = _a.sent();
+                libs.log({ cipherLen: cipherText ? cipherText.length : 0, apiKey: apiKey, urlData: urlData }, QHEXA_PROVIDER, 'CIPHER');
+                console.log('[RN-Fetch][QHEXA-CIPHER] len=' + (cipherText ? cipherText.length : 0));
+                if (!qhexaIsValidCipherText(cipherText)) {
+                    console.log('[RN-Fetch][QHEXA-SKIP] cipher-invalid body=' + String(cipherText).substring(0, 80));
+                    return [2, { sources: [], reason: 'cipher-invalid' }];
+                }
+                return [4, fetch(QHEXA_DEC_URL, {
+                        method: 'POST',
+                        headers: {
+                            'content-type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            text: cipherText,
+                            key: apiKey,
+                        }),
+                    })];
+            case 5:
+                decryptResponse = _a.sent();
+                console.log('[RN-Fetch][QHEXA-DECRYPT-HTTP] ' + decryptResponse.status);
+                if (!decryptResponse.ok) {
+                    console.log('[RN-Fetch][QHEXA-SKIP] decrypt-http-' + decryptResponse.status);
+                    return [2, { sources: [], reason: 'decrypt-http-' + decryptResponse.status }];
+                }
+                return [4, decryptResponse.json()];
+            case 6:
+                decryptJson = _a.sent();
+                libs.log({ decryptJson: decryptJson }, QHEXA_PROVIDER, 'DECRYPT');
+                sources = decryptJson && decryptJson.result && decryptJson.result.sources ? decryptJson.result.sources : [];
+                console.log('[RN-Fetch][QHEXA-SOURCES] count=' + sources.length);
+                if (!sources.length) {
+                    console.log('[RN-Fetch][QHEXA-SKIP] sources-empty');
+                    return [2, { sources: [], reason: 'sources-empty' }];
+                }
+                return [2, { sources: sources, reason: '' }];
+        }
+    });
+}); }
 function qhexaGetCachedToken() {
     var cache = libs.__qhexaCapCache;
     if (cache && cache.token && cache.expiresAt > Date.now()) {
@@ -212,79 +407,37 @@ function qhexaFetchCapTokenInner() { return __awaiter(_this, void 0, void 0, fun
     });
 }); }
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var urlData, tokenResult, capToken, apiKey, headers, apiResponse, cipherText, decryptResponse, decryptJson, sources, playHeaders, rank, _i, sources_1, item, serverName, e_1;
+    var rawTmdb, tmdbId, urlData, tokenResult, capToken, fetchResult, sources, playHeaders, rank, _i, sources_1, item, serverName, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][QHEXA-VERSION] v3-enc-retry-cache');
-                console.log('[RN-Fetch][QHEXA-TMDB] type=' + movieInfo.type + ' id=' + movieInfo.tmdb_id + (movieInfo.type == 'tv' ? ' s' + movieInfo.season + 'e' + movieInfo.episode : ''));
+                console.log('[RN-Fetch][QHEXA-VERSION] v4-tmdb-id-resolve');
+                rawTmdb = movieInfo && movieInfo.tmdb_id !== undefined && movieInfo.tmdb_id !== null ? String(movieInfo.tmdb_id) : '';
+                console.log('[RN-Fetch][QHEXA-TMDB] type=' + movieInfo.type + ' id=' + rawTmdb + ' imdb=' + String(movieInfo.imdb_id || '') + (movieInfo.type == 'tv' ? ' s' + movieInfo.season + 'e' + movieInfo.episode : ''));
                 _a.label = 1;
             case 1:
-                _a.trys.push([1, 11, , 12]);
-                urlData = qhexaBuildApiUrl(movieInfo);
+                _a.trys.push([1, 7, , 8]);
+                return [4, qhexaResolveTmdbId(movieInfo)];
+            case 2:
+                tmdbId = _a.sent();
+                if (tmdbId && rawTmdb && tmdbId !== rawTmdb) {
+                    console.log('[RN-Fetch][QHEXA-TMDB-MAP] raw=' + rawTmdb + ' resolved=' + tmdbId);
+                }
+                urlData = qhexaBuildApiUrl(movieInfo, tmdbId);
                 console.log('[RN-Fetch][QHEXA-API] ' + urlData);
                 return [4, qhexaFetchCapToken()];
-            case 2:
+            case 3:
                 tokenResult = _a.sent();
                 capToken = tokenResult && tokenResult.token ? tokenResult.token : '';
                 if (!capToken) {
                     return [2];
                 }
-                libs.log({ tokenSource: tokenResult.source, urlData: urlData }, QHEXA_PROVIDER, 'TOKEN');
-                apiKey = qhexaGetRandomKey();
-                headers = {
-                    'user-agent': QHEXA_USER_AGENT,
-                    Referer: QHEXA_REFERER,
-                    Accept: 'plain/text',
-                    'X-Api-Key': apiKey,
-                    'X-Fingerprint-Lite': 'e9136c41504646444',
-                    'x-cap-token': capToken,
-                };
-                return [4, fetch(urlData, {
-                        method: 'GET',
-                        headers: headers,
-                    })];
-            case 3:
-                apiResponse = _a.sent();
-                console.log('[RN-Fetch][QHEXA-CIPHER-HTTP] ' + apiResponse.status);
-                if (!apiResponse.ok) {
-                    console.log('[RN-Fetch][QHEXA-SKIP] cipher-http-' + apiResponse.status);
-                    return [2];
-                }
-                return [4, apiResponse.text()];
+                libs.log({ tokenSource: tokenResult.source, urlData: urlData, tmdbId: tmdbId }, QHEXA_PROVIDER, 'TOKEN');
+                return [4, qhexaFetchCipherAndSources(urlData, capToken)];
             case 4:
-                cipherText = _a.sent();
-                libs.log({ cipherLen: cipherText ? cipherText.length : 0, apiKey: apiKey }, QHEXA_PROVIDER, 'CIPHER');
-                console.log('[RN-Fetch][QHEXA-CIPHER] len=' + (cipherText ? cipherText.length : 0));
-                if (!qhexaIsValidCipherText(cipherText)) {
-                    console.log('[RN-Fetch][QHEXA-SKIP] cipher-invalid');
-                    return [2];
-                }
-                return [4, fetch(QHEXA_DEC_URL, {
-                        method: 'POST',
-                        headers: {
-                            'content-type': 'application/json',
-                        },
-                        body: JSON.stringify({
-                            text: cipherText,
-                            key: apiKey,
-                        }),
-                    })];
-            case 5:
-                decryptResponse = _a.sent();
-                console.log('[RN-Fetch][QHEXA-DECRYPT-HTTP] ' + decryptResponse.status);
-                if (!decryptResponse.ok) {
-                    console.log('[RN-Fetch][QHEXA-SKIP] decrypt-http-' + decryptResponse.status);
-                    return [2];
-                }
-                return [4, decryptResponse.json()];
-            case 6:
-                decryptJson = _a.sent();
-                libs.log({ decryptJson: decryptJson }, QHEXA_PROVIDER, 'DECRYPT');
-                sources = decryptJson && decryptJson.result && decryptJson.result.sources ? decryptJson.result.sources : [];
-                console.log('[RN-Fetch][QHEXA-SOURCES] count=' + sources.length);
+                fetchResult = _a.sent();
+                sources = fetchResult && fetchResult.sources ? fetchResult.sources : [];
                 if (!sources.length) {
-                    console.log('[RN-Fetch][QHEXA-SKIP] sources-empty');
                     return [2];
                 }
                 playHeaders = {
@@ -294,9 +447,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 };
                 rank = 1;
                 _i = 0, sources_1 = sources;
-                _a.label = 7;
-            case 7:
-                if (!(_i < sources_1.length)) return [3, 10];
+                _a.label = 5;
+            case 5:
+                if (!(_i < sources_1.length)) return [3, 7];
                 item = sources_1[_i];
                 if (item && item.url) {
                     serverName = item.server ? String(item.server) : 'server' + rank;
@@ -308,14 +461,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     rank++;
                 }
                 _i++;
-                return [3, 7];
-            case 10: return [3, 12];
-            case 11:
+                return [3, 5];
+            case 7: return [2, true];
+            case 8:
                 e_1 = _a.sent();
                 libs.log({ e: e_1 }, QHEXA_PROVIDER, 'ERROR');
                 console.log('[RN-Fetch][QHEXA-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
-                return [3, 12];
-            case 12: return [2, true];
+                return [3, 9];
+            case 9: return [2, true];
         }
     });
 }); };
