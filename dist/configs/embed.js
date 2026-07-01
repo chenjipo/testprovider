@@ -141,7 +141,15 @@ if (!libs.__embedCallbackDeliver) {
             }
             console.log({ subs: subs }, "SUBDATAPARSE");
         }
-        callback(__assign({ file: urlDirect, quality: quality, host: host, source: provider, provider: libs.string_provider(provider, rank), subs: parseSubs, direct_quality: direct_quality, headers: headers }, options));
+        var linkRank = rank || 0;
+        var displayProvider = libs.string_provider(provider, linkRank);
+        var linkSource = String(provider || '');
+        var linkHost = String(host || provider || '');
+        if (linkRank > 0) {
+            linkSource = linkSource + '-' + linkRank;
+            linkHost = linkHost + '-' + linkRank;
+        }
+        callback(__assign({ file: urlDirect, quality: quality, host: linkHost, source: linkSource, provider: displayProvider, rank: linkRank, subs: parseSubs, direct_quality: direct_quality, headers: headers }, options));
     };
 }
 libs.__embedCallbackBaseDeliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
@@ -486,10 +494,13 @@ libs.__flushVodDelayQueue = function () {
         }
         var row = items[flushIdx];
         flushIdx++;
-        if (!row[5]) {
-            row[5] = 1;
+        var flushRank = row[5] || 1;
+        row[5] = flushRank;
+        var flushHost = row[2] || row[1];
+        if (flushRank > 0) {
+            flushHost = String(flushHost) + '-' + flushRank;
         }
-        console.log('[RN-Fetch][DELAY-FLUSH-ITEM] provider=' + row[1] + ' rank=' + row[5] + ' idx=' + flushIdx + '/' + items.length);
+        console.log('[RN-Fetch][DELAY-FLUSH-ITEM] provider=' + row[1] + ' rank=' + flushRank + ' host=' + flushHost + ' idx=' + flushIdx + '/' + items.length);
         deliver.apply(libs, row);
         setTimeout(flushNext, staggerMs);
     }
@@ -947,7 +958,7 @@ libs.__installVodBatchDeliverWrap = function () {
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-console.log('[RN-Fetch][EMBED-CFG] delay-v28 min=' + libs.__vodDelayMinMs + 'ms stagger=' + libs.__vodDelayStaggerMs + 'ms cap=' + libs.__vodDelayMaxPerProvider);
+console.log('[RN-Fetch][EMBED-CFG] delay-v29 min=' + libs.__vodDelayMinMs + 'ms stagger=' + libs.__vodDelayStaggerMs + 'ms cap=' + libs.__vodDelayMaxPerProvider);
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {
