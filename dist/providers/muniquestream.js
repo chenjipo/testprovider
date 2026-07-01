@@ -240,16 +240,24 @@ function extractDirectStreamFromPageHtml(pageHtml) {
         return '';
     }
     var html = String(pageHtml);
-    var pattern = /https?:\/\/[^"'\\<>]+\.m3u8[^"'\\<>]*/gi;
+    var patterns = [
+        /https?:\/\/[^"'\\<>]+\.m3u8[^"'\\<>]*/gi,
+        /https?:\/\/hellstorm\.lol\/playlist\/[^"'\\<>]+/gi,
+        /https?:\/\/storrrrrrm\.site\/stream\/[^"'\\<>]+/gi,
+    ];
+    var patternIdx = 0;
     var match = null;
     var bestUrl = '';
     var bestScore = 0;
-    while ((match = pattern.exec(html)) !== null) {
-        var candidate = normalizeMediacachePlaylistUrl(match[0].replace(/\\/g, ''));
-        var score = scorePageStreamCandidate(candidate);
-        if (score > bestScore) {
-            bestScore = score;
-            bestUrl = candidate;
+    for (patternIdx = 0; patternIdx < patterns.length; patternIdx++) {
+        patterns[patternIdx].lastIndex = 0;
+        while ((match = patterns[patternIdx].exec(html)) !== null) {
+            var candidate = normalizeMediacachePlaylistUrl(match[0].replace(/\\/g, ''));
+            var score = scorePageStreamCandidate(candidate);
+            if (score > bestScore) {
+                bestScore = score;
+                bestUrl = candidate;
+            }
         }
     }
     if (bestUrl) {
@@ -407,6 +415,40 @@ function isValidM3u8Body(text) {
 function isMediacacheUrl(url) {
     return !!(url && (url.indexOf('mediacache.cc') >= 0 || url.indexOf('hls.uniquestream.net') >= 0));
 }
+function isPlayableStreamUrl(url) {
+    if (!url) {
+        return false;
+    }
+    var file = String(url);
+    if (file.indexOf('.m3u8') >= 0 || file.indexOf('master.txt') >= 0) {
+        return true;
+    }
+    if (file.indexOf('hellstorm.lol/playlist') >= 0) {
+        return true;
+    }
+    if (file.indexOf('storrrrrrm.site/stream') >= 0) {
+        return true;
+    }
+    if (file.indexOf('workers.dev') >= 0 && file.indexOf('m3u8') >= 0) {
+        return true;
+    }
+    return isMediacacheUrl(file);
+}
+function buildStreamRefererHeaders(pageReferer, streamUrl) {
+    if (isMediacacheUrl(streamUrl)) {
+        return buildHlsRefererHeaders();
+    }
+    var ref = pageReferer || 'https://uniquestream.net/';
+    return {
+        'user-agent': USER_AGENT,
+        'referer': ref,
+        'Referer': ref,
+        'origin': 'https://uniquestream.net',
+        'Origin': 'https://uniquestream.net',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+    };
+}
 function resolveM3u8Url(baseUrl, relativeUrl) {
     if (!relativeUrl) {
         return '';
@@ -479,8 +521,8 @@ function finishUniqueStreamProviderEmbed(playUrl, callback, qualities, headerDir
     if (!sorted.length) {
         sorted = [{ file: playUrl, quality: 1080 }];
     }
-    if (!isMediacacheUrl(playUrl)) {
-        console.log('[RN-Fetch][UNIQUESTREAM-PLAY] skip non-mediacache url=' + String(playUrl).substring(0, 100));
+    if (!isPlayableStreamUrl(playUrl)) {
+        console.log('[RN-Fetch][UNIQUESTREAM-PLAY] skip non-playable url=' + String(playUrl).substring(0, 100));
         return;
     }
     deliverUniqueStreamLink(playUrl, callback, sorted, headerDirect);
@@ -529,7 +571,7 @@ function embedMediacacheMaster(playlistUrl, callback, metadata) { return __await
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                if (!isMediacacheUrl(playlistUrl)) {
+                if (!isPlayableStreamUrl(playlistUrl)) {
                     console.log('[RN-Fetch][UNIQUESTREAM-PROBE] reject url=' + String(playlistUrl).substring(0, 100));
                     return [2];
                 }
@@ -541,6 +583,10 @@ function embedMediacacheMaster(playlistUrl, callback, metadata) { return __await
                 }
                 getUniqueStreamState().embedDone[dedupeKey] = true;
                 console.log('[RN-Fetch][UNIQUESTREAM-PREFETCH] raw=' + rawUrl.substring(0, 80) + ' master=' + masterUrl.substring(0, 80));
+                if (!isMediacacheUrl(masterUrl)) {
+                    finishUniqueStreamProviderEmbed(masterUrl, callback, [{ file: masterUrl, quality: 1080 }], buildStreamRefererHeaders(metadata && metadata.pageReferer, masterUrl), metadata);
+                    return [2];
+                }
                 return [4, probeAndEmbedPlaylist(masterUrl, callback, metadata)];
             case 1:
                 ok = _a.sent();
@@ -754,7 +800,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_a.label) {
             case 0:
                 beginUniqueStreamSession(movieInfo);
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v32-rn-cookie-ajax');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v33-rn-external-m3u8');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 6, , 7]);

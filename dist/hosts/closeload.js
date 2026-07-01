@@ -139,6 +139,35 @@ function isCloseloadHtmlUsable(response, htmlText) {
     }
     return response.status < 500;
 }
+function fetchCloseloadWithRetry(activeUrl, embedHeaders, maxAttempts) {
+    maxAttempts = maxAttempts || 3;
+    function attempt(n) {
+        if (n >= maxAttempts) {
+            return Promise.reject(new Error('closeload-fetch-exhausted'));
+        }
+        var delay = n === 0 ? 0 : (400 + n * 350);
+        return new Promise(function (resolve) {
+            setTimeout(resolve, delay);
+        }).then(function () {
+            return fetch(activeUrl, {
+                headers: embedHeaders,
+                method: 'GET',
+            });
+        }).then(function (response) {
+            return response.text().then(function (htmlText) {
+                if (isCloseloadHtmlUsable(response, htmlText)) {
+                    return { response: response, htmlText: htmlText };
+                }
+                console.log('[RN-Fetch][CLOSELOAD-RETRY] attempt=' + (n + 1) + ' status=' + response.status);
+                return attempt(n + 1);
+            });
+        }).catch(function (err) {
+            console.log('[RN-Fetch][CLOSELOAD-RETRY-ERR] attempt=' + (n + 1) + ' ' + String(err && err.message ? err.message : err));
+            return attempt(n + 1);
+        });
+    }
+    return attempt(0);
+}
 function buildCloseloadWebviewScript() {
     return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function postUrl(u){if(done||!u||String(u).indexOf('http')!==0)return;done=1;pm({step:'cl-url',url:u});}function scan(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m&&m[1])postUrl(m[1]);var m2=h.match(/https?:[^'\"\\s<>]+\\.(?:m3u8|txt)[^'\"\\s<>]*/i);if(m2)postUrl(m2[0]);var m3=h.match(/https?:[^'\"\\s<>]+master\\.txt[^'\"\\s<>]*/i);if(m3)postUrl(m3[0]);}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(!done&&(s.indexOf('.m3u8')>=0||s.indexOf('master.txt')>=0))postUrl(s);return r;});};}hook();pm({step:'cl-boot'});scan();var n=0;var iv=setInterval(function(){scan();n++;if(done||n>80)clearInterval(iv);},400);})();";
 }
@@ -350,7 +379,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
         var dc = eval('(' + fnSrc + ')');
         return dc(parts);
     }
-    var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1, urlCandidates, candidateIdx, activeUrl;
+    var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1, urlCandidates, candidateIdx, activeUrl, fetchResult;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -364,7 +393,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v4-rn-soft-502 candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v5-rn-retry candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
@@ -376,16 +405,12 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 console.log('[RN-Fetch][CLOSELOAD-TRY] idx=' + candidateIdx + ' ' + activeUrl.substring(0, 120));
                 _a.label = 2;
             case 2:
-                _a.trys.push([2, 5, , 6]);
-                return [4, fetch(activeUrl, {
-                        headers: embedHeaders,
-                        method: 'GET',
-                    })];
+                _a.trys.push([2, 4, , 5]);
+                return [4, fetchCloseloadWithRetry(activeUrl, embedHeaders, 3)];
             case 3:
-                response = _a.sent();
-                return [4, response.text()];
-            case 4:
-                htmlText = _a.sent();
+                fetchResult = _a.sent();
+                response = fetchResult.response;
+                htmlText = fetchResult.htmlText;
                 console.log('[RN-Fetch][CLOSELOAD-FETCH] status=' + response.status + ' len=' + (htmlText ? htmlText.length : 0));
                 if (!isCloseloadHtmlUsable(response, htmlText)) {
                     console.log('[RN-Fetch][CLOSELOAD-SKIP] fetch-failed idx=' + candidateIdx + ' status=' + response.status);

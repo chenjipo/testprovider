@@ -102,6 +102,40 @@ function playKeyFromUrl(file) {
 function isMediacacheUrl(url) {
     return !!(url && (url.indexOf('mediacache.cc') >= 0 || url.indexOf('hls.uniquestream.net') >= 0));
 }
+function isPlayableStreamUrl(url) {
+    if (!url) {
+        return false;
+    }
+    var file = String(url);
+    if (file.indexOf('.m3u8') >= 0 || file.indexOf('master.txt') >= 0) {
+        return true;
+    }
+    if (file.indexOf('hellstorm.lol/playlist') >= 0) {
+        return true;
+    }
+    if (file.indexOf('storrrrrrm.site/stream') >= 0) {
+        return true;
+    }
+    if (file.indexOf('workers.dev') >= 0 && file.indexOf('m3u8') >= 0) {
+        return true;
+    }
+    return isMediacacheUrl(file);
+}
+function buildStreamRefererHeaders(pageReferer, streamUrl) {
+    if (isMediacacheUrl(streamUrl)) {
+        return buildHlsRefererHeaders();
+    }
+    var ref = pageReferer || 'https://uniquestream.net/';
+    return {
+        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36',
+        'referer': ref,
+        'Referer': ref,
+        'origin': 'https://uniquestream.net',
+        'Origin': 'https://uniquestream.net',
+        'Accept': '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
+    };
+}
 function normalizeMediacachePlaylistUrl(url) {
     if (!url) {
         return '';
@@ -123,8 +157,8 @@ function finishUniqueStreamCbEmbed(playUrl, provider, callback, qualities, heade
     if (state.played[playKey]) {
         return;
     }
-    if (!isMediacacheUrl(playFile)) {
-        console.log('[RN-Fetch][UNIQUESTREAM-PLAY] skip non-mediacache url=' + String(playFile).substring(0, 100));
+    if (!isPlayableStreamUrl(playFile)) {
+        console.log('[RN-Fetch][UNIQUESTREAM-PLAY] skip non-playable url=' + String(playFile).substring(0, 100));
         return;
     }
     state.played[playKey] = true;
@@ -206,7 +240,7 @@ callbacksEmbed['uniquestream-embed'] = function (dataCallback, provider, host, c
                 }
                 if (data.step === 'us-url' && data.url) {
                     masterUrl = normalizeMediacachePlaylistUrl(String(data.url));
-                    if (!isMediacacheUrl(masterUrl)) {
+                    if (!isPlayableStreamUrl(masterUrl)) {
                         return [2];
                     }
                     dedupeKey = playKeyFromUrl(masterUrl);
@@ -215,6 +249,10 @@ callbacksEmbed['uniquestream-embed'] = function (dataCallback, provider, host, c
                     }
                     getUniqueStreamState().embedDone[dedupeKey] = true;
                     console.log('[RN-Fetch][UNIQUESTREAM-URL] source=' + (data.source || '') + ' url=' + masterUrl.substring(0, 140));
+                    if (!isMediacacheUrl(masterUrl)) {
+                        finishUniqueStreamCbEmbed(masterUrl, provider, callback, [{ file: masterUrl, quality: 1080 }], buildStreamRefererHeaders(metadata && metadata.pageReferer, masterUrl), metadata);
+                        return [2];
+                    }
                     return [4, processMediacacheMaster(masterUrl, provider, callback, metadata)];
                 }
                 return [3, 2];
