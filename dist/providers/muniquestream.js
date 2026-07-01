@@ -129,7 +129,7 @@ function mergeFetchSetCookies(response, cookieHeader) {
 }
 function parsePlayerPageMetaFromHtml(html) {
     if (!html) {
-        return { postID: '', nonce: '', ajaxUrl: DOMAIN + '/wp-admin/admin-ajax.php' };
+        return { postID: '', nonce: '', ajaxUrl: DOMAIN + '/wp-admin/admin-ajax.php', restUrl: DOMAIN + '/wp-json/uniquestream/v1/', restNonce: '' };
     }
     var text = String(html);
     var extraMatch = text.match(/id=["']uniquestream-player-js-extra["'][^>]*>([\s\S]*?)<\/script>/i);
@@ -142,6 +142,8 @@ function parsePlayerPageMetaFromHtml(html) {
                 postID: player.postId ? String(player.postId) : '',
                 nonce: player.nonce || '',
                 ajaxUrl: player.ajaxUrl || DOMAIN + '/wp-admin/admin-ajax.php',
+                restUrl: player.restUrl || DOMAIN + '/wp-json/uniquestream/v1/',
+                restNonce: player.restNonce || '',
             };
         }
         catch (e) {
@@ -149,11 +151,14 @@ function parsePlayerPageMetaFromHtml(html) {
         }
     }
     var nonceMatch = text.match(/"nonce"\s*:\s*"([^"]+)/i);
+    var restNonceMatch = text.match(/"restNonce"\s*:\s*"([^"]+)/i);
     var postMatch = text.match(/class="[^"]*server-btn[^"]*"[^>]*data-post=["']([^"']+)/i);
     return {
         postID: postMatch ? postMatch[1] : '',
         nonce: nonceMatch ? nonceMatch[1] : '',
         ajaxUrl: DOMAIN + '/wp-admin/admin-ajax.php',
+        restUrl: DOMAIN + '/wp-json/uniquestream/v1/',
+        restNonce: restNonceMatch ? restNonceMatch[1] : '',
     };
 }
 function parseServerBtnFromHtml(html) {
@@ -173,20 +178,70 @@ function parseServerBtnFromHtml(html) {
 }
 function buildServerTypes(movieInfo, btnType) {
     var types = [];
-    if (movieInfo.type == 'tv') {
-        types.push('tv');
-        if (btnType && btnType !== 'tv') {
-            types.push(btnType);
+    var preferred = btnType || (movieInfo.type == 'tv' ? 'tv' : 'mv');
+    function pushType(type) {
+        if (!type || types.indexOf(type) >= 0) {
+            return;
         }
+        types.push(type);
+    }
+    pushType(preferred);
+    if (movieInfo.type == 'tv') {
+        pushType('tv');
+        pushType('mv');
     }
     else {
-        types.push('mv');
-        if (btnType && btnType !== 'mv') {
-            types.push(btnType);
-        }
+        pushType('mv');
+        pushType('tv');
     }
     return types;
 }
+function parseRestPlayerEmbedUrl(data) {
+    if (!data || !data.embed_url) {
+        return '';
+    }
+    var embed = String(data.embed_url);
+    if (embed.indexOf('<iframe') >= 0) {
+        return parseIframeFromEmbedResponse({ embed_url: embed });
+    }
+    return normalizeIframeUrl(embed);
+}
+function requestPlayerEmbedRest(restUrl, restNonce, cookieHeader, pageReferer, postID, serverType, serverNum) { return __awaiter(_this, void 0, void 0, function () {
+    var base, targetUrl, response, data;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                if (!restUrl || !restNonce || !postID) {
+                    return [2, null];
+                }
+                base = String(restUrl).replace(/\/$/, '');
+                targetUrl = base + '/player/' + encodeURIComponent(postID) + '/' + encodeURIComponent(serverType) + '/' + encodeURIComponent(String(serverNum || '1'));
+                console.log('[RN-Fetch][UNIQUESTREAM-REST] ' + targetUrl.substring(0, 140));
+                return [4, fetch(targetUrl, {
+                        headers: {
+                            'user-agent': USER_AGENT,
+                            Accept: 'application/json, text/plain, */*',
+                            referer: pageReferer,
+                            origin: DOMAIN,
+                            'X-WP-Nonce': restNonce,
+                            Cookie: cookieHeader || '',
+                        },
+                        method: 'GET',
+                    })];
+            case 1:
+                response = _a.sent();
+                return [4, response.json()];
+            case 2:
+                data = _a.sent();
+                if (data && data.embed_url) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-REST] ok type=' + serverType + ' embed=' + String(data.embed_url).substring(0, 100));
+                    return [2, data];
+                }
+                console.log('[RN-Fetch][UNIQUESTREAM-REST] empty type=' + serverType + ' status=' + response.status);
+                return [2, null];
+        }
+    });
+}); }
 function normalizeIframeUrl(iframeUrl) {
     if (!iframeUrl) {
         return '';
@@ -668,7 +723,7 @@ function fireEmbedHostFallback(iframeUrl, movieInfo, callback, pageReferer) { re
                         embedUrl: iframeUrl,
                         pageReferer: pageReferer,
                     }, callback);
-                }, 8000);
+                }, 20000);
                 return [2];
         }
     });
@@ -712,7 +767,7 @@ function tryRnPrefetchIframe(iframeUrl, pageReferer, cookieHeader) { return __aw
     });
 }); }
 function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, void 0, function () {
-    var urlSearch, pageReferer, varyRes, cache, cookieHeader, pageHtml, pageMeta, serverBtn, postID, nonce, ajaxUrl, serverTypes, parseEmbed, embedHtml, iframeUrl, prefetchUrl;
+    var urlSearch, pageReferer, varyRes, cache, cookieHeader, pageHtml, pageMeta, serverBtn, postID, nonce, ajaxUrl, restUrl, restNonce, serverTypes, _i, serverTypes_1, serverType, restData, restIframe, prefetchUrl, parseEmbed, embedHtml, iframeUrl;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -748,14 +803,51 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
                 postID = pageMeta.postID;
                 nonce = pageMeta.nonce;
                 ajaxUrl = pageMeta.ajaxUrl;
+                restUrl = pageMeta.restUrl;
+                restNonce = pageMeta.restNonce;
                 serverTypes = buildServerTypes(movieInfo, serverBtn.btnType);
                 libs.log({ postID: postID, nonce: nonce, serverTypes: serverTypes, serverNum: serverBtn.serverNum }, PROVIDER, 'PAGE META');
                 if (!postID || !nonce) {
                     console.log('[RN-Fetch][UNIQUESTREAM-SKIP] page-meta-missing post=' + postID + ' nonce=' + (nonce ? 'ok' : 'empty'));
                     return [2, null];
                 }
-                return [4, requestPlayerEmbed(ajaxUrl, cookieHeader, urlSearch, postID, nonce, serverTypes, serverBtn.serverNum)];
+                if (!restNonce) {
+                    return [3, 8];
+                }
+                _i = 0, serverTypes_1 = serverTypes;
+                _a.label = 4;
             case 4:
+                if (!(_i < serverTypes_1.length)) return [3, 8];
+                serverType = serverTypes_1[_i];
+                return [4, requestPlayerEmbedRest(restUrl, restNonce, cookieHeader, pageReferer, postID, serverType, serverBtn.serverNum)];
+            case 5:
+                restData = _a.sent();
+                restIframe = parseRestPlayerEmbedUrl(restData);
+                if (!restIframe) {
+                    return [3, 7];
+                }
+                return [4, tryRnPrefetchIframe(restIframe, pageReferer, cookieHeader)];
+            case 6:
+                prefetchUrl = _a.sent();
+                if (prefetchUrl) {
+                    return [2, {
+                            iframeUrl: restIframe,
+                            pageUrl: urlSearch,
+                            pageReferer: pageReferer,
+                            prefetchUrl: prefetchUrl,
+                        }];
+                }
+                return [2, {
+                        iframeUrl: restIframe,
+                        pageUrl: urlSearch,
+                        pageReferer: pageReferer,
+                        prefetchUrl: '',
+                    }];
+            case 7:
+                _i++;
+                return [3, 4];
+            case 8: return [4, requestPlayerEmbed(ajaxUrl, cookieHeader, urlSearch, postID, nonce, serverTypes, serverBtn.serverNum)];
+            case 9:
                 parseEmbed = _a.sent();
                 libs.log({ parseEmbed: parseEmbed }, PROVIDER, 'EMBED INFO');
                 embedHtml = parseEmbedResponse(parseEmbed);
@@ -783,7 +875,7 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
                 }
                 libs.log({ iframeUrl: iframeUrl }, PROVIDER, 'IFRAME URL');
                 return [4, tryRnPrefetchIframe(iframeUrl, pageReferer, cookieHeader)];
-            case 5:
+            case 10:
                 prefetchUrl = _a.sent();
                 return [2, {
                         iframeUrl: iframeUrl,
@@ -800,7 +892,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_a.label) {
             case 0:
                 beginUniqueStreamSession(movieInfo);
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v33-rn-external-m3u8');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v34-rn-rest-player');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 6, , 7]);
