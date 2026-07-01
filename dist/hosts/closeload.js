@@ -115,8 +115,32 @@ function buildCloseloadFetchHeaders(activeUrl, pageReferer) {
     }
     return headers;
 }
+function isCloseloadHtmlUsable(response, htmlText) {
+    if (!htmlText || htmlText.length < 200) {
+        return false;
+    }
+    if (response.status < 400) {
+        return true;
+    }
+    if (response.status === 404) {
+        return false;
+    }
+    if (htmlText.indexOf('eval(function(p,a,c,k,e,d)') >= 0) {
+        return true;
+    }
+    if (htmlText.match(/let\s+url\s*=\s*['"]https/i)) {
+        return true;
+    }
+    if (htmlText.match(/https?:[^"'\\s]+\.m3u8/i)) {
+        return true;
+    }
+    if (htmlText.indexOf('master.txt') >= 0) {
+        return true;
+    }
+    return response.status < 500;
+}
 function buildCloseloadWebviewScript() {
-    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function postUrl(u){if(done||!u||String(u).indexOf('http')!==0)return;done=1;pm({step:'cl-url',url:u});}function scan(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m&&m[1])postUrl(m[1]);var m2=h.match(/https?:[^'\"\\s<>]+\\.(?:m3u8|txt)[^'\"\\s<>]*/i);if(m2)postUrl(m2[0]);}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(!done&&(s.indexOf('.m3u8')>=0||s.indexOf('master.txt')>=0))postUrl(s);return r;});};}hook();pm({step:'cl-boot'});scan();var n=0;var iv=setInterval(function(){scan();n++;if(done||n>80)clearInterval(iv);},400);})();";
+    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function postUrl(u){if(done||!u||String(u).indexOf('http')!==0)return;done=1;pm({step:'cl-url',url:u});}function scan(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m&&m[1])postUrl(m[1]);var m2=h.match(/https?:[^'\"\\s<>]+\\.(?:m3u8|txt)[^'\"\\s<>]*/i);if(m2)postUrl(m2[0]);var m3=h.match(/https?:[^'\"\\s<>]+master\\.txt[^'\"\\s<>]*/i);if(m3)postUrl(m3[0]);}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(!done&&(s.indexOf('.m3u8')>=0||s.indexOf('master.txt')>=0))postUrl(s);return r;});};}hook();pm({step:'cl-boot'});scan();var n=0;var iv=setInterval(function(){scan();n++;if(done||n>80)clearInterval(iv);},400);})();";
 }
 function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, candidates) {
     var pageReferer = config && config.pageReferer ? config.pageReferer : 'https://ridomovies.is/';
@@ -145,7 +169,7 @@ function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, 
                 },
             },
         });
-    });
+    }, 8000);
 }
 hosts["closeload"] = function (url, movieInfo, provider, config, callback) { return __awaiter(_this, void 0, void 0, function () {
     function dc_o55npDX9dLL(value_parts) {
@@ -340,7 +364,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v3-rn-ridorapid-first candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v4-rn-soft-502 candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
@@ -363,8 +387,8 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
             case 4:
                 htmlText = _a.sent();
                 console.log('[RN-Fetch][CLOSELOAD-FETCH] status=' + response.status + ' len=' + (htmlText ? htmlText.length : 0));
-                if (!htmlText || response.status >= 400) {
-                    console.log('[RN-Fetch][CLOSELOAD-SKIP] fetch-failed idx=' + candidateIdx);
+                if (!isCloseloadHtmlUsable(response, htmlText)) {
+                    console.log('[RN-Fetch][CLOSELOAD-SKIP] fetch-failed idx=' + candidateIdx + ' status=' + response.status);
                     candidateIdx++;
                     return [3, 1];
                 }

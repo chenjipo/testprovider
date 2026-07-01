@@ -61,7 +61,7 @@ function buildPageUrl(movieInfo) {
     return DOMAIN + '/movies/' + libs.url_slug_search(movieInfo) + '-' + movieInfo.year + '/';
 }
 function fetchPageHtml(url, cookieHeader) { return __awaiter(_this, void 0, void 0, function () {
-    var response;
+    var response, html, mergedCookie;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0: return [4, fetch(url, {
@@ -74,10 +74,59 @@ function fetchPageHtml(url, cookieHeader) { return __awaiter(_this, void 0, void
             case 1:
                 response = _a.sent();
                 return [4, response.text()];
-            case 2: return [2, _a.sent()];
+            case 2:
+                html = _a.sent();
+                mergedCookie = mergeFetchSetCookies(response, cookieHeader);
+                if (mergedCookie !== cookieHeader) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-COOKIE] merged page cookies');
+                }
+                return [2, { html: html, cookieHeader: mergedCookie }];
         }
     });
 }); }
+function mergeFetchSetCookies(response, cookieHeader) {
+    var header = String(cookieHeader || '');
+    var setCookieRaw = '';
+    if (response && response.headers) {
+        if (typeof response.headers.getSetCookie === 'function') {
+            setCookieRaw = response.headers.getSetCookie().join('; ');
+        }
+        else {
+            setCookieRaw = response.headers.get('set-cookie') || '';
+        }
+    }
+    if (!setCookieRaw) {
+        return header;
+    }
+    var parts = setCookieRaw.split(/,(?=[^;]+?=)/);
+    var jar = {};
+    var idx = 0;
+    var pair = null;
+    var key = '';
+    var val = '';
+    function ingestCookieLine(line) {
+        pair = String(line || '').split(';')[0];
+        if (!pair || pair.indexOf('=') < 0) {
+            return;
+        }
+        key = pair.substring(0, pair.indexOf('=')).trim();
+        val = pair.substring(pair.indexOf('=') + 1).trim();
+        if (key) {
+            jar[key] = val;
+        }
+    }
+    for (idx = 0; idx < parts.length; idx++) {
+        ingestCookieLine(parts[idx]);
+    }
+    if (header) {
+        header.split(';').forEach(function (chunk) {
+            ingestCookieLine(chunk);
+        });
+    }
+    return Object.keys(jar).map(function (name) {
+        return name + '=' + jar[name];
+    }).join('; ') + ';';
+}
 function parsePlayerPageMetaFromHtml(html) {
     if (!html) {
         return { postID: '', nonce: '', ajaxUrl: DOMAIN + '/wp-admin/admin-ajax.php' };
@@ -573,7 +622,7 @@ function fireEmbedHostFallback(iframeUrl, movieInfo, callback, pageReferer) { re
                         embedUrl: iframeUrl,
                         pageReferer: pageReferer,
                     }, callback);
-                });
+                }, 8000);
                 return [2];
         }
     });
@@ -642,10 +691,12 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
                 return [4, fetchPageHtml(urlSearch, cookieHeader)];
             case 3:
                 pageHtml = _a.sent();
-                if (!pageHtml) {
+                if (!pageHtml || !pageHtml.html) {
                     console.log('[RN-Fetch][UNIQUESTREAM-SKIP] page-empty');
                     return [2, null];
                 }
+                cookieHeader = pageHtml.cookieHeader || cookieHeader;
+                pageHtml = pageHtml.html;
                 pageMeta = parsePlayerPageMetaFromHtml(pageHtml);
                 serverBtn = parseServerBtnFromHtml(pageHtml);
                 postID = pageMeta.postID;
@@ -703,7 +754,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_a.label) {
             case 0:
                 beginUniqueStreamSession(movieInfo);
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v31-rn-page-m3u8');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v32-rn-cookie-ajax');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 6, , 7]);

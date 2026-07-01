@@ -348,6 +348,7 @@ libs.__batchHasProvider = function (provider) {
 };
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 16000;
+libs.__vodSyncWvMaxMs = 45000;
 libs.__vodSyncSingleMs = 16000;
 libs.__vodSyncCoalesceMs = 3500;
 libs.__vodRnWaitMs = 0;
@@ -489,6 +490,7 @@ libs.__isWebviewPumping = function () {
 };
 libs.__finishSyncSession = function (reason) {
     var bag = libs.__getVodSyncBag();
+    var elapsed = 0;
     if (bag.flushed) {
         return;
     }
@@ -502,12 +504,15 @@ libs.__finishSyncSession = function (reason) {
         if (bag.timer) {
             clearTimeout(bag.timer);
         }
-        bag.timer = setTimeout(function () {
-            libs.__scheduleSyncFlush();
-        }, 2000);
-        return;
+        elapsed = bag.startMs ? Date.now() - bag.startMs : 0;
+        if (elapsed < (libs.__vodSyncWvMaxMs || 45000)) {
+            bag.timer = setTimeout(function () {
+                libs.__scheduleSyncFlush();
+            }, 2000);
+            return;
+        }
     }
-    var elapsed = bag.startMs ? Date.now() - bag.startMs : 0;
+    elapsed = bag.startMs ? Date.now() - bag.startMs : 0;
     if (elapsed < libs.__vodSyncMaxMs) {
         if (bag.timer) {
             clearTimeout(bag.timer);
