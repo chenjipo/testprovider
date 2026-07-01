@@ -397,6 +397,116 @@ libs.__shouldSyncVodLinks = function () {
 libs.__shouldBatchVodLinks = function () {
     return false;
 };
+libs.__vodDelayMinMs = 15000;
+libs.__vodDelayQueue = [];
+libs.__vodDelayStartMs = 0;
+libs.__vodDelayFlushed = false;
+libs.__vodDelayLastFlushMs = 0;
+libs.__vodDelayTimer = null;
+libs.__shouldDelayVodLinks = function () {
+    return true;
+};
+libs.__isDelayableVodStream = function (urlDirect) {
+    if (!urlDirect) {
+        return false;
+    }
+    var url = String(urlDirect);
+    if (url.indexOf('.m3u8') >= 0 || url.indexOf('.hls') >= 0 || url.indexOf('master.txt') >= 0) {
+        return true;
+    }
+    if (url.indexOf('closeload.top/master') >= 0 || url.indexOf('ridorapid.closeload.top/master') >= 0) {
+        return true;
+    }
+    if (url.indexOf('playmix.uno/hls') >= 0) {
+        return true;
+    }
+    return false;
+};
+libs.__resetVodDelaySession = function () {
+    libs.__vodDelayStartMs = 0;
+    libs.__vodDelayFlushed = false;
+    libs.__vodDelayLastFlushMs = 0;
+    libs.__vodDelayQueue = [];
+    if (libs.__vodDelayTimer) {
+        clearTimeout(libs.__vodDelayTimer);
+        libs.__vodDelayTimer = null;
+    }
+};
+libs.__ensureVodDelaySession = function () {
+    var now = Date.now();
+    if (libs.__vodDelayFlushed && libs.__vodDelayLastFlushMs && now - libs.__vodDelayLastFlushMs > 4000) {
+        libs.__resetVodDelaySession();
+    }
+    if (!libs.__vodDelayStartMs) {
+        libs.__vodDelayStartMs = now;
+        console.log('[RN-Fetch][DELAY-SESSION] start min=' + libs.__vodDelayMinMs + 'ms');
+    }
+};
+libs.__flushVodDelayQueue = function () {
+    var items = libs.__vodDelayQueue || [];
+    if (!items.length) {
+        libs.__vodDelayFlushed = true;
+        libs.__vodDelayLastFlushMs = Date.now();
+        return;
+    }
+    libs.__vodDelayQueue = [];
+    libs.__vodDelayFlushed = true;
+    libs.__vodDelayLastFlushMs = Date.now();
+    if (libs.__vodDelayTimer) {
+        clearTimeout(libs.__vodDelayTimer);
+        libs.__vodDelayTimer = null;
+    }
+    console.log('[RN-Fetch][DELAY-FLUSH] count=' + items.length);
+    libs.__vodDelayReleasing = true;
+    var deliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
+    for (var i = 0; i < items.length; i++) {
+        console.log('[RN-Fetch][DELAY-FLUSH-ITEM] provider=' + items[i][1]);
+        deliver.apply(libs, items[i]);
+    }
+    libs.__vodDelayReleasing = false;
+};
+libs.__scheduleVodDelayFlush = function () {
+    if (libs.__vodDelayFlushed) {
+        return;
+    }
+    var elapsed = libs.__vodDelayStartMs ? Date.now() - libs.__vodDelayStartMs : 0;
+    var remaining = libs.__vodDelayMinMs - elapsed;
+    if (remaining <= 0) {
+        libs.__flushVodDelayQueue();
+        return;
+    }
+    if (libs.__vodDelayTimer) {
+        clearTimeout(libs.__vodDelayTimer);
+    }
+    libs.__vodDelayTimer = setTimeout(function () {
+        libs.__flushVodDelayQueue();
+    }, remaining + 50);
+};
+libs.__tryQueueVodDelay = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
+    if (libs.__vodDelayReleasing) {
+        return false;
+    }
+    if (!libs.__shouldDelayVodLinks() || !libs.__isDelayableVodStream(urlDirect)) {
+        return false;
+    }
+    if (libs.__vodDelayFlushed) {
+        return false;
+    }
+    libs.__ensureVodDelaySession();
+    var items = libs.__vodDelayQueue || [];
+    var idx = 0;
+    for (idx = 0; idx < items.length; idx++) {
+        if (items[idx][1] === provider && items[idx][0] === urlDirect) {
+            console.log('[RN-Fetch][DELAY-SKIP-DUP] provider=' + provider);
+            return true;
+        }
+    }
+    items.push([urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options]);
+    libs.__vodDelayQueue = items;
+    console.log('[RN-Fetch][DELAY-QUEUE] provider=' + provider + ' total=' + items.length + ' wait=' + Math.max(0, libs.__vodDelayMinMs - (Date.now() - libs.__vodDelayStartMs)) + 'ms');
+    libs.__scheduleVodDelayFlush();
+    return true;
+};
 libs.__pushVodSyncItem = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
     var bag = libs.__getVodSyncBag();
     callback = libs.__unwrapVodCallback(callback);
@@ -616,6 +726,9 @@ libs.beginVodLinkSession = function () {
         libs.__vodSyncFlushed = false;
         libs.__vidlinkDelivered = {};
         libs.__vidlinkPlayLock = {};
+        if (typeof libs.__resetVodDelaySession === 'function') {
+            libs.__resetVodDelaySession();
+        }
         console.log('[RN-Fetch][SYNC-SESSION] start');
         libs.__ensureSyncPoller();
         libs.__scheduleSyncFlush();
@@ -776,13 +889,16 @@ libs.__installVodBatchDeliverWrap = function () {
                 return;
             }
         }
+        if (libs.__tryQueueVodDelay && libs.__tryQueueVodDelay(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options)) {
+            return;
+        }
         return inner.call(libs, urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
     };
     libs.__embedCallbackDeliver.__vodBatchWrapV12 = true;
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-console.log('[RN-Fetch][EMBED-CFG] direct-v25');
+console.log('[RN-Fetch][EMBED-CFG] delay-v26 min=' + libs.__vodDelayMinMs + 'ms');
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {

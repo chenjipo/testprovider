@@ -62,23 +62,41 @@ function buildPageUrl(movieInfo) {
     return DOMAIN + '/movies/' + libs.url_slug_search(movieInfo) + '-' + movieInfo.year + '/';
 }
 function fetchPageHtml(url, cookieHeader) { return __awaiter(_this, void 0, void 0, function () {
-    var html, jarHeader, mergedCookie;
+    var attempt, html, jarHeader, mergedCookie;
     return __generator(this, function (_a) {
         switch (_a.label) {
-            case 0: return [4, libs.request_get(url, {
-                    'user-agent': USER_AGENT,
-                    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                    Cookie: cookieHeader,
-                    referer: DOMAIN + '/',
-                    Referer: DOMAIN + '/',
-                }, false, true, 2)];
+            case 0:
+                attempt = 0;
+                html = '';
+                _a.label = 1;
             case 1:
+                if (!(attempt < 3)) return [3, 5];
+                attempt++;
+                return [4, uniqueStreamHttpGet(url, {
+                        'user-agent': USER_AGENT,
+                        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                        Cookie: cookieHeader,
+                        referer: DOMAIN + '/',
+                        Referer: DOMAIN + '/',
+                    }, true)];
+            case 2:
                 html = _a.sent();
+                if (html && String(html).length > 200) {
+                    return [3, 5];
+                }
+                console.log('[RN-Fetch][UNIQUESTREAM-PAGE-RETRY] attempt=' + attempt + ' len=' + (html ? String(html).length : 0));
+                return [4, sleepMs(400 * attempt)];
+            case 3:
+                _a.sent();
+                _a.label = 4;
+            case 4:
+                return [3, 1];
+            case 5:
                 if (!html || String(html).length < 200) {
                     return [2, { html: '', cookieHeader: cookieHeader }];
                 }
                 return [4, readUniqueStreamCookieJar(url)];
-            case 2:
+            case 6:
                 jarHeader = _a.sent();
                 mergedCookie = mergeCookieHeaderStrings(cookieHeader, jarHeader);
                 if (mergedCookie !== cookieHeader) {
@@ -210,6 +228,68 @@ function buildUniqueStreamApiHeaders(pageReferer, cookieHeader, restNonce) {
     }
     return headers;
 }
+function sleepMs(ms) {
+    return new Promise(function (resolve) {
+        setTimeout(resolve, ms);
+    });
+}
+function uniqueStreamHttpGet(url, headers, preferFetch) { return __awaiter(_this, void 0, void 0, function () {
+    var response, text, data;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                if (!(preferFetch !== false && typeof fetch === 'function')) return [3, 4];
+                _a.label = 1;
+            case 1:
+                _a.trys.push([1, 3, , 4]);
+                return [4, fetch(url, { method: 'GET', headers: headers })];
+            case 2:
+                response = _a.sent();
+                return [4, response.text()];
+            case 3:
+                text = _a.sent();
+                if (response.status >= 200 && response.status < 300 && text) {
+                    return [2, text];
+                }
+                console.log('[RN-Fetch][UNIQUESTREAM-HTTP] fetch-status=' + response.status + ' len=' + (text ? text.length : 0));
+                return [3, 4];
+            case 4: return [4, libs.request_get(url, headers, false, true, 2)];
+            case 5:
+                data = _a.sent();
+                if (typeof data === 'string') {
+                    return [2, data];
+                }
+                if (data && typeof data === 'object') {
+                    try {
+                        return [2, JSON.stringify(data)];
+                    }
+                    catch (e) {
+                        return [2, ''];
+                    }
+                }
+                return [2, data ? String(data) : ''];
+        }
+    });
+}); }
+function parseUniqueStreamRestData(raw) {
+    if (!raw) {
+        return null;
+    }
+    if (typeof raw === 'object' && raw.embed_url) {
+        return raw;
+    }
+    var text = String(raw);
+    if (text.indexOf('embed_url') < 0) {
+        console.log('[RN-Fetch][UNIQUESTREAM-REST] body=' + text.substring(0, 140));
+        return null;
+    }
+    try {
+        return JSON.parse(text);
+    }
+    catch (e) {
+        return null;
+    }
+}
 function parsePlayerPageMetaFromHtml(html) {
     if (!html) {
         return { postID: '', nonce: '', ajaxUrl: DOMAIN + '/wp-admin/admin-ajax.php', restUrl: DOMAIN + '/wp-json/uniquestream/v1/', restNonce: '' };
@@ -290,7 +370,7 @@ function parseRestPlayerEmbedUrl(data) {
     return normalizeIframeUrl(embed);
 }
 function requestPlayerEmbedRest(restUrl, restNonce, cookieHeader, pageReferer, postID, serverType, serverNum) { return __awaiter(_this, void 0, void 0, function () {
-    var base, targetUrl, headers, data;
+    var base, targetUrl, headers, text, data;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -301,9 +381,10 @@ function requestPlayerEmbedRest(restUrl, restNonce, cookieHeader, pageReferer, p
                 targetUrl = base + '/player/' + encodeURIComponent(postID) + '/' + encodeURIComponent(serverType) + '/' + encodeURIComponent(String(serverNum || '1'));
                 headers = buildUniqueStreamApiHeaders(pageReferer, cookieHeader, restNonce);
                 console.log('[RN-Fetch][UNIQUESTREAM-REST] ' + targetUrl.substring(0, 140) + ' nonce=' + restNonce.substring(0, 4) + '..' + restNonce.length);
-                return [4, libs.request_get(targetUrl, headers, false, true, 2)];
+                return [4, uniqueStreamHttpGet(targetUrl, headers, true)];
             case 1:
-                data = _a.sent();
+                text = _a.sent();
+                data = parseUniqueStreamRestData(text);
                 if (data && data.embed_url) {
                     console.log('[RN-Fetch][UNIQUESTREAM-REST] ok type=' + serverType + ' embed=' + String(data.embed_url).substring(0, 100));
                     return [2, data];
@@ -807,7 +888,7 @@ function tryRnPrefetchIframe(iframeUrl, pageReferer, cookieHeader) { return __aw
     var text, directUrl;
     return __generator(this, function (_a) {
         switch (_a.label) {
-            case 0: return [4, libs.request_get(normalizeIframeUrl(iframeUrl), {
+            case 0: return [4, uniqueStreamHttpGet(normalizeIframeUrl(iframeUrl), {
                     referer: pageReferer,
                     Referer: pageReferer,
                     origin: 'https://uniquestream.net',
@@ -815,11 +896,12 @@ function tryRnPrefetchIframe(iframeUrl, pageReferer, cookieHeader) { return __aw
                     'user-agent': USER_AGENT,
                     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                     Cookie: cookieHeader || '',
-                }, false, true, 2)];
+                }, true)];
             case 1:
                 text = _a.sent();
                 directUrl = extractLetUrlFromHtml(text);
                 if (!directUrl) {
+                    console.log('[RN-Fetch][UNIQUESTREAM-PREFETCH] empty len=' + (text ? String(text).length : 0));
                     return [2, ''];
                 }
                 directUrl = normalizeMediacachePlaylistUrl(directUrl);
@@ -966,7 +1048,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_a.label) {
             case 0:
                 beginUniqueStreamSession(movieInfo);
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v35-rn-axios-direct');
+                if (typeof libs.beginVodLinkSession === 'function') {
+                    libs.beginVodLinkSession();
+                }
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v36-rn-fetch-fallback');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 5, , 6]);

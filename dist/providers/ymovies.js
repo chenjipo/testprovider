@@ -372,6 +372,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
+                if (typeof libs.beginVodLinkSession === 'function') {
+                    libs.beginVodLinkSession();
+                }
                 console.log('[RN-Fetch][YMOVIES-VERSION] v6-rn-crypto-global');
                 _a.label = 1;
             case 1:
