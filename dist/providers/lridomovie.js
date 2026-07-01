@@ -94,6 +94,88 @@ function extractPlayerEmbed(html) {
     }
     return '';
 }
+function collectEmbedCandidates(html) {
+    if (!html) {
+        return [];
+    }
+    var decoded = decodeHtmlEntities(html);
+    var candidates = [];
+    var seen = {};
+    function pushCandidate(raw) {
+        if (!raw) {
+            return;
+        }
+        var url = String(raw);
+        if (url.indexOf('//') === 0) {
+            url = 'https:' + url;
+        }
+        if (url.indexOf('/') === 0) {
+            url = DOMAIN + url;
+        }
+        if (seen[url]) {
+            return;
+        }
+        seen[url] = true;
+        candidates.push(url);
+    }
+    var match;
+    var iframeRegex = /<iframe[^>]+src\s*=\s*["']([^"']+)/gi;
+    while ((match = iframeRegex.exec(decoded)) !== null) {
+        pushCandidate(match[1]);
+    }
+    var embedRegex = /data-embed\s*=\s*["']([^"']+)/gi;
+    while ((match = embedRegex.exec(decoded)) !== null) {
+        var embedValue = match[1];
+        if (embedValue.indexOf('<iframe') >= 0) {
+            var iframeMatch = embedValue.match(/src\s*=\s*["']([^"']+)/i);
+            if (iframeMatch) {
+                pushCandidate(iframeMatch[1]);
+            }
+        }
+        else {
+            pushCandidate(embedValue);
+        }
+    }
+    return candidates;
+}
+function scoreEmbedCandidate(url) {
+    var file = String(url || '');
+    if (file.indexOf('closeload.top/video/embed') >= 0) {
+        return 100;
+    }
+    if (file.indexOf('closeload.top') >= 0) {
+        return 80;
+    }
+    if (file.indexOf('ridorapid.closeload') >= 0) {
+        return 20;
+    }
+    if (file.indexOf('closeload') >= 0) {
+        return 60;
+    }
+    return 0;
+}
+function pickBestEmbedUrl(candidates) {
+    if (!candidates || !candidates.length) {
+        return '';
+    }
+    var sorted = candidates.slice().sort(function (a, b) {
+        return scoreEmbedCandidate(b) - scoreEmbedCandidate(a);
+    });
+    return sorted[0] || '';
+}
+function normalizeCloseloadIframeUrl(rawUrl) {
+    if (!rawUrl || rawUrl.indexOf('closeload') < 0) {
+        return rawUrl;
+    }
+    var embedMatch = String(rawUrl).match(/\/embed-([A-Za-z0-9]+)/i);
+    if (!embedMatch) {
+        return rawUrl;
+    }
+    var embedId = embedMatch[1];
+    var imdbMatch = String(rawUrl).match(/imdb_id=([^&]+)/i);
+    var query = imdbMatch ? '?imdb_id=' + imdbMatch[1] : '';
+    return 'https://closeload.top/video/embed/' + embedId + '/' + query;
+}
 function extractStreamFromText(text) {
     if (!text) {
         return '';
@@ -220,7 +302,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                console.log('[RN-Fetch][RIDO-VERSION] v6-rn-no-cheerio');
+                console.log('[RN-Fetch][RIDO-VERSION] v7-rn-closeload-fallback');
                 headers = buildSiteHeaders(DOMAIN + '/');
                 _b.label = 1;
             case 1:
@@ -265,6 +347,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [2];
                 }
                 iframeUrl = extractIframeUrl(iframe);
+                if (!iframeUrl) {
+                    iframeUrl = pickBestEmbedUrl(collectEmbedCandidates(pageHtml));
+                }
+                iframeUrl = normalizeCloseloadIframeUrl(iframeUrl);
                 libs.log({ iframeUrl: iframeUrl }, PROVIDER, 'IFRAME URL');
                 if (!iframeUrl) {
                     console.log('[RN-Fetch][RIDO-SKIP] iframe-parse-failed');

@@ -653,7 +653,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_a.label) {
             case 0:
                 beginUniqueStreamSession(movieInfo);
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v29-rn-fetch-regex');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v30-rn-webview-ajax');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 6, , 7]);

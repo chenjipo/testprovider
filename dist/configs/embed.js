@@ -239,6 +239,9 @@ libs.__resolveVodBatchProvider = function (urlDirect, provider, host) {
     if (p === 'uniquestream-embed' || h === 'uniquestream-embed') {
         return 'MUniqueStream';
     }
+    if (p === 'closeload-embed' || h === 'closeload-embed') {
+        return 'LRIDOMOVIE';
+    }
     if (p === 'yesmovies-embed' || h === 'yesmovies-embed' || p === 'ployan' || h === 'ployan') {
         return 'IYesMovies';
     }

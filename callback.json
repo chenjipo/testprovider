@@ -13,6 +13,7 @@
     "dist/callbacks/ployan.js",
     "dist/callbacks/yesmovies-embed.js",
     "dist/callbacks/vidlink-embed.js",
-    "dist/callbacks/uniquestream-embed.js"
+    "dist/callbacks/uniquestream-embed.js",
+    "dist/callbacks/closeload-embed.js"
   ]
 }
