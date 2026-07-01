@@ -78,7 +78,7 @@ function fetchPageHtml(url, cookieHeader) { return __awaiter(_this, void 0, void
                         Cookie: cookieHeader,
                         referer: DOMAIN + '/',
                         Referer: DOMAIN + '/',
-                    }, true)];
+                    }, false)];
             case 2:
                 html = _a.sent();
                 if (html && String(html).length > 200) {
@@ -233,30 +233,28 @@ function sleepMs(ms) {
         setTimeout(resolve, ms);
     });
 }
+function formUrlEncode(data) {
+    var parts = [];
+    var key = '';
+    for (key in data) {
+        if (!Object.prototype.hasOwnProperty.call(data, key)) {
+            continue;
+        }
+        if (data[key] === undefined || data[key] === null) {
+            continue;
+        }
+        parts.push(encodeURIComponent(key) + '=' + encodeURIComponent(String(data[key])));
+    }
+    return parts.join('&');
+}
 function uniqueStreamHttpGet(url, headers, preferFetch) { return __awaiter(_this, void 0, void 0, function () {
     var response, text, data;
     return __generator(this, function (_a) {
         switch (_a.label) {
-            case 0:
-                if (!(preferFetch !== false && typeof fetch === 'function')) return [3, 4];
-                _a.label = 1;
+            case 0: return [4, libs.request_get(url, headers, false, true, 2)];
             case 1:
-                _a.trys.push([1, 3, , 4]);
-                return [4, fetch(url, { method: 'GET', headers: headers })];
-            case 2:
-                response = _a.sent();
-                return [4, response.text()];
-            case 3:
-                text = _a.sent();
-                if (response.status >= 200 && response.status < 300 && text) {
-                    return [2, text];
-                }
-                console.log('[RN-Fetch][UNIQUESTREAM-HTTP] fetch-status=' + response.status + ' len=' + (text ? text.length : 0));
-                return [3, 4];
-            case 4: return [4, libs.request_get(url, headers, false, true, 2)];
-            case 5:
                 data = _a.sent();
-                if (typeof data === 'string') {
+                if (typeof data === 'string' && data.length > 0) {
                     return [2, data];
                 }
                 if (data && typeof data === 'object') {
@@ -267,7 +265,22 @@ function uniqueStreamHttpGet(url, headers, preferFetch) { return __awaiter(_this
                         return [2, ''];
                     }
                 }
-                return [2, data ? String(data) : ''];
+                if (!(preferFetch !== false && typeof fetch === 'function')) return [3, 5];
+                _a.label = 2;
+            case 2:
+                _a.trys.push([2, 4, , 5]);
+                return [4, fetch(url, { method: 'GET', headers: headers })];
+            case 3:
+                response = _a.sent();
+                return [4, response.text()];
+            case 4:
+                text = _a.sent();
+                if (response.status >= 200 && response.status < 300 && text) {
+                    return [2, text];
+                }
+                console.log('[RN-Fetch][UNIQUESTREAM-HTTP] fetch-status=' + response.status + ' len=' + (text ? text.length : 0));
+                return [3, 5];
+            case 5: return [2, data ? String(data) : ''];
         }
     });
 }); }
@@ -381,7 +394,7 @@ function requestPlayerEmbedRest(restUrl, restNonce, cookieHeader, pageReferer, p
                 targetUrl = base + '/player/' + encodeURIComponent(postID) + '/' + encodeURIComponent(serverType) + '/' + encodeURIComponent(String(serverNum || '1'));
                 headers = buildUniqueStreamApiHeaders(pageReferer, cookieHeader, restNonce);
                 console.log('[RN-Fetch][UNIQUESTREAM-REST] ' + targetUrl.substring(0, 140) + ' nonce=' + restNonce.substring(0, 4) + '..' + restNonce.length);
-                return [4, uniqueStreamHttpGet(targetUrl, headers, true)];
+                return [4, uniqueStreamHttpGet(targetUrl, headers, false)];
             case 1:
                 text = _a.sent();
                 data = parseUniqueStreamRestData(text);
@@ -582,7 +595,7 @@ function requestPlayerEmbed(ajaxUrl, cookieHeader, urlSearch, postID, nonce, ser
                 if (!serverType) {
                     return [3, 4];
                 }
-                body = qs.stringify({
+                body = formUrlEncode({
                     action: 'uniquestream_player_ajax',
                     nonce: nonce,
                     post: postID,
@@ -896,7 +909,7 @@ function tryRnPrefetchIframe(iframeUrl, pageReferer, cookieHeader) { return __aw
                     'user-agent': USER_AGENT,
                     Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
                     Cookie: cookieHeader || '',
-                }, true)];
+                }, false)];
             case 1:
                 text = _a.sent();
                 directUrl = extractLetUrlFromHtml(text);
@@ -1051,7 +1064,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (typeof libs.beginVodLinkSession === 'function') {
                     libs.beginVodLinkSession();
                 }
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v36-rn-fetch-fallback');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v37-rn-cookie-ajax-fix');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 5, , 6]);

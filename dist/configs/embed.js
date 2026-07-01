@@ -398,6 +398,8 @@ libs.__shouldBatchVodLinks = function () {
     return false;
 };
 libs.__vodDelayMinMs = 15000;
+libs.__vodDelayStaggerMs = 300;
+libs.__vodDelayMaxPerProvider = 3;
 libs.__vodDelayQueue = [];
 libs.__vodDelayStartMs = 0;
 libs.__vodDelayFlushed = false;
@@ -456,14 +458,42 @@ libs.__flushVodDelayQueue = function () {
         clearTimeout(libs.__vodDelayTimer);
         libs.__vodDelayTimer = null;
     }
-    console.log('[RN-Fetch][DELAY-FLUSH] count=' + items.length);
+    var priority = {
+        YMovies: 1,
+        LRIDOMOVIE: 2,
+        MUniqueStream: 3,
+        IYesMovies: 4,
+        MVidlink: 5,
+        XVidsrcVip: 9,
+    };
+    items.sort(function (a, b) {
+        var pa = priority[a[1]] || 50;
+        var pb = priority[b[1]] || 50;
+        if (pa !== pb) {
+            return pa - pb;
+        }
+        return (a[5] || 0) - (b[5] || 0);
+    });
+    console.log('[RN-Fetch][DELAY-FLUSH] count=' + items.length + ' providers=' + items.map(function (row) { return row[1]; }).join(','));
     libs.__vodDelayReleasing = true;
     var deliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
-    for (var i = 0; i < items.length; i++) {
-        console.log('[RN-Fetch][DELAY-FLUSH-ITEM] provider=' + items[i][1]);
-        deliver.apply(libs, items[i]);
+    var staggerMs = libs.__vodDelayStaggerMs || 300;
+    var flushIdx = 0;
+    function flushNext() {
+        if (flushIdx >= items.length) {
+            libs.__vodDelayReleasing = false;
+            return;
+        }
+        var row = items[flushIdx];
+        flushIdx++;
+        if (!row[5]) {
+            row[5] = 1;
+        }
+        console.log('[RN-Fetch][DELAY-FLUSH-ITEM] provider=' + row[1] + ' rank=' + row[5] + ' idx=' + flushIdx + '/' + items.length);
+        deliver.apply(libs, row);
+        setTimeout(flushNext, staggerMs);
     }
-    libs.__vodDelayReleasing = false;
+    flushNext();
 };
 libs.__scheduleVodDelayFlush = function () {
     if (libs.__vodDelayFlushed) {
@@ -482,6 +512,16 @@ libs.__scheduleVodDelayFlush = function () {
         libs.__flushVodDelayQueue();
     }, remaining + 50);
 };
+libs.__countVodDelayProvider = function (items, provider) {
+    var count = 0;
+    var idx = 0;
+    for (idx = 0; idx < items.length; idx++) {
+        if (items[idx][1] === provider) {
+            count++;
+        }
+    }
+    return count;
+};
 libs.__tryQueueVodDelay = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
     if (libs.__vodDelayReleasing) {
         return false;
@@ -494,16 +534,25 @@ libs.__tryQueueVodDelay = function (urlDirect, provider, host, quality, callback
     }
     libs.__ensureVodDelaySession();
     var items = libs.__vodDelayQueue || [];
+    var maxPer = libs.__vodDelayMaxPerProvider || 3;
     var idx = 0;
+    var providerCount = 0;
+    var providerRank = 1;
     for (idx = 0; idx < items.length; idx++) {
-        if (items[idx][1] === provider && items[idx][0] === urlDirect) {
+        if (items[idx][0] === urlDirect) {
             console.log('[RN-Fetch][DELAY-SKIP-DUP] provider=' + provider);
             return true;
         }
     }
-    items.push([urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options]);
+    providerCount = libs.__countVodDelayProvider(items, provider);
+    if (providerCount >= maxPer) {
+        console.log('[RN-Fetch][DELAY-SKIP-CAP] provider=' + provider + ' cap=' + maxPer);
+        return true;
+    }
+    providerRank = providerCount + 1;
+    items.push([urlDirect, provider, host, quality, callback, providerRank, subs, direct_quality, headers, options]);
     libs.__vodDelayQueue = items;
-    console.log('[RN-Fetch][DELAY-QUEUE] provider=' + provider + ' total=' + items.length + ' wait=' + Math.max(0, libs.__vodDelayMinMs - (Date.now() - libs.__vodDelayStartMs)) + 'ms');
+    console.log('[RN-Fetch][DELAY-QUEUE] provider=' + provider + ' rank=' + providerRank + '/' + maxPer + ' total=' + items.length + ' wait=' + Math.max(0, libs.__vodDelayMinMs - (Date.now() - libs.__vodDelayStartMs)) + 'ms');
     libs.__scheduleVodDelayFlush();
     return true;
 };
@@ -898,7 +947,7 @@ libs.__installVodBatchDeliverWrap = function () {
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-console.log('[RN-Fetch][EMBED-CFG] delay-v26 min=' + libs.__vodDelayMinMs + 'ms');
+console.log('[RN-Fetch][EMBED-CFG] delay-v28 min=' + libs.__vodDelayMinMs + 'ms stagger=' + libs.__vodDelayStaggerMs + 'ms cap=' + libs.__vodDelayMaxPerProvider);
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {
