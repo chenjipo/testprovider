@@ -298,11 +298,11 @@ function lridomovieResolveSlug(movieInfo, parseSearch) {
     return slugDetail;
 }
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var headers, slugDetail, url, parseSearch, detailUrl, pageHtml, pageStream, iframe, iframeUrl, streamHeaders, closeloadHandler, e_1;
+    var headers, slugDetail, url, parseSearch, detailUrl, pageHtml, pageStream, iframe, iframeUrl, embedUrlRaw, iframeUrlNormalized, streamHeaders, closeloadHandler, e_1;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                console.log('[RN-Fetch][RIDO-VERSION] v7-rn-closeload-fallback');
+                console.log('[RN-Fetch][RIDO-VERSION] v8-rn-embed-raw');
                 headers = buildSiteHeaders(DOMAIN + '/');
                 _b.label = 1;
             case 1:
@@ -350,28 +350,30 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!iframeUrl) {
                     iframeUrl = pickBestEmbedUrl(collectEmbedCandidates(pageHtml));
                 }
-                iframeUrl = normalizeCloseloadIframeUrl(iframeUrl);
-                libs.log({ iframeUrl: iframeUrl }, PROVIDER, 'IFRAME URL');
-                if (!iframeUrl) {
+                embedUrlRaw = iframeUrl;
+                iframeUrlNormalized = normalizeCloseloadIframeUrl(iframeUrl);
+                libs.log({ embedUrlRaw: embedUrlRaw, iframeUrl: iframeUrlNormalized }, PROVIDER, 'IFRAME URL');
+                if (!embedUrlRaw) {
                     console.log('[RN-Fetch][RIDO-SKIP] iframe-parse-failed');
                     return [2];
                 }
-                if (iframeUrl.indexOf('.m3u8') != -1) {
+                if (embedUrlRaw.indexOf('.m3u8') != -1) {
                     streamHeaders = buildSiteHeaders(detailUrl + '/');
-                    libs.embed_callback(iframeUrl, PROVIDER, PROVIDER, 'Hls', callback, 0, [], [{ file: iframeUrl, quality: 1080 }], streamHeaders, { type: 'm3u8' });
+                    libs.embed_callback(embedUrlRaw, PROVIDER, PROVIDER, 'Hls', callback, 0, [], [{ file: embedUrlRaw, quality: 1080 }], streamHeaders, { type: 'm3u8' });
                     return [2, true];
                 }
                 streamHeaders = buildSiteHeaders(detailUrl + '/');
-                closeloadHandler = resolveCloseloadHandler(iframeUrl);
-                console.log('[RN-Fetch][RIDO-REDIRECT] host=' + libs.url_get_host(iframeUrl) + ' handler=' + (closeloadHandler ? 'closeload' : 'embed_redirect'));
+                closeloadHandler = resolveCloseloadHandler(embedUrlRaw);
+                console.log('[RN-Fetch][RIDO-REDIRECT] host=' + libs.url_get_host(embedUrlRaw) + ' handler=' + (closeloadHandler ? 'closeload' : 'embed_redirect'));
                 if (closeloadHandler) {
-                    return [4, closeloadHandler(iframeUrl, movieInfo, PROVIDER, {
+                    return [4, closeloadHandler(embedUrlRaw, movieInfo, PROVIDER, {
                             subs: [],
                             pageReferer: detailUrl + '/',
                             streamHeaders: streamHeaders,
+                            embedUrlRaw: embedUrlRaw,
                         }, callback)];
                 }
-                return [4, libs.embed_redirect(iframeUrl, '', movieInfo, PROVIDER, callback, PROVIDER, [], {}, streamHeaders)];
+                return [4, libs.embed_redirect(embedUrlRaw, '', movieInfo, PROVIDER, callback, PROVIDER, [], {}, streamHeaders)];
             case 5:
                 _b.sent();
                 return [3, 7];

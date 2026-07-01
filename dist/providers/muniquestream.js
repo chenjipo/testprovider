@@ -167,6 +167,47 @@ function extractLetUrlFromHtml(text) {
     var m3u8Match = html.match(/https?:[^'"\s<>]+\.m3u8[^'"\s<>]*/i);
     return m3u8Match ? m3u8Match[0] : '';
 }
+function scorePageStreamCandidate(url) {
+    var file = String(url || '');
+    if (!file || file.indexOf('.m3u8') < 0) {
+        return 0;
+    }
+    if (file.indexOf('mediacache.cc') >= 0 || file.indexOf('hls.uniquestream.net') >= 0) {
+        return 100;
+    }
+    if (file.indexOf('/master.m3u8') >= 0) {
+        return 80;
+    }
+    if (file.indexOf('storrrrrrm.site') >= 0 || file.indexOf('hellstorm.lol') >= 0) {
+        return 70;
+    }
+    if (file.indexOf('workers.dev') >= 0) {
+        return 60;
+    }
+    return 10;
+}
+function extractDirectStreamFromPageHtml(pageHtml) {
+    if (!pageHtml) {
+        return '';
+    }
+    var html = String(pageHtml);
+    var pattern = /https?:\/\/[^"'\\<>]+\.m3u8[^"'\\<>]*/gi;
+    var match = null;
+    var bestUrl = '';
+    var bestScore = 0;
+    while ((match = pattern.exec(html)) !== null) {
+        var candidate = normalizeMediacachePlaylistUrl(match[0].replace(/\\/g, ''));
+        var score = scorePageStreamCandidate(candidate);
+        if (score > bestScore) {
+            bestScore = score;
+            bestUrl = candidate;
+        }
+    }
+    if (bestUrl) {
+        console.log('[RN-Fetch][UNIQUESTREAM-PAGE-STREAM] url=' + bestUrl.substring(0, 140));
+    }
+    return bestUrl;
+}
 function buildHlsRefererHeaders() {
     return {
         'user-agent': USER_AGENT,
@@ -626,6 +667,15 @@ function resolveUniqueStreamIframe(movieInfo) { return __awaiter(_this, void 0, 
                     iframeUrl = extractIframeFromPageHtml(pageHtml);
                 }
                 if (!iframeUrl) {
+                    prefetchUrl = extractDirectStreamFromPageHtml(pageHtml);
+                    if (prefetchUrl) {
+                        return [2, {
+                                iframeUrl: urlSearch,
+                                pageUrl: urlSearch,
+                                pageReferer: pageReferer,
+                                prefetchUrl: prefetchUrl,
+                            }];
+                    }
                     console.log('[RN-Fetch][UNIQUESTREAM-AJAX] empty, page-webview-fallback');
                     return [2, {
                             iframeUrl: urlSearch,
@@ -653,7 +703,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_a.label) {
             case 0:
                 beginUniqueStreamSession(movieInfo);
-                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v30-rn-webview-ajax');
+                console.log('[RN-Fetch][UNIQUESTREAM-VERSION] v31-rn-page-m3u8');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 6, , 7]);

@@ -49,7 +49,21 @@ function normalizeCloseloadEmbedUrl(rawUrl) {
     }
     return url;
 }
-function buildCloseloadUrlCandidates(rawUrl) {
+function buildRidorapidEmbedUrl(rawUrl) {
+    if (!rawUrl) {
+        return '';
+    }
+    var url = String(rawUrl);
+    var embedMatch = url.match(/\/embed-([A-Za-z0-9]+)/i);
+    if (!embedMatch) {
+        return '';
+    }
+    var embedId = embedMatch[1];
+    var imdbMatch = url.match(/imdb_id=([^&]+)/i);
+    var query = imdbMatch ? '?imdb_id=' + imdbMatch[1] : '';
+    return 'https://ridorapid.closeload.top/embed-' + embedId + '/' + query;
+}
+function buildCloseloadUrlCandidates(rawUrl, config) {
     var list = [];
     var seen = {};
     function pushCandidate(candidate) {
@@ -59,46 +73,73 @@ function buildCloseloadUrlCandidates(rawUrl) {
         seen[candidate] = true;
         list.push(candidate);
     }
+    var raw = String((config && config.embedUrlRaw) ? config.embedUrlRaw : rawUrl || '');
     var url = String(rawUrl || '');
-    pushCandidate(url);
-    pushCandidate(normalizeCloseloadEmbedUrl(url));
-    var embedMatch = url.match(/\/embed-([A-Za-z0-9]+)/i);
+    pushCandidate(raw);
+    if (url && url !== raw) {
+        pushCandidate(url);
+    }
+    pushCandidate(buildRidorapidEmbedUrl(raw || url));
+    pushCandidate(normalizeCloseloadEmbedUrl(raw || url));
+    var embedMatch = (raw || url).match(/\/embed-([A-Za-z0-9]+)/i);
     if (embedMatch) {
         var embedId = embedMatch[1];
-        var imdbMatch = url.match(/imdb_id=([^&]+)/i);
+        var imdbMatch = (raw || url).match(/imdb_id=([^&]+)/i);
         var query = imdbMatch ? '?imdb_id=' + imdbMatch[1] : '';
         pushCandidate('https://closeload.top/video/embed/' + embedId + '/' + query);
     }
     return list;
 }
-function buildCloseloadWebviewScript() {
-    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function postUrl(u){if(done||!u||String(u).indexOf('http')!==0)return;done=1;pm({step:'cl-url',url:u});}function scan(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m&&m[1])postUrl(m[1]);var m2=h.match(/https?:[^'\"\\s<>]+\\.(?:m3u8|txt)[^'\"\\s<>]*/i);if(m2)postUrl(m2[0]);}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(!done&&(s.indexOf('.m3u8')>=0||s.indexOf('master.txt')>=0))postUrl(s);return r;});};}hook();pm({step:'cl-boot'});scan();var n=0;var iv=setInterval(function(){scan();n++;if(done||n>80)clearInterval(iv);},400);})();";
+function pickCloseloadWebviewUrl(rawUrl, config, candidates) {
+    if (config && config.embedUrlRaw) {
+        return config.embedUrlRaw;
+    }
+    var idx = 0;
+    for (idx = 0; idx < candidates.length; idx++) {
+        if (candidates[idx].indexOf('ridorapid') >= 0) {
+            return candidates[idx];
+        }
+    }
+    return candidates.length ? candidates[0] : String(rawUrl || '');
 }
-function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback) {
-    var pageReferer = config && config.pageReferer ? config.pageReferer : 'https://ridomovies.is/';
+function buildCloseloadFetchHeaders(activeUrl, pageReferer) {
     var headers = {
         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
         referer: pageReferer,
         origin: 'https://ridomovies.is',
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
     };
+    if (activeUrl && activeUrl.indexOf('ridorapid') >= 0) {
+        headers.referer = activeUrl;
+        headers.origin = 'https://ridorapid.closeload.top';
+    }
+    return headers;
+}
+function buildCloseloadWebviewScript() {
+    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function postUrl(u){if(done||!u||String(u).indexOf('http')!==0)return;done=1;pm({step:'cl-url',url:u});}function scan(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m&&m[1])postUrl(m[1]);var m2=h.match(/https?:[^'\"\\s<>]+\\.(?:m3u8|txt)[^'\"\\s<>]*/i);if(m2)postUrl(m2[0]);}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(!done&&(s.indexOf('.m3u8')>=0||s.indexOf('master.txt')>=0))postUrl(s);return r;});};}hook();pm({step:'cl-boot'});scan();var n=0;var iv=setInterval(function(){scan();n++;if(done||n>80)clearInterval(iv);},400);})();";
+}
+function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, candidates) {
+    var pageReferer = config && config.pageReferer ? config.pageReferer : 'https://ridomovies.is/';
+    var wvUrl = pickCloseloadWebviewUrl(embedUrl, config, candidates || [embedUrl]);
+    var headers = buildCloseloadFetchHeaders(wvUrl, pageReferer);
     if (!libs.scheduleEmbedWebview) {
         console.log('[RN-Fetch][CLOSELOAD-SKIP] webview-unavailable');
         return;
     }
-    console.log('[RN-Fetch][CLOSELOAD-WV] queue ' + String(embedUrl).substring(0, 120));
+    console.log('[RN-Fetch][CLOSELOAD-WV] queue ' + String(wvUrl).substring(0, 120));
     libs.scheduleEmbedWebview(provider === 'LRIDOMOVIE' ? provider : 'closeload', function () {
         callback({
             callback: {
                 provider: provider,
                 host: 'closeload-embed',
-                url: embedUrl,
+                url: wvUrl,
                 headers: headers,
                 callback: callback,
                 userAgent: headers['user-agent'],
                 beforeLoadScript: buildCloseloadWebviewScript(),
                 metadata: {
-                    embedUrl: embedUrl,
+                    embedUrl: wvUrl,
+                    embedUrlRaw: config && config.embedUrlRaw ? config.embedUrlRaw : wvUrl,
                     pageReferer: pageReferer,
                     movieInfo: movieInfo,
                 },
@@ -292,24 +333,22 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 DOMAIN = 'https://closeload.top';
                 HOST = 'closeload';
                 pageReferer = config && config.pageReferer ? config.pageReferer : 'https://ridomovies.is/';
-                embedHeaders = {
-                    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                    referer: pageReferer,
-                    origin: 'https://ridomovies.is',
-                    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-                };
                 callbackHost = provider === 'LRIDOMOVIE' ? provider : HOST;
-                urlCandidates = buildCloseloadUrlCandidates(url);
+                urlCandidates = buildCloseloadUrlCandidates(url, config);
                 candidateIdx = 0;
                 console.log('[RN-Fetch][CLOSELOAD-URL] ' + String(url).substring(0, 140));
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v2-rn-wv-fallback candidates=' + urlCandidates.length);
+                if (config && config.embedUrlRaw) {
+                    console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
+                }
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v3-rn-ridorapid-first candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
-                    queueCloseloadWebview(url, movieInfo, provider, config, callback);
+                    queueCloseloadWebview(url, movieInfo, provider, config, callback, urlCandidates);
                     return [2];
                 }
                 activeUrl = urlCandidates[candidateIdx];
+                embedHeaders = buildCloseloadFetchHeaders(activeUrl, pageReferer);
                 console.log('[RN-Fetch][CLOSELOAD-TRY] idx=' + candidateIdx + ' ' + activeUrl.substring(0, 120));
                 _a.label = 2;
             case 2:

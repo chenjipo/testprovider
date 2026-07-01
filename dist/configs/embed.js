@@ -808,7 +808,7 @@ libs.parse_size = function (file, provider, host, type, callback, rank, tracks) 
     });
 }); };
 libs.__embedWebviewSlot = libs.__embedWebviewSlot || { busyUntil: 0, pumping: false, queue: [], multiSourceBatch: false };
-libs.__embedWebviewOrder = { 'MVidlink': 0, 'IYesMovies': 1, 'MUniqueStream': 2 };
+libs.__embedWebviewOrder = { 'MVidlink': 0, 'IYesMovies': 1, 'MUniqueStream': 2, 'LRIDOMOVIE': 1 };
 libs.scheduleEmbedWebview = function (provider, task, slotMs) {
     var slot = libs.__embedWebviewSlot;
     libs.beginVodLinkSession();
