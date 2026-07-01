@@ -1034,7 +1034,7 @@ function xvidsrcvipBuildEncWithRetry(movieInfo) {
     }
 })();
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, DOMAIN, headers, enc, urlovo, response, json, _a, _b, _c, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, e_1;
+    var PROVIDER, DOMAIN, headers, enc, urlovo, response, json, xvipKeyList, xvipLastKey, xvipIdx, _a, _b, _c, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, e_1;
     return __generator(this, function (_g) {
         switch (_g.label) {
             case 0:
@@ -1045,7 +1045,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v7-rn-b64-fallback');
+                console.log('[RN-Fetch][XVIP-VERSION] v8-last-source-only');
                 _g.label = 1;
             case 1:
                 _g.trys.push([1, 14, , 15]);
@@ -1076,12 +1076,28 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 _b = [];
                 for (_c in _a)
                     _b.push(_c);
+                xvipKeyList = [];
+                for (xvipIdx = 0; xvipIdx < _b.length; xvipIdx++) {
+                    if (_a[_b[xvipIdx]] && _a[_b[xvipIdx]].url) {
+                        xvipKeyList.push(_b[xvipIdx]);
+                    }
+                }
+                if (!xvipKeyList.length) {
+                    console.log('[RN-Fetch][XVIP-SKIP] sources-empty');
+                    return [2];
+                }
+                xvipLastKey = xvipKeyList[xvipKeyList.length - 1];
+                console.log('[RN-Fetch][XVIP-PICK] last=' + xvipLastKey + ' total=' + xvipKeyList.length);
                 _i = 0;
                 _g.label = 5;
             case 5:
                 if (!(_i < _b.length)) return [3, 15];
                 _c = _b[_i];
                 if (!(_c in _a)) return [3, 13];
+                if (_c !== xvipLastKey) {
+                    _i++;
+                    return [3, 5];
+                }
                 item = _c;
                 _g.label = 6;
             case 6:
