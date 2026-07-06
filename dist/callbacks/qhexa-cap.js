@@ -48,7 +48,8 @@ callbacksEmbed['qhexa-cap'] = function (dataCallback, provider, host, callback, 
             return [2];
         }
         if (data.step && data.step.indexOf('qhexa-cap-') === 0 && data.step !== 'qhexa-cap-token') {
-            console.log('[RN-Fetch][QHEXA-CAP-WV-STEP] ' + data.step + (data.msg ? ' ' + data.msg : ''));
+            var stepMsg = data.step + (data.msg ? ' ' + data.msg : '') + (data.phase ? ' phase=' + data.phase : '') + (data.href ? ' href=' + String(data.href).substring(0, 60) : '');
+            console.log('[RN-Fetch][QHEXA-CAP-WV-STEP] ' + stepMsg);
             return [2];
         }
         if (!(data.step === 'qhexa-cap-token' && data.token)) {
