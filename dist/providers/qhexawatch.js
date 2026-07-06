@@ -36,12 +36,12 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var QHEXA_DOMAIN = 'https://theemoviedb.hexa.su';
-var QHEXA_ENC_TOKEN_URL = 'https://enc-dec.app/api/enc-hexa';
+var QHEXA_CAP_ENDPOINT = 'https://cap.hexa.su/15d2cf0395/';
 var QHEXA_DEC_URL = 'https://enc-dec.app/api/dec-hexa';
 var QHEXA_REFERER = 'https://hexa.su/';
 var QHEXA_PROVIDER = 'QHexaWatch';
 var QHEXA_USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36';
-var QHEXA_CAP_CACHE_MS = 50 * 60 * 1000;
+var QHEXA_CAP_CACHE_MS = 3 * 60 * 60 * 1000;
 var QHEXA_TOKEN_RETRY_MAX = 4;
 var QHEXA_TOKEN_RETRY_MS = 3000;
 var QHEXA_TMDB_API_KEYS = libs.TMDB_API_KEYS || [
@@ -279,26 +279,240 @@ function qhexaSetCachedToken(token) {
         expiresAt: Date.now() + QHEXA_CAP_CACHE_MS,
     };
 }
-function qhexaExtractTokenFromJson(json) {
-    if (!json) {
-        return '';
+libs.__qhexaSetCapToken = qhexaSetCachedToken;
+function qhexaScheduleCapWebview(movieInfo) {
+    if (!libs.scheduleEmbedWebview) {
+        console.log('[RN-Fetch][QHEXA-SKIP] webview-unavailable');
+        return;
     }
-    if (json.result && json.result.token) {
-        return String(json.result.token);
+    if (libs.__qhexaCapWebviewQueued) {
+        return;
     }
-    if (json.token) {
-        return String(json.token);
+    libs.__qhexaCapWebviewQueued = true;
+    libs.scheduleEmbedWebview(QHEXA_PROVIDER, function () {
+        libs.__qhexaCapWebviewQueued = false;
+        var handler = hosts && hosts['qhexa-cap'] ? hosts['qhexa-cap'] : null;
+        if (!handler) {
+            console.log('[RN-Fetch][QHEXA-SKIP] qhexa-cap-host-missing');
+            if (libs.__qhexaCapTokenResolve) {
+                libs.__qhexaCapTokenResolve({ token: '', source: 'failed', reason: 'host-missing' });
+                libs.__qhexaCapTokenResolve = null;
+            }
+            return;
+        }
+        handler(QHEXA_REFERER, movieInfo || {}, QHEXA_PROVIDER, {
+            pageUrl: 'https://hexa.su/',
+        }, function () { });
+    }, 20000);
+}
+libs.__qhexaOnCapToken = function (token, movieInfo, callback) {
+    if (!token) {
+        return;
+    }
+    qhexaSetCachedToken(token);
+    if (libs.__qhexaCapTokenResolve) {
+        libs.__qhexaCapTokenResolve({ token: token, source: 'cap-hexa-wv' });
+        libs.__qhexaCapTokenResolve = null;
+    }
+};
+function qhexaCapDeriveHex(seed, length) {
+    var hash = 2166136261;
+    var i = 0;
+    for (i = 0; i < seed.length; i++) {
+        hash ^= seed.charCodeAt(i);
+        hash += (hash << 1) + (hash << 4) + (hash << 7) + (hash << 8) + (hash << 24);
+    }
+    hash = hash >>> 0;
+    var state = hash;
+    var out = '';
+    function next() {
+        state ^= state << 13;
+        state ^= state >>> 17;
+        state ^= state << 5;
+        return state >>> 0;
+    }
+    while (out.length < length) {
+        out += next().toString(16).padStart(8, '0');
+    }
+    return out.substring(0, length);
+}
+function qhexaCapBuildChallengePairs(challengeResp) {
+    if (!challengeResp) {
+        return [];
+    }
+    if (challengeResp.format == 2 && Array.isArray(challengeResp.challenges)) {
+        var pairs = [];
+        var idx = 0;
+        for (idx = 0; idx < challengeResp.challenges.length; idx++) {
+            var item = challengeResp.challenges[idx];
+            if (item && item.protocol == 'sha256-pow' && item.payload) {
+                pairs.push([String(item.payload.salt || ''), String(item.payload.target || '')]);
+            }
+        }
+        return pairs;
+    }
+    var challenge = challengeResp.challenge;
+    var token = String(challengeResp.token || '');
+    if (!challenge || !token) {
+        return [];
+    }
+    if (Array.isArray(challenge)) {
+        return challenge;
+    }
+    var count = Number(challenge.c || 0);
+    var saltLen = Number(challenge.s || 0);
+    var targetLen = Number(challenge.d || 0);
+    var built = [];
+    var n = 0;
+    for (n = 0; n < count; n++) {
+        var index = String(n + 1);
+        built.push([
+            qhexaCapDeriveHex(token + index, saltLen),
+            qhexaCapDeriveHex(token + index + 'd', targetLen),
+        ]);
+    }
+    return built;
+}
+function qhexaCapHasInstrumentation(challengeResp) {
+    if (!challengeResp) {
+        return false;
+    }
+    if (challengeResp.instrumentation) {
+        return true;
+    }
+    if (challengeResp.format == 2 && Array.isArray(challengeResp.challenges)) {
+        var idx = 0;
+        for (idx = 0; idx < challengeResp.challenges.length; idx++) {
+            if (challengeResp.challenges[idx] && challengeResp.challenges[idx].protocol == 'instrumentation') {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+function qhexaCapSha256Hex(message) {
+    if (typeof CryptoJS !== 'undefined' && CryptoJS.SHA256) {
+        return CryptoJS.SHA256(String(message)).toString(CryptoJS.enc.Hex);
     }
     return '';
 }
-function qhexaFetchEncToken(method) {
-    return fetch(QHEXA_ENC_TOKEN_URL, {
-        method: method,
+function qhexaCapEnsureCrypto() { return __awaiter(_this, void 0, void 0, function () {
+    var code, loadErr_1;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                if (qhexaCapSha256Hex('test')) {
+                    return [2, true];
+                }
+                if (libs.__qhexaCryptoPromise) {
+                    return [4, libs.__qhexaCryptoPromise];
+                }
+                return [3, 2];
+            case 1:
+                _a.sent();
+                return [2, !!qhexaCapSha256Hex('test')];
+            case 2:
+                libs.__qhexaCryptoPromise = fetch('https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.2.0/crypto-js.min.js').then(function (response) {
+                    return response.text();
+                }).then(function (text) {
+                    if (text && text.length > 1000) {
+                        eval(text);
+                    }
+                    return !!qhexaCapSha256Hex('test');
+                }).catch(function () {
+                    return false;
+                }).finally(function () {
+                    libs.__qhexaCryptoPromise = null;
+                });
+                return [4, libs.__qhexaCryptoPromise];
+            case 3:
+                _a.sent();
+                if (!qhexaCapSha256Hex('test')) return [3, 4];
+                console.log('[RN-Fetch][QHEXA-CRYPTO] ready');
+                return [2, true];
+            case 4:
+                console.log('[RN-Fetch][QHEXA-SKIP] crypto-unavailable');
+                return [2, false];
+            case 5: return [2];
+        }
+    });
+}); }
+function qhexaCapSolvePow(salt, target) {
+    var nonce = 0;
+    var hash = '';
+    while (nonce < 5000000) {
+        hash = qhexaCapSha256Hex(String(salt) + String(nonce));
+        if (hash.indexOf(String(target)) === 0) {
+            return nonce;
+        }
+        nonce++;
+    }
+    return -1;
+}
+function qhexaCapSolveChallenges(challengeResp) { return __awaiter(_this, void 0, void 0, function () {
+    var cryptoReady, pairs, solutions, idx, item, nonce, pairIndex, solved;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                return [4, qhexaCapEnsureCrypto()];
+            case 1:
+                cryptoReady = _a.sent();
+                if (!cryptoReady) {
+                    return [2, { solutions: [], reason: 'crypto-unavailable' }];
+                }
+                if (challengeResp.format == 2 && Array.isArray(challengeResp.challenges)) {
+                    solutions = [];
+                    for (idx = 0; idx < challengeResp.challenges.length; idx++) {
+                        item = challengeResp.challenges[idx];
+                        if (!item || item.protocol != 'sha256-pow' || !item.payload) {
+                            continue;
+                        }
+                        nonce = qhexaCapSolvePow(item.payload.salt, item.payload.target);
+                        if (nonce < 0) {
+                            console.log('[RN-Fetch][QHEXA-SKIP] pow-failed idx=' + idx);
+                            return [2, { solutions: [], reason: 'pow-failed' }];
+                        }
+                        solutions.push({ nonce: nonce });
+                    }
+                    if (!solutions.length) {
+                        return [2, { solutions: [], reason: 'challenge-empty' }];
+                    }
+                    console.log('[RN-Fetch][QHEXA-POW] solved=' + solutions.length);
+                    return [2, { solutions: solutions, reason: '' }];
+                }
+                pairs = qhexaCapBuildChallengePairs(challengeResp);
+                if (!pairs.length) {
+                    return [2, { solutions: [], reason: 'challenge-empty' }];
+                }
+                solutions = [];
+                for (pairIndex = 0; pairIndex < pairs.length; pairIndex++) {
+                    solved = qhexaCapSolvePow(pairs[pairIndex][0], pairs[pairIndex][1]);
+                    if (solved < 0) {
+                        console.log('[RN-Fetch][QHEXA-SKIP] pow-failed idx=' + pairIndex);
+                        return [2, { solutions: [], reason: 'pow-failed' }];
+                    }
+                    solutions.push(solved);
+                }
+                console.log('[RN-Fetch][QHEXA-POW] solved=' + solutions.length);
+                return [2, { solutions: solutions, reason: '' }];
+        }
+    });
+}); }
+function qhexaCapPostJson(pathSuffix, body) {
+    var endpoint = QHEXA_CAP_ENDPOINT;
+    if (!endpoint.endsWith('/')) {
+        endpoint += '/';
+    }
+    return fetch(endpoint + pathSuffix, {
+        method: 'POST',
         headers: {
             'user-agent': QHEXA_USER_AGENT,
+            accept: 'application/json',
             'content-type': 'application/json',
+            origin: 'https://hexa.su',
+            referer: QHEXA_REFERER,
         },
-        body: method == 'POST' ? '{}' : undefined,
+        body: JSON.stringify(body || {}),
     }).then(function (response) {
         return response.json().then(function (json) {
             return {
@@ -313,6 +527,49 @@ function qhexaFetchEncToken(method) {
         });
     });
 }
+function qhexaCapFetchChallengeAndRedeem() { return __awaiter(_this, void 0, void 0, function () {
+    var challengeResult, challengeResp, solveResult, redeemResult, capToken;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0:
+                return [4, qhexaCapPostJson('challenge', {})];
+            case 1:
+                challengeResult = _a.sent();
+                console.log('[RN-Fetch][QHEXA-CAP-CHALLENGE] ' + challengeResult.status);
+                challengeResp = challengeResult.json;
+                if (!challengeResp || challengeResp.error) {
+                    console.log('[RN-Fetch][QHEXA-TOKEN-ERR] ' + String(challengeResp && challengeResp.error ? challengeResp.error : 'challenge-failed'));
+                    return [2, { token: '', source: 'failed', reason: 'challenge-' + challengeResult.status }];
+                }
+                if (qhexaCapHasInstrumentation(challengeResp)) {
+                    console.log('[RN-Fetch][QHEXA-TOKEN-ERR] instrumentation-required');
+                    return [2, { token: '', source: 'failed', reason: 'instrumentation-required' }];
+                }
+                return [4, qhexaCapSolveChallenges(challengeResp)];
+            case 2:
+                solveResult = _a.sent();
+                if (!solveResult.solutions.length) {
+                    console.log('[RN-Fetch][QHEXA-SKIP] ' + (solveResult.reason || 'solve-empty'));
+                    return [2, { token: '', source: 'failed', reason: solveResult.reason || 'solve-empty' }];
+                }
+                return [4, qhexaCapPostJson('redeem', {
+                        token: challengeResp.token,
+                        solutions: solveResult.solutions,
+                    })];
+            case 3:
+                redeemResult = _a.sent();
+                console.log('[RN-Fetch][QHEXA-CAP-REDEEM] ' + redeemResult.status);
+                if (!redeemResult.json || !redeemResult.json.success || !redeemResult.json.token) {
+                    console.log('[RN-Fetch][QHEXA-TOKEN-ERR] ' + String(redeemResult.json && redeemResult.json.error ? redeemResult.json.error : 'redeem-failed'));
+                    return [2, { token: '', source: 'failed', reason: 'redeem-' + redeemResult.status }];
+                }
+                capToken = String(redeemResult.json.token);
+                qhexaSetCachedToken(capToken);
+                console.log('[RN-Fetch][QHEXA-TOKEN] source=cap-hexa ' + capToken.substring(0, 40) + '...');
+                return [2, { token: capToken, source: 'cap-hexa' }];
+        }
+    });
+}); }
 function qhexaFetchCapToken() { return __awaiter(_this, void 0, void 0, function () {
     var cached, attempt, methodNames, methodIndex, methodName, result, capToken, lastError, lastHint;
     return __generator(this, function (_a) {
@@ -334,7 +591,7 @@ function qhexaFetchCapToken() { return __awaiter(_this, void 0, void 0, function
     });
 }); }
 function qhexaFetchCapTokenInner() { return __awaiter(_this, void 0, void 0, function () {
-    var cached, attempt, methodNames, methodIndex, methodName, result, capToken, lastError, lastHint;
+    var cached, attempt, webviewResult, lastReason;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -344,64 +601,41 @@ function qhexaFetchCapTokenInner() { return __awaiter(_this, void 0, void 0, fun
                     return [2, { token: cached, source: 'cache' }];
                 }
                 attempt = 0;
-                lastError = '';
-                lastHint = '';
+                lastReason = '';
                 _a.label = 1;
             case 1:
-                if (!(attempt < QHEXA_TOKEN_RETRY_MAX)) return [3, 10];
+                if (!(attempt < QHEXA_TOKEN_RETRY_MAX)) return [3, 7];
                 attempt++;
-                methodNames = ['GET', 'POST'];
-                methodIndex = 0;
-                _a.label = 2;
+                if (!libs.__qhexaTokenWaitPromise) {
+                    libs.__qhexaTokenWaitPromise = new Promise(function (resolve) {
+                        libs.__qhexaCapTokenResolve = resolve;
+                        qhexaScheduleCapWebview(libs.__qhexaPendingMovieInfo || null);
+                        setTimeout(function () {
+                            if (!libs.__qhexaCapTokenResolve) {
+                                return;
+                            }
+                            libs.__qhexaCapTokenResolve({ token: '', source: 'failed', reason: 'cap-wv-timeout' });
+                            libs.__qhexaCapTokenResolve = null;
+                        }, 45000);
+                    }).finally(function () {
+                        libs.__qhexaTokenWaitPromise = null;
+                    });
+                }
+                return [4, libs.__qhexaTokenWaitPromise];
             case 2:
-                if (!(methodIndex < methodNames.length)) return [3, 8];
-                methodName = methodNames[methodIndex];
-                _a.label = 3;
-            case 3:
-                _a.trys.push([3, 5, , 6]);
-                return [4, qhexaFetchEncToken(methodName)];
-            case 4:
-                result = _a.sent();
-                console.log('[RN-Fetch][QHEXA-TOKEN-HTTP] ' + result.status + ' attempt=' + attempt + ' method=' + methodName);
-                if (result.json && result.json.error) {
-                    lastError = String(result.json.error);
-                    console.log('[RN-Fetch][QHEXA-TOKEN-ERR] ' + lastError);
+                webviewResult = _a.sent();
+                if (webviewResult && webviewResult.token) {
+                    return [2, webviewResult];
                 }
-                if (result.json && result.json.hint) {
-                    lastHint = String(result.json.hint);
-                    console.log('[RN-Fetch][QHEXA-TOKEN-HINT] ' + lastHint);
-                }
-                capToken = qhexaExtractTokenFromJson(result.json);
-                if (result.status == 200 && capToken) {
-                    qhexaSetCachedToken(capToken);
-                    console.log('[RN-Fetch][QHEXA-TOKEN] source=enc-hexa ' + capToken.substring(0, 40) + '...');
-                    return [2, { token: capToken, source: 'enc-hexa' }];
-                }
-                return [3, 6];
-            case 5:
-                _a.sent();
-                console.log('[RN-Fetch][QHEXA-TOKEN-ERR] fetch-failed');
-                return [3, 6];
-            case 6:
-                methodIndex++;
-                return [3, 2];
-            case 7: return [3, 10];
-            case 8:
-                if (!(attempt < QHEXA_TOKEN_RETRY_MAX)) return [3, 10];
+                lastReason = webviewResult && webviewResult.reason ? webviewResult.reason : 'token-empty';
+                if (!(attempt < QHEXA_TOKEN_RETRY_MAX)) return [3, 4];
                 return [4, qhexaSleep(QHEXA_TOKEN_RETRY_MS)];
-            case 9:
+            case 3:
                 _a.sent();
                 return [3, 1];
-            case 10:
-                if (lastError) {
-                    console.log('[RN-Fetch][QHEXA-SKIP] token-failed ' + lastError);
-                }
-                else {
-                    console.log('[RN-Fetch][QHEXA-SKIP] token-empty');
-                }
-                if (lastHint) {
-                    console.log('[RN-Fetch][QHEXA-SKIP-HINT] ' + lastHint);
-                }
+            case 4: return [3, 7];
+            case 7:
+                console.log('[RN-Fetch][QHEXA-SKIP] token-failed ' + lastReason);
                 return [2, { token: '', source: 'failed' }];
         }
     });
@@ -411,7 +645,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][QHEXA-VERSION] v4-tmdb-id-resolve');
+                console.log('[RN-Fetch][QHEXA-VERSION] v5-cap-hexa-token');
                 rawTmdb = movieInfo && movieInfo.tmdb_id !== undefined && movieInfo.tmdb_id !== null ? String(movieInfo.tmdb_id) : '';
                 console.log('[RN-Fetch][QHEXA-TMDB] type=' + movieInfo.type + ' id=' + rawTmdb + ' imdb=' + String(movieInfo.imdb_id || '') + (movieInfo.type == 'tv' ? ' s' + movieInfo.season + 'e' + movieInfo.episode : ''));
                 _a.label = 1;
@@ -425,6 +659,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 urlData = qhexaBuildApiUrl(movieInfo, tmdbId);
                 console.log('[RN-Fetch][QHEXA-API] ' + urlData);
+                libs.__qhexaPendingMovieInfo = movieInfo;
                 return [4, qhexaFetchCapToken()];
             case 3:
                 tokenResult = _a.sent();

@@ -32,6 +32,7 @@
     "dist/hosts/ployan.js",
     "dist/hosts/yesmovies-embed.js",
     "dist/hosts/vidlink-embed.js",
-    "dist/hosts/uniquestream-embed.js"
+    "dist/hosts/uniquestream-embed.js",
+    "dist/hosts/qhexa-cap.js"
   ]
 }
