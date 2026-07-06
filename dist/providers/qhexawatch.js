@@ -609,11 +609,13 @@ function qhexaFetchCapTokenInner() { return __awaiter(_this, void 0, void 0, fun
                 if (!libs.__qhexaTokenWaitPromise) {
                     libs.__qhexaTokenWaitPromise = new Promise(function (resolve) {
                         libs.__qhexaCapTokenResolve = resolve;
+                        console.log('[RN-Fetch][QHEXA-TOKEN-WAIT] start attempt=' + attempt + ' timeout=45s');
                         qhexaScheduleCapWebview(libs.__qhexaPendingMovieInfo || null);
                         setTimeout(function () {
                             if (!libs.__qhexaCapTokenResolve) {
                                 return;
                             }
+                            console.log('[RN-Fetch][QHEXA-TOKEN-WAIT] timeout attempt=' + attempt);
                             libs.__qhexaCapTokenResolve({ token: '', source: 'failed', reason: 'cap-wv-timeout' });
                             libs.__qhexaCapTokenResolve = null;
                         }, 45000);
@@ -645,7 +647,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][QHEXA-VERSION] v5-cap-hexa-token');
+                console.log('[RN-Fetch][QHEXA-VERSION] v6-cap-wv-script-fix');
                 rawTmdb = movieInfo && movieInfo.tmdb_id !== undefined && movieInfo.tmdb_id !== null ? String(movieInfo.tmdb_id) : '';
                 console.log('[RN-Fetch][QHEXA-TMDB] type=' + movieInfo.type + ' id=' + rawTmdb + ' imdb=' + String(movieInfo.imdb_id || '') + (movieInfo.type == 'tv' ? ' s' + movieInfo.season + 'e' + movieInfo.episode : ''));
                 _a.label = 1;

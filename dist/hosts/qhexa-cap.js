@@ -37,11 +37,12 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 var _this = this;
 var QHEXA_CAP_PAGE = 'https://hexa.su/';
 var QHEXA_CAP_ENDPOINT = 'https://cap.hexa.su/15d2cf0395/';
-function buildQhexaCapWebviewScript() {
-  return "(function(){var done=0,ENDPOINT='" + QHEXA_CAP_ENDPOINT + "';function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function onToken(token){if(done||!token)return;done=1;pm({step:'qhexa-cap-token',token:String(token)});}function mount(){if(done)return;var el=document.createElement('cap-widget');el.setAttribute('data-cap-api-endpoint',ENDPOINT);el.setAttribute('data-cap-i18n-initial-state','Verify');el.style.cssText='position:fixed;left:-9999px;top:-9999px;opacity:0.01;pointer-events:none;';document.body.appendChild(el);el.addEventListener('solve',function(e){var t=e&&e.detail&&e.detail.token;onToken(t);});el.addEventListener('error',function(e){var msg=(e&&e.detail&&e.detail.message)?String(e.detail.message):'cap-error';pm({step:'qhexa-cap-err',msg:msg});});pm({step:'qhexa-cap-mounted'});}function boot(){if(customElements.get('cap-widget')){mount();return;}var s=document.createElement('script');s.type='module';s.src='https://cdn.jsdelivr.net/npm/@cap.js/widget@0.1.44/cap.min.js';s.onload=function(){setTimeout(mount,400);};s.onerror=function(){pm({step:'qhexa-cap-err',msg:'widget-load-failed'});};document.head.appendChild(s);}pm({step:'qhexa-cap-boot',href:location.href});if(document.body){boot();}else{document.addEventListener('DOMContentLoaded',boot);}})();";
+function buildQhexaCapWebviewScript(phase) {
+    var phaseTag = phase === 'after' ? 'after' : 'before';
+    return "(function(){var done=0,phase='" + phaseTag + "',ENDPOINT='" + QHEXA_CAP_ENDPOINT + "',CDN=['https://cdn.jsdelivr.net/npm/@cap.js/widget@0.1.44/cap.min.js','https://unpkg.com/@cap.js/widget@0.1.44/cap.min.js'],cdnIdx=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function onToken(token){if(done||!token)return;done=1;pm({step:'qhexa-cap-token',token:String(token)});}function mount(){if(done)return;if(!customElements.get('cap-widget')){pm({step:'qhexa-cap-err',msg:'widget-undefined'});return;}var el=document.createElement('cap-widget');el.setAttribute('data-cap-api-endpoint',ENDPOINT);el.setAttribute('data-cap-i18n-initial-state','Verify');el.setAttribute('data-cap-worker-count','4');el.style.cssText='position:fixed;left:0;bottom:0;width:1px;height:1px;opacity:0.01;overflow:hidden;';document.body.appendChild(el);el.addEventListener('solve',function(e){var t=e&&e.detail&&e.detail.token;onToken(t);});el.addEventListener('error',function(e){var msg=(e&&e.detail&&e.detail.message)?String(e.detail.message):'cap-error';pm({step:'qhexa-cap-err',msg:msg});});pm({step:'qhexa-cap-mounted'});}function loadWidget(){if(done||customElements.get('cap-widget')){mount();return;}if(cdnIdx>=CDN.length){pm({step:'qhexa-cap-err',msg:'widget-load-failed'});return;}var s=document.createElement('script');s.src=CDN[cdnIdx];s.async=true;s.onload=function(){setTimeout(mount,500);};s.onerror=function(){cdnIdx++;loadWidget();};(document.head||document.documentElement).appendChild(s);}function boot(){pm({step:'qhexa-cap-boot',phase:phase,href:location.href,ready:document.readyState});loadWidget();}if(phase==='after'){setTimeout(boot,300);}else if(document.body){boot();}else{document.addEventListener('DOMContentLoaded',boot);}})();";
 }
 hosts['qhexa-cap'] = function (url, movieInfo, provider, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var pageUrl, headers, beforeLoadScript;
+    var pageUrl, headers, beforeLoadScript, afterLoadScript;
     return __generator(this, function (_a) {
         pageUrl = (config && config.pageUrl) ? config.pageUrl : QHEXA_CAP_PAGE;
         headers = {
@@ -49,8 +50,9 @@ hosts['qhexa-cap'] = function (url, movieInfo, provider, config, callback) { ret
             Origin: 'https://hexa.su',
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36',
         };
-        beforeLoadScript = buildQhexaCapWebviewScript();
-        console.log('[RN-Fetch][QHEXA-CAP-WV] start');
+        beforeLoadScript = buildQhexaCapWebviewScript('before');
+        afterLoadScript = buildQhexaCapWebviewScript('after');
+        console.log('[RN-Fetch][QHEXA-CAP-WV] start url=' + pageUrl);
         try {
             callback({
                 callback: {
@@ -61,6 +63,7 @@ hosts['qhexa-cap'] = function (url, movieInfo, provider, config, callback) { ret
                     callback: callback,
                     userAgent: headers['user-agent'],
                     beforeLoadScript: beforeLoadScript,
+                    script: afterLoadScript,
                     metadata: {
                         pageUrl: pageUrl,
                         url_webview: pageUrl,
@@ -68,9 +71,11 @@ hosts['qhexa-cap'] = function (url, movieInfo, provider, config, callback) { ret
                     },
                 },
             });
+            console.log('[RN-Fetch][QHEXA-CAP-WV] dispatched host=qhexa-cap');
         }
         catch (e) {
             libs.log({ e: e }, 'qhexa-cap', 'ERROR');
+            console.log('[RN-Fetch][QHEXA-CAP-WV-ERR] ' + String(e && e.message ? e.message : e));
         }
         return [2];
     });
