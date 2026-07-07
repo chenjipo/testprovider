@@ -36,15 +36,16 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v4-seed-ratefix';
+var AVIDEASY_VERSION = 'v5-deadlock-fix';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
 var AVIDEASY_PLAYER_ORIGIN = 'https://player.videasy.to';
 var AVIDEASY_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
 var AVIDEASY_CACHE_MS = 120000;
-var AVIDEASY_SERVER_DELAY_MS = 350;
-var AVIDEASY_SEED_GAP_MS = 800;
+var AVIDEASY_SERVER_DELAY_MS = 400;
+var AVIDEASY_SEED_GAP_MS = 900;
+var AVIDEASY_FETCH_TIMEOUT_MS = 22000;
 var AVIDEASY_MAX_OK = 3;
 var AVIDEASY_SERVERS = [
     { name: 'Neon', path: 'neon2' },
@@ -147,44 +148,58 @@ function avideasyDeliverCached(items, callback) {
         libs.embed_callback(item.file, AVIDEASY_PROVIDER, item.host, 'Hls', callback, item.rank, item.tracks, item.directQuality, item.headers);
     }
 }
-function avideasyEnqueue(task) {
-    if (!libs.__avideasyQueue) {
-        libs.__avideasyQueue = Promise.resolve();
-    }
-    var next = libs.__avideasyQueue.then(task);
-    libs.__avideasyQueue = next.catch(function () { });
-    return next;
+function avideasyFetchText(url, headers) {
+    var timeout = new Promise(function (_, reject) {
+        setTimeout(function () {
+            reject(new Error('fetch-timeout'));
+        }, AVIDEASY_FETCH_TIMEOUT_MS);
+    });
+    return Promise.race([
+        fetch(url, { headers: headers, method: 'GET' }).then(function (response) {
+            return response.text().then(function (text) {
+                return { status: response.status, text: text };
+            });
+        }),
+        timeout,
+    ]);
 }
 function avideasyFetchSeedRaw(tmdbId, attempt) {
-    return fetch(AVIDEASY_SEED_URL + '?mediaId=' + encodeURIComponent(String(tmdbId)), {
-        headers: avideasyBuildHeaders(),
-        method: 'GET',
-    }).then(function (response) {
-        return response.json().then(function (data) {
-            if (response.status === 429 && attempt < 2) {
-                console.log('[RN-Fetch][AVIDEASY-SEED-429] retry=' + (attempt + 1));
-                return avideasySleep(1500 * (attempt + 1)).then(function () {
-                    return avideasyFetchSeedRaw(tmdbId, attempt + 1);
-                });
-            }
-            if (!response.ok || !data || !data.seed) {
-                throw new Error('seed-missing status=' + response.status);
-            }
-            libs.__avideasyLastSeedAt = Date.now();
-            return String(data.seed);
-        });
+    return avideasyFetchText(AVIDEASY_SEED_URL + '?mediaId=' + encodeURIComponent(String(tmdbId)), avideasyBuildHeaders()).then(function (result) {
+        var data = null;
+        try {
+            data = JSON.parse(result.text);
+        }
+        catch (parseError) {
+            data = null;
+        }
+        if (result.status === 429 && attempt < 2) {
+            console.log('[RN-Fetch][AVIDEASY-SEED-429] retry=' + (attempt + 1));
+            return avideasySleep(1800 * (attempt + 1)).then(function () {
+                return avideasyFetchSeedRaw(tmdbId, attempt + 1);
+            });
+        }
+        if (!data || !data.seed) {
+            throw new Error('seed-missing status=' + result.status);
+        }
+        libs.__avideasyLastSeedAt = Date.now();
+        return String(data.seed);
     });
 }
 function avideasyFetchSeed(tmdbId) {
-    return avideasyEnqueue(function () {
-        var waitMs = Math.max(0, AVIDEASY_SEED_GAP_MS - (Date.now() - (libs.__avideasyLastSeedAt || 0)));
+    if (!libs.__avideasySeedMutex) {
+        libs.__avideasySeedMutex = Promise.resolve();
+    }
+    var waitMs = Math.max(0, AVIDEASY_SEED_GAP_MS - (Date.now() - (libs.__avideasyLastSeedAt || 0)));
+    var chain = libs.__avideasySeedMutex.then(function () {
         if (waitMs > 0) {
-            return avideasySleep(waitMs).then(function () {
-                return avideasyFetchSeedRaw(tmdbId, 0);
-            });
+            return avideasySleep(waitMs);
         }
+        return null;
+    }).then(function () {
         return avideasyFetchSeedRaw(tmdbId, 0);
     });
+    libs.__avideasySeedMutex = chain.catch(function () { });
+    return chain;
 }
 function avideasyExtractSources(decryptData) {
     if (!decryptData || typeof decryptData !== 'object') {
@@ -221,28 +236,23 @@ function avideasyDecryptBlob(movieInfo, encryptedText, seed) {
         seed: seed,
     }, false, false);
 }
-function avideasyFetchServerSource(server, movieInfo, headers) { return __awaiter(_this, void 0, void 0, function () {
-    var seed, sourceUrl, response, encryptedText, decryptData, sources;
+function avideasyFetchServerSource(server, movieInfo, seed, headers) { return __awaiter(_this, void 0, void 0, function () {
+    var sourceUrl, result, decryptData, sources;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
                 console.log('[RN-Fetch][AVIDEASY-TRY] server=' + server.name + ' path=' + server.path);
-                return [4, avideasyFetchSeed(movieInfo.tmdb_id)];
-            case 1:
-                seed = _a.sent();
                 sourceUrl = avideasyBuildSourceUrl(server.path, movieInfo, seed);
-                return [4, fetch(sourceUrl, { headers: headers, method: 'GET' })];
-            case 2:
-                response = _a.sent();
-                return [4, response.text()];
-            case 3:
-                encryptedText = _a.sent();
-                if (!avideasyIsEncryptedBlob(encryptedText)) {
-                    console.log('[RN-Fetch][AVIDEASY-SKIP] server=' + server.name + ' status=' + response.status + ' len=' + (encryptedText ? encryptedText.length : 0));
+                return [4, avideasyFetchText(sourceUrl, headers)];
+            case 1:
+                result = _a.sent();
+                if (!avideasyIsEncryptedBlob(result.text)) {
+                    console.log('[RN-Fetch][AVIDEASY-SKIP] server=' + server.name + ' status=' + result.status + ' len=' + (result.text ? result.text.length : 0));
                     return [2, null];
                 }
-                return [4, avideasyDecryptBlob(movieInfo, encryptedText, seed)];
-            case 4:
+                console.log('[RN-Fetch][AVIDEASY-BLOB] server=' + server.name + ' len=' + result.text.length);
+                return [4, avideasyDecryptBlob(movieInfo, result.text, seed)];
+            case 2:
                 decryptData = _a.sent();
                 sources = avideasyExtractSources(decryptData);
                 if (!sources.length) {
@@ -254,38 +264,41 @@ function avideasyFetchServerSource(server, movieInfo, headers) { return __awaite
     });
 }); }
 function avideasyCollectLinks(movieInfo) { return __awaiter(_this, void 0, void 0, function () {
-    var headers, okCount, rank, delivered, _i, AVIDEASY_SERVERS_1, server, payload, directQuality, tracks, _a, _b, itemDirect, _c, _d, itemSubtitle, lang, serverError_1;
+    var headers, seed, okCount, rank, delivered, _i, AVIDEASY_SERVERS_1, server, payload, directQuality, tracks, _a, _b, itemDirect, _c, _d, itemSubtitle, lang, serverError_1;
     return __generator(this, function (_e) {
         switch (_e.label) {
             case 0:
                 headers = avideasyBuildHeaders();
                 console.log('[RN-Fetch][AVIDEASY-COLLECT] start tmdb=' + movieInfo.tmdb_id);
+                return [4, avideasyFetchSeed(movieInfo.tmdb_id)];
+            case 1:
+                seed = _e.sent();
+                console.log('[RN-Fetch][AVIDEASY-SEED] ok tmdb=' + movieInfo.tmdb_id);
                 okCount = 0;
                 rank = 0;
                 delivered = [];
                 _i = 0, AVIDEASY_SERVERS_1 = AVIDEASY_SERVERS;
-                _e.label = 1;
-            case 1:
-                if (!(okCount < AVIDEASY_MAX_OK && _i < AVIDEASY_SERVERS_1.length)) return [3, 8];
-                server = AVIDEASY_SERVERS_1[_i];
-                if (server.moviesOnly && movieInfo.type == 'tv') {
-                    return [3, 7];
-                }
                 _e.label = 2;
             case 2:
-                _e.trys.push([2, 5, , 6]);
-                if (_i > 0) {
-                    return [4, avideasySleep(AVIDEASY_SERVER_DELAY_MS)];
+                if (!(okCount < AVIDEASY_MAX_OK && _i < AVIDEASY_SERVERS_1.length)) return [3, 9];
+                server = AVIDEASY_SERVERS_1[_i];
+                if (server.moviesOnly && movieInfo.type == 'tv') {
+                    return [3, 8];
                 }
-                case 3:
-                if (_i > 0) {
-                    _e.sent();
-                }
-                return [4, avideasyFetchServerSource(server, movieInfo, headers)];
+                _e.label = 3;
+            case 3:
+                _e.trys.push([3, 7, , 8]);
+                if (!(_i > 0)) return [3, 5];
+                return [4, avideasySleep(AVIDEASY_SERVER_DELAY_MS)];
             case 4:
+                _e.sent();
+                _e.label = 5;
+            case 5:
+                return [4, avideasyFetchServerSource(server, movieInfo, seed, headers)];
+            case 6:
                 payload = _e.sent();
                 if (!payload || !payload.sources || !payload.sources.length) {
-                    return [3, 6];
+                    return [3, 8];
                 }
                 directQuality = [];
                 tracks = [];
@@ -314,7 +327,7 @@ function avideasyCollectLinks(movieInfo) { return __awaiter(_this, void 0, void 
                     }
                 }
                 if (!directQuality.length) {
-                    return [3, 6];
+                    return [3, 8];
                 }
                 directQuality = _.orderBy(directQuality, ['quality'], ['desc']);
                 rank += 1;
@@ -328,16 +341,15 @@ function avideasyCollectLinks(movieInfo) { return __awaiter(_this, void 0, void 
                     directQuality: directQuality,
                     headers: headers,
                 });
-                return [3, 6];
-            case 5:
+                return [3, 8];
+            case 7:
                 serverError_1 = _e.sent();
                 console.log('[RN-Fetch][AVIDEASY-SERVER-ERR] server=' + server.name + ' err=' + String(serverError_1 && serverError_1.message ? serverError_1.message : serverError_1));
-                return [3, 6];
-            case 6: return [3, 7];
-            case 7:
-                _i++;
-                return [3, 1];
+                return [3, 8];
             case 8:
+                _i++;
+                return [3, 2];
+            case 9:
                 console.log('[RN-Fetch][AVIDEASY-COLLECT] done count=' + delivered.length);
                 return [2, delivered];
         }
@@ -348,11 +360,10 @@ function avideasyEnsureInflight(runKey, movieInfo) {
         libs.__avideasyInflight = {};
     }
     if (libs.__avideasyInflight[runKey]) {
+        console.log('[RN-Fetch][AVIDEASY-WAIT] ' + runKey);
         return libs.__avideasyInflight[runKey];
     }
-    var task = avideasyEnqueue(function () {
-        return avideasyCollectLinks(movieInfo);
-    }).then(function (items) {
+    var task = avideasyCollectLinks(movieInfo).then(function (items) {
         if (items.length) {
             avideasySetCacheEntry(runKey, items);
         }
@@ -383,9 +394,6 @@ source.getResource = function (movieInfo, config, callback) {
         console.log('[RN-Fetch][AVIDEASY-CACHE] hit count=' + cached.items.length);
         avideasyDeliverCached(cached.items, callback);
         return Promise.resolve();
-    }
-    if (libs.__avideasyInflight && libs.__avideasyInflight[runKey]) {
-        console.log('[RN-Fetch][AVIDEASY-WAIT] ' + runKey);
     }
     return avideasyEnsureInflight(runKey, movieInfo).then(function (items) {
         if (items.length) {
