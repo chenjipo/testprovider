@@ -203,12 +203,12 @@ function isCloseloadHtmlUsable(response, htmlText) {
     return false;
 }
 function fetchCloseloadWithRetry(activeUrl, embedHeaders, maxAttempts) {
-    maxAttempts = maxAttempts || 3;
+    maxAttempts = maxAttempts || 2;
     function attempt(n) {
         if (n >= maxAttempts) {
             return Promise.reject(new Error('closeload-fetch-exhausted'));
         }
-        var delay = n === 0 ? 0 : (400 + n * 350);
+        var delay = n === 0 ? 0 : (300 + n * 250);
         return new Promise(function (resolve) {
             setTimeout(resolve, delay);
         }).then(function () {
@@ -225,7 +225,14 @@ function fetchCloseloadWithRetry(activeUrl, embedHeaders, maxAttempts) {
                 return attempt(n + 1);
             });
         }).catch(function (err) {
-            console.log('[RN-Fetch][CLOSELOAD-RETRY-ERR] attempt=' + (n + 1) + ' ' + String(err && err.message ? err.message : err));
+            var msg = String(err && err.message ? err.message : err);
+            if (msg.indexOf('closeload-fetch-exhausted') >= 0) {
+                return Promise.reject(err);
+            }
+            console.log('[RN-Fetch][CLOSELOAD-RETRY-ERR] attempt=' + (n + 1) + ' ' + msg);
+            if (n + 1 >= maxAttempts) {
+                return Promise.reject(new Error('closeload-fetch-exhausted'));
+            }
             return attempt(n + 1);
         });
     }
@@ -464,7 +471,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v6-cf-embed-fix candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v6.1-cf-retry-fix candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
@@ -566,8 +573,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 return [3, 6];
             case 5:
                 e_1 = _a.sent();
-                libs.log({ e: e_1 }, HOST, 'ERROR');
-                console.log('[RN-Fetch][CLOSELOAD-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
+                console.log('[RN-Fetch][CLOSELOAD-ERROR] idx=' + candidateIdx + ' ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 candidateIdx++;
                 return [3, 1];
             case 6: return [2];
