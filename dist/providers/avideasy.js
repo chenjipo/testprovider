@@ -35,8 +35,8 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v5-deadlock-fix';
+var AVIDEASY_PROVIDER = 'V';
+var AVIDEASY_VERSION = 'v6-provider-v-inflight';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
@@ -145,7 +145,8 @@ function avideasySetCacheEntry(runKey, items) {
 function avideasyDeliverCached(items, callback) {
     for (var i = 0; i < items.length; i++) {
         var item = items[i];
-        libs.embed_callback(item.file, AVIDEASY_PROVIDER, item.host, 'Hls', callback, item.rank, item.tracks, item.directQuality, item.headers);
+        console.log('[RN-Fetch][AVIDEASY-DELIVER] rank=' + item.rank + ' host=' + item.host);
+        libs.embed_callback(item.file, AVIDEASY_PROVIDER, item.host, 'Hls', callback, item.rank, item.tracks, item.directQuality, item.headers, { type: 'm3u8' });
     }
 }
 function avideasyFetchText(url, headers) {
@@ -363,7 +364,9 @@ function avideasyEnsureInflight(runKey, movieInfo) {
         console.log('[RN-Fetch][AVIDEASY-WAIT] ' + runKey);
         return libs.__avideasyInflight[runKey];
     }
-    var task = avideasyCollectLinks(movieInfo).then(function (items) {
+    var task = Promise.resolve().then(function () {
+        return avideasyCollectLinks(movieInfo);
+    }).then(function (items) {
         if (items.length) {
             avideasySetCacheEntry(runKey, items);
         }
@@ -371,15 +374,14 @@ function avideasyEnsureInflight(runKey, movieInfo) {
     }).catch(function (err) {
         console.log('[RN-Fetch][AVIDEASY-ERROR] ' + String(err && err.message ? err.message : err));
         return [];
-    });
-    libs.__avideasyInflight[runKey] = task;
-    task.finally(function () {
+    }).finally(function () {
         setTimeout(function () {
             if (libs.__avideasyInflight && libs.__avideasyInflight[runKey] === task) {
                 delete libs.__avideasyInflight[runKey];
             }
         }, AVIDEASY_CACHE_MS);
     });
+    libs.__avideasyInflight[runKey] = task;
     return task;
 }
 source.getResource = function (movieInfo, config, callback) {

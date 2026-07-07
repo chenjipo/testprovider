@@ -64,6 +64,7 @@ libs.string_provider = function (provider, rank) {
         'LRIDOMOVIE': 'L',
         'XVidsrcVip': 'X',
         'AVideasy': 'V',
+        'V': 'V',
     };
     if (labels[provider]) {
         if (!rank) {
@@ -80,7 +81,7 @@ libs.string_provider = function (provider, rank) {
     }
     return "Server ".concat(provider[0].toUpperCase()).concat(rank);
 };
-console.log('[RN-Fetch][STRING-CFG] v5-avideasy-v');
+console.log('[RN-Fetch][STRING-CFG] v6-provider-v');
 libs.string_encrypt_fmovies = function (input) {
     var keytwo = "51wJ0FDq/UVCefLopEcmK3ni4WIQztMjZdSYOsbHr9R2h7PvxBGAuglaN8+kXT6y";
     var output = '';
