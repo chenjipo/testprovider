@@ -52,7 +52,7 @@ callbacksEmbed['closeload-embed'] = function (dataCallback, provider, host, call
                 }
                 data = JSON.parse(dataCallback);
                 if (data.step && data.step.indexOf('cl-') === 0 && data.step !== 'cl-url') {
-                    console.log('[RN-Fetch][CLOSELOAD-WV-STEP] ' + data.step);
+                    console.log('[RN-Fetch][CLOSELOAD-WV-STEP] ' + data.step + (data.href ? ' href=' + String(data.href).substring(0, 80) : ''));
                     return [2];
                 }
                 if (data.responseURL || data.responseText || data.status) {
@@ -72,7 +72,7 @@ callbacksEmbed['closeload-embed'] = function (dataCallback, provider, host, call
                 console.log('[RN-Fetch][CLOSELOAD-WV-PLAY] ' + playUrl.substring(0, 120));
                 libs.embed_callback(playUrl, provider, provider, 'Hls', callback, 0, [], [{ file: playUrl, quality: 1080 }], {
                     referer: referer,
-                    'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    'user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
                 }, {
                     type: 'm3u8',
                 });

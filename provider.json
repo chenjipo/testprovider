@@ -1,9 +1,8 @@
 {
   "providers": [
-	"dist/providers/qhexawatch.js",
     "dist/providers/ymovies.js",
     "dist/providers/xvidsrcvip.js",
     "dist/providers/muniquestream.js",
-    "dist/providers/lridomovie.js"
+	"dist/providers/lridomovie.js"
   ]
 }

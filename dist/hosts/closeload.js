@@ -35,33 +35,41 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
+function extractCloseloadEmbedId(rawUrl) {
+    if (!rawUrl) {
+        return '';
+    }
+    var url = String(rawUrl);
+    var videoMatch = url.match(/\/video\/embed\/([A-Za-z0-9]+)/i);
+    if (videoMatch) {
+        return videoMatch[1];
+    }
+    var legacyMatch = url.match(/\/embed-([A-Za-z0-9]+)/i);
+    if (legacyMatch) {
+        return legacyMatch[1];
+    }
+    return '';
+}
+function buildCloseloadImdbQuery(rawUrl) {
+    var imdbMatch = String(rawUrl || '').match(/imdb_id=([^&]+)/i);
+    return imdbMatch ? '?imdb_id=' + imdbMatch[1] : '';
+}
 function normalizeCloseloadEmbedUrl(rawUrl) {
     if (!rawUrl) {
         return '';
     }
-    var url = String(rawUrl);
-    var embedMatch = url.match(/\/embed-([A-Za-z0-9]+)/i);
-    if (url.indexOf('closeload') >= 0 && embedMatch) {
-        var embedId = embedMatch[1];
-        var imdbMatch = url.match(/imdb_id=([^&]+)/i);
-        var query = imdbMatch ? '?imdb_id=' + imdbMatch[1] : '';
-        return 'https://closeload.top/video/embed/' + embedId + '/' + query;
+    var embedId = extractCloseloadEmbedId(rawUrl);
+    if (!embedId) {
+        return String(rawUrl);
     }
-    return url;
+    return 'https://closeload.top/video/embed/' + embedId + '/' + buildCloseloadImdbQuery(rawUrl);
 }
 function buildRidorapidEmbedUrl(rawUrl) {
-    if (!rawUrl) {
+    var embedId = extractCloseloadEmbedId(rawUrl);
+    if (!embedId) {
         return '';
     }
-    var url = String(rawUrl);
-    var embedMatch = url.match(/\/embed-([A-Za-z0-9]+)/i);
-    if (!embedMatch) {
-        return '';
-    }
-    var embedId = embedMatch[1];
-    var imdbMatch = url.match(/imdb_id=([^&]+)/i);
-    var query = imdbMatch ? '?imdb_id=' + imdbMatch[1] : '';
-    return 'https://ridorapid.closeload.top/embed-' + embedId + '/' + query;
+    return 'https://ridorapid.closeload.top/embed-' + embedId + '/' + buildCloseloadImdbQuery(rawUrl);
 }
 function buildCloseloadUrlCandidates(rawUrl, config) {
     var list = [];
@@ -75,48 +83,103 @@ function buildCloseloadUrlCandidates(rawUrl, config) {
     }
     var raw = String((config && config.embedUrlRaw) ? config.embedUrlRaw : rawUrl || '');
     var url = String(rawUrl || '');
+    var base = raw || url;
+    var embedId = extractCloseloadEmbedId(base);
+    var query = buildCloseloadImdbQuery(base);
     pushCandidate(raw);
     if (url && url !== raw) {
         pushCandidate(url);
     }
-    pushCandidate(buildRidorapidEmbedUrl(raw || url));
-    pushCandidate(normalizeCloseloadEmbedUrl(raw || url));
-    var embedMatch = (raw || url).match(/\/embed-([A-Za-z0-9]+)/i);
-    if (embedMatch) {
-        var embedId = embedMatch[1];
-        var imdbMatch = (raw || url).match(/imdb_id=([^&]+)/i);
-        var query = imdbMatch ? '?imdb_id=' + imdbMatch[1] : '';
+    if (embedId) {
         pushCandidate('https://closeload.top/video/embed/' + embedId + '/' + query);
+        pushCandidate('https://closeload.top/video/embed/' + embedId + '/');
+        pushCandidate('https://closeload.top/video/embed/' + embedId);
+        pushCandidate('https://closeload.top/embed-' + embedId + '/' + query);
+        pushCandidate('https://ridorapid.closeload.top/video/embed/' + embedId + '/' + query);
+        pushCandidate('https://ridorapid.closeload.top/embed-' + embedId + '/' + query);
     }
+    pushCandidate(normalizeCloseloadEmbedUrl(base));
+    pushCandidate(buildRidorapidEmbedUrl(base));
     return list;
 }
-function pickCloseloadWebviewUrl(rawUrl, config, candidates) {
-    if (config && config.embedUrlRaw) {
-        return config.embedUrlRaw;
+function buildCloseloadWebviewPageUrl(embedUrl) {
+    var base = String(embedUrl || '').split('#')[0];
+    if (!base) {
+        return '';
     }
+    var sep = base.indexOf('?') >= 0 ? '&' : '?';
+    return base + sep + '_wv=' + Date.now() + '_' + Math.floor(Math.random() * 1000000);
+}
+function pickCloseloadWebviewUrl(rawUrl, config, candidates) {
+    var pick = '';
     var idx = 0;
     for (idx = 0; idx < candidates.length; idx++) {
-        if (candidates[idx].indexOf('ridorapid') >= 0) {
-            return candidates[idx];
+        if (candidates[idx].indexOf('closeload.top/video/embed') >= 0) {
+            pick = candidates[idx];
+            break;
         }
     }
-    return candidates.length ? candidates[0] : String(rawUrl || '');
+    if (!pick) {
+        for (idx = 0; idx < candidates.length; idx++) {
+            if (candidates[idx].indexOf('closeload') >= 0) {
+                pick = candidates[idx];
+                break;
+            }
+        }
+    }
+    if (!pick) {
+        pick = candidates.length ? candidates[0] : String(rawUrl || '');
+    }
+    return buildCloseloadWebviewPageUrl(pick);
+}
+function deriveOriginFromReferer(pageReferer) {
+    var match = String(pageReferer || '').match(/^(https?:\/\/[^\/]+)/i);
+    return match ? match[1] : 'https://closeload.top';
 }
 function buildCloseloadFetchHeaders(activeUrl, pageReferer) {
-    var headers = {
-        'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        referer: pageReferer,
-        origin: 'https://ridomovies.is',
-        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-    };
+    var referer = pageReferer || 'https://closeload.top/';
+    var origin = deriveOriginFromReferer(referer);
     if (activeUrl && activeUrl.indexOf('ridorapid') >= 0) {
-        headers.referer = activeUrl;
-        headers.origin = 'https://ridorapid.closeload.top';
+        referer = activeUrl;
+        origin = 'https://ridorapid.closeload.top';
+    } else if (activeUrl && activeUrl.indexOf('closeload.top') >= 0) {
+        referer = pageReferer || activeUrl;
+        origin = 'https://closeload.top';
     }
-    return headers;
+    return {
+        'user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+        referer: referer,
+        origin: origin,
+        Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+    };
+}
+function isCloseloadCloudflareBlock(response, htmlText) {
+    if (!htmlText) {
+        return false;
+    }
+    if (htmlText.indexOf('eval(function(p,a,c,k,e,d)') >= 0) {
+        return false;
+    }
+    if (htmlText.match(/let\s+url\s*=\s*['"]https/i)) {
+        return false;
+    }
+    if (htmlText.match(/https?:[^"'\\s]+\.m3u8/i)) {
+        return false;
+    }
+    if (response.status === 403 && (htmlText.indexOf('cloudflare') >= 0 || htmlText.indexOf('cf-browser-verification') >= 0 || htmlText.indexOf('Just a moment') >= 0)) {
+        return true;
+    }
+    if (response.status === 403 && htmlText.length < 9000) {
+        return true;
+    }
+    return false;
 }
 function isCloseloadHtmlUsable(response, htmlText) {
     if (!htmlText || htmlText.length < 200) {
+        return false;
+    }
+    if (isCloseloadCloudflareBlock(response, htmlText)) {
         return false;
     }
     if (response.status < 400) {
@@ -137,7 +200,7 @@ function isCloseloadHtmlUsable(response, htmlText) {
     if (htmlText.indexOf('master.txt') >= 0) {
         return true;
     }
-    return response.status < 500;
+    return false;
 }
 function fetchCloseloadWithRetry(activeUrl, embedHeaders, maxAttempts) {
     maxAttempts = maxAttempts || 3;
@@ -169,12 +232,19 @@ function fetchCloseloadWithRetry(activeUrl, embedHeaders, maxAttempts) {
     return attempt(0);
 }
 function buildCloseloadWebviewScript() {
-    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function postUrl(u){if(done||!u||String(u).indexOf('http')!==0)return;done=1;pm({step:'cl-url',url:u});}function scan(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m&&m[1])postUrl(m[1]);var m2=h.match(/https?:[^'\"\\s<>]+\\.(?:m3u8|txt)[^'\"\\s<>]*/i);if(m2)postUrl(m2[0]);var m3=h.match(/https?:[^'\"\\s<>]+master\\.txt[^'\"\\s<>]*/i);if(m3)postUrl(m3[0]);}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(!done&&(s.indexOf('.m3u8')>=0||s.indexOf('master.txt')>=0))postUrl(s);return r;});};}hook();pm({step:'cl-boot'});scan();var n=0;var iv=setInterval(function(){scan();n++;if(done||n>80)clearInterval(iv);},400);})();";
+    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function postUrl(u){if(done||!u||String(u).indexOf('http')!==0)return;done=1;pm({step:'cl-url',url:u});}function scan(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m&&m[1])postUrl(m[1]);var m2=h.match(/https?:[^'\"\\s<>]+\\.(?:m3u8|txt)[^'\"\\s<>]*/i);if(m2)postUrl(m2[0]);var m3=h.match(/https?:[^'\"\\s<>]+master\\.txt[^'\"\\s<>]*/i);if(m3)postUrl(m3[0]);}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(!done&&(s.indexOf('.m3u8')>=0||s.indexOf('master.txt')>=0))postUrl(s);return r;});};}hook();pm({step:'cl-boot',href:location.href});scan();var n=0;var iv=setInterval(function(){scan();n++;if(done||n>80)clearInterval(iv);},400);})();true;";
+}
+function buildCloseloadWebviewScripts() {
+    return {
+        beforeLoadScript: "(function(){try{window.ReactNativeWebView.postMessage(JSON.stringify({step:'cl-ping',href:location.href}));}catch(e){}})();true;",
+        script: buildCloseloadWebviewScript(),
+    };
 }
 function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, candidates) {
-    var pageReferer = config && config.pageReferer ? config.pageReferer : 'https://ridomovies.is/';
+    var pageReferer = config && config.pageReferer ? config.pageReferer : 'https://closeload.top/';
     var wvUrl = pickCloseloadWebviewUrl(embedUrl, config, candidates || [embedUrl]);
     var headers = buildCloseloadFetchHeaders(wvUrl, pageReferer);
+    var wvScripts = buildCloseloadWebviewScripts();
     if (!libs.scheduleEmbedWebview) {
         console.log('[RN-Fetch][CLOSELOAD-SKIP] webview-unavailable');
         return;
@@ -189,7 +259,8 @@ function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, 
                 headers: headers,
                 callback: callback,
                 userAgent: headers['user-agent'],
-                beforeLoadScript: buildCloseloadWebviewScript(),
+                beforeLoadScript: wvScripts.beforeLoadScript,
+                script: wvScripts.script,
                 metadata: {
                     embedUrl: wvUrl,
                     embedUrlRaw: config && config.embedUrlRaw ? config.embedUrlRaw : wvUrl,
@@ -385,7 +456,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
             case 0:
                 DOMAIN = 'https://closeload.top';
                 HOST = 'closeload';
-                pageReferer = config && config.pageReferer ? config.pageReferer : 'https://ridomovies.is/';
+                pageReferer = config && config.pageReferer ? config.pageReferer : 'https://closeload.top/';
                 callbackHost = provider === 'LRIDOMOVIE' ? provider : HOST;
                 urlCandidates = buildCloseloadUrlCandidates(url, config);
                 candidateIdx = 0;
@@ -393,7 +464,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v5-rn-retry candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v6-cf-embed-fix candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
@@ -504,16 +575,12 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
     });
 }); };
 hosts['closeload-embed'] = function (url, movieInfo, provider, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var embedUrl, pageReferer, headers, beforeLoadScript;
+    var embedUrl, pageReferer, headers, wvScripts;
     return __generator(this, function (_a) {
         embedUrl = (config && config.embedUrl) ? config.embedUrl : String(url || '');
-        pageReferer = (config && config.pageReferer) ? config.pageReferer : 'https://ridomovies.is/';
-        headers = {
-            referer: pageReferer,
-            origin: 'https://ridomovies.is',
-            'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        };
-        beforeLoadScript = buildCloseloadWebviewScript();
+        pageReferer = (config && config.pageReferer) ? config.pageReferer : 'https://closeload.top/';
+        headers = buildCloseloadFetchHeaders(embedUrl, pageReferer);
+        wvScripts = buildCloseloadWebviewScripts();
         console.log('[RN-Fetch][CLOSELOAD-EMBED-HOST] ' + embedUrl.substring(0, 140));
         try {
             callback({
@@ -524,7 +591,8 @@ hosts['closeload-embed'] = function (url, movieInfo, provider, config, callback)
                     headers: headers,
                     callback: callback,
                     userAgent: headers['user-agent'],
-                    beforeLoadScript: beforeLoadScript,
+                    beforeLoadScript: wvScripts.beforeLoadScript,
+                    script: wvScripts.script,
                     metadata: {
                         embedUrl: embedUrl,
                         pageReferer: pageReferer,
