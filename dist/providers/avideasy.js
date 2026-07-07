@@ -35,17 +35,18 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-var AVIDEASY_PROVIDER = 'V';
-var AVIDEASY_VERSION = 'v6-provider-v-inflight';
+var AVIDEASY_PROVIDER = 'AVideasy';
+var AVIDEASY_VERSION = 'v7-global-cache';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
 var AVIDEASY_PLAYER_ORIGIN = 'https://player.videasy.to';
 var AVIDEASY_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
-var AVIDEASY_CACHE_MS = 120000;
-var AVIDEASY_SERVER_DELAY_MS = 400;
-var AVIDEASY_SEED_GAP_MS = 900;
+var AVIDEASY_CACHE_MS = 300000;
+var AVIDEASY_SERVER_DELAY_MS = 500;
+var AVIDEASY_SEED_GAP_MS = 1200;
 var AVIDEASY_FETCH_TIMEOUT_MS = 22000;
+var AVIDEASY_DECRYPT_RETRY_MS = 700;
 var AVIDEASY_MAX_OK = 3;
 var AVIDEASY_SERVERS = [
     { name: 'Neon', path: 'neon2' },
@@ -115,6 +116,28 @@ function avideasySleep(ms) {
         setTimeout(resolve, ms);
     });
 }
+function avideasyGetGlobalRoot() {
+    if (typeof globalThis !== 'undefined') {
+        return globalThis;
+    }
+    if (typeof global !== 'undefined') {
+        return global;
+    }
+    return {};
+}
+function avideasyGetState() {
+    var root = avideasyGetGlobalRoot();
+    if (!root.__avideasyState) {
+        root.__avideasyState = {
+            cache: {},
+            inflight: {},
+            seedMutex: Promise.resolve(),
+            decryptMutex: Promise.resolve(),
+            lastSeedAt: 0,
+        };
+    }
+    return root.__avideasyState;
+}
 function avideasyRunKey(movieInfo) {
     return [
         String(movieInfo.tmdb_id || ''),
@@ -124,29 +147,36 @@ function avideasyRunKey(movieInfo) {
     ].join('|');
 }
 function avideasyGetCacheEntry(runKey) {
-    if (!libs.__avideasyCache) {
-        return null;
-    }
-    var entry = libs.__avideasyCache[runKey];
+    var state = avideasyGetState();
+    var entry = state.cache[runKey];
     if (!entry || Date.now() - entry.at > AVIDEASY_CACHE_MS) {
         return null;
     }
     return entry;
 }
 function avideasySetCacheEntry(runKey, items) {
-    if (!libs.__avideasyCache) {
-        libs.__avideasyCache = {};
-    }
-    libs.__avideasyCache[runKey] = {
+    var state = avideasyGetState();
+    state.cache[runKey] = {
         at: Date.now(),
         items: items,
     };
+    if (typeof libs !== 'undefined' && libs) {
+        libs.__avideasyCache = state.cache;
+    }
+}
+function avideasyDisplayName(rank) {
+    return rank ? 'Server V' + rank : 'Server V';
 }
 function avideasyDeliverCached(items, callback) {
     for (var i = 0; i < items.length; i++) {
         var item = items[i];
-        console.log('[RN-Fetch][AVIDEASY-DELIVER] rank=' + item.rank + ' host=' + item.host);
-        libs.embed_callback(item.file, AVIDEASY_PROVIDER, item.host, 'Hls', callback, item.rank, item.tracks, item.directQuality, item.headers, { type: 'm3u8' });
+        var label = avideasyDisplayName(item.rank);
+        console.log('[RN-Fetch][AVIDEASY-DELIVER] rank=' + item.rank + ' host=' + item.host + ' label=' + label);
+        libs.embed_callback(item.file, AVIDEASY_PROVIDER, item.host, 'Hls', callback, item.rank, item.tracks, item.directQuality, item.headers, {
+            type: 'm3u8',
+            provider: label,
+            source: 'V-' + item.rank,
+        });
     }
 }
 function avideasyFetchText(url, headers) {
@@ -183,15 +213,14 @@ function avideasyFetchSeedRaw(tmdbId, attempt) {
             throw new Error('seed-missing status=' + result.status);
         }
         libs.__avideasyLastSeedAt = Date.now();
+        avideasyGetState().lastSeedAt = libs.__avideasyLastSeedAt;
         return String(data.seed);
     });
 }
 function avideasyFetchSeed(tmdbId) {
-    if (!libs.__avideasySeedMutex) {
-        libs.__avideasySeedMutex = Promise.resolve();
-    }
-    var waitMs = Math.max(0, AVIDEASY_SEED_GAP_MS - (Date.now() - (libs.__avideasyLastSeedAt || 0)));
-    var chain = libs.__avideasySeedMutex.then(function () {
+    var state = avideasyGetState();
+    var waitMs = Math.max(0, AVIDEASY_SEED_GAP_MS - (Date.now() - (state.lastSeedAt || 0)));
+    var chain = state.seedMutex.then(function () {
         if (waitMs > 0) {
             return avideasySleep(waitMs);
         }
@@ -199,7 +228,7 @@ function avideasyFetchSeed(tmdbId) {
     }).then(function () {
         return avideasyFetchSeedRaw(tmdbId, 0);
     });
-    libs.__avideasySeedMutex = chain.catch(function () { });
+    state.seedMutex = chain.catch(function () { });
     return chain;
 }
 function avideasyExtractSources(decryptData) {
@@ -227,16 +256,48 @@ function avideasyExtractSubtitles(decryptData) {
     return [];
 }
 function avideasyDecryptBlob(movieInfo, encryptedText, seed) {
-    return libs.request_post(AVIDEASY_DEC_URL, {
-        'content-type': 'application/json',
-        'user-agent': AVIDEASY_USER_AGENT,
-        referer: AVIDEASY_PLAYER_ORIGIN + '/',
-    }, {
-        text: encryptedText,
-        id: String(movieInfo.tmdb_id),
-        seed: seed,
-    }, false, false);
+    var state = avideasyGetState();
+    var work = state.decryptMutex.then(function () {
+        return libs.request_post(AVIDEASY_DEC_URL, {
+            'content-type': 'application/json',
+            'user-agent': AVIDEASY_USER_AGENT,
+            referer: AVIDEASY_PLAYER_ORIGIN + '/',
+        }, {
+            text: encryptedText,
+            id: String(movieInfo.tmdb_id),
+            seed: seed,
+        }, false, false);
+    });
+    state.decryptMutex = work.catch(function () { });
+    return work;
 }
+function avideasyDecryptWithRetry(movieInfo, encryptedText, seed, serverName) { return __awaiter(_this, void 0, void 0, function () {
+    var decryptData, sources, retryData, retrySources;
+    return __generator(this, function (_a) {
+        switch (_a.label) {
+            case 0: return [4, avideasyDecryptBlob(movieInfo, encryptedText, seed)];
+            case 1:
+                decryptData = _a.sent();
+                sources = avideasyExtractSources(decryptData);
+                if (sources.length) {
+                    return [2, decryptData];
+                }
+                console.log('[RN-Fetch][AVIDEASY-DECRYPT-RETRY] server=' + serverName);
+                return [4, avideasySleep(AVIDEASY_DECRYPT_RETRY_MS)];
+            case 2:
+                _a.sent();
+                return [4, avideasyDecryptBlob(movieInfo, encryptedText, seed)];
+            case 3:
+                retryData = _a.sent();
+                retrySources = avideasyExtractSources(retryData);
+                if (!retrySources.length) {
+                    console.log('[RN-Fetch][AVIDEASY-DECRYPT-EMPTY] server=' + serverName);
+                    return [2, null];
+                }
+                return [2, retryData];
+        }
+    });
+}); }
 function avideasyFetchServerSource(server, movieInfo, seed, headers) { return __awaiter(_this, void 0, void 0, function () {
     var sourceUrl, result, decryptData, sources;
     return __generator(this, function (_a) {
@@ -252,9 +313,12 @@ function avideasyFetchServerSource(server, movieInfo, seed, headers) { return __
                     return [2, null];
                 }
                 console.log('[RN-Fetch][AVIDEASY-BLOB] server=' + server.name + ' len=' + result.text.length);
-                return [4, avideasyDecryptBlob(movieInfo, result.text, seed)];
+                return [4, avideasyDecryptWithRetry(movieInfo, result.text, seed, server.name)];
             case 2:
                 decryptData = _a.sent();
+                if (!decryptData) {
+                    return [2, null];
+                }
                 sources = avideasyExtractSources(decryptData);
                 if (!sources.length) {
                     console.log('[RN-Fetch][AVIDEASY-DECRYPT-EMPTY] server=' + server.name);
@@ -265,10 +329,16 @@ function avideasyFetchServerSource(server, movieInfo, seed, headers) { return __
     });
 }); }
 function avideasyCollectLinks(movieInfo) { return __awaiter(_this, void 0, void 0, function () {
-    var headers, seed, okCount, rank, delivered, _i, AVIDEASY_SERVERS_1, server, payload, directQuality, tracks, _a, _b, itemDirect, _c, _d, itemSubtitle, lang, serverError_1;
+    var runKey, cached, headers, seed, okCount, rank, delivered, _i, AVIDEASY_SERVERS_1, server, payload, directQuality, tracks, _a, _b, itemDirect, _c, _d, itemSubtitle, lang, serverError_1;
     return __generator(this, function (_e) {
         switch (_e.label) {
             case 0:
+                runKey = avideasyRunKey(movieInfo);
+                cached = avideasyGetCacheEntry(runKey);
+                if (cached && cached.items.length) {
+                    console.log('[RN-Fetch][AVIDEASY-COLLECT-SKIP] cache count=' + cached.items.length);
+                    return [2, cached.items];
+                }
                 headers = avideasyBuildHeaders();
                 console.log('[RN-Fetch][AVIDEASY-COLLECT] start tmdb=' + movieInfo.tmdb_id);
                 return [4, avideasyFetchSeed(movieInfo.tmdb_id)];
@@ -357,12 +427,10 @@ function avideasyCollectLinks(movieInfo) { return __awaiter(_this, void 0, void 
     });
 }); }
 function avideasyEnsureInflight(runKey, movieInfo) {
-    if (!libs.__avideasyInflight) {
-        libs.__avideasyInflight = {};
-    }
-    if (libs.__avideasyInflight[runKey]) {
+    var state = avideasyGetState();
+    if (state.inflight[runKey]) {
         console.log('[RN-Fetch][AVIDEASY-WAIT] ' + runKey);
-        return libs.__avideasyInflight[runKey];
+        return state.inflight[runKey];
     }
     var task = Promise.resolve().then(function () {
         return avideasyCollectLinks(movieInfo);
@@ -376,12 +444,15 @@ function avideasyEnsureInflight(runKey, movieInfo) {
         return [];
     }).finally(function () {
         setTimeout(function () {
-            if (libs.__avideasyInflight && libs.__avideasyInflight[runKey] === task) {
-                delete libs.__avideasyInflight[runKey];
+            if (state.inflight[runKey] === task) {
+                delete state.inflight[runKey];
             }
         }, AVIDEASY_CACHE_MS);
     });
-    libs.__avideasyInflight[runKey] = task;
+    state.inflight[runKey] = task;
+    if (typeof libs !== 'undefined' && libs) {
+        libs.__avideasyInflight = state.inflight;
+    }
     return task;
 }
 source.getResource = function (movieInfo, config, callback) {
@@ -398,11 +469,16 @@ source.getResource = function (movieInfo, config, callback) {
         return Promise.resolve();
     }
     return avideasyEnsureInflight(runKey, movieInfo).then(function (items) {
-        if (items.length) {
-            avideasyDeliverCached(items, callback);
-        }
-        else {
+        if (!items.length) {
+            var lateCache = avideasyGetCacheEntry(runKey);
+            if (lateCache && lateCache.items.length) {
+                console.log('[RN-Fetch][AVIDEASY-CACHE-LATE] count=' + lateCache.items.length);
+                avideasyDeliverCached(lateCache.items, callback);
+                return;
+            }
             console.log('[RN-Fetch][AVIDEASY-MISS] no sources tmdb=' + movieInfo.tmdb_id);
+            return;
         }
+        avideasyDeliverCached(items, callback);
     });
 };
