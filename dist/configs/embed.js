@@ -142,13 +142,9 @@ if (!libs.__embedCallbackDeliver) {
             console.log({ subs: subs }, "SUBDATAPARSE");
         }
         var linkRank = rank || 0;
-        var labelProvider = provider;
-        if (labelProvider === 'AVideasy' || labelProvider === 'V') {
-            labelProvider = 'V';
-        }
-        var displayProvider = libs.string_provider(labelProvider, linkRank);
-        var linkSource = String(labelProvider || '');
-        var linkHost = String(host || labelProvider || '');
+        var displayProvider = libs.string_provider(provider, linkRank);
+        var linkSource = String(provider || '');
+        var linkHost = String(host || provider || '');
         if (linkRank > 0) {
             linkSource = linkSource + '-' + linkRank;
             linkHost = linkHost + '-' + linkRank;

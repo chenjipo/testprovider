@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v7-live-deliver';
+var AVIDEASY_VERSION = 'v8-source-avideasy';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
@@ -166,9 +166,6 @@ function avideasySetCacheEntry(runKey, items) {
         libs.__avideasyCache = state.cache;
     }
 }
-function avideasyDisplayName(rank) {
-    return rank ? 'Server V' + rank : 'Server V';
-}
 function avideasyDeliverCached(items, callback, runKey) {
     var state = avideasyGetState();
     for (var i = 0; i < items.length; i++) {
@@ -178,12 +175,9 @@ function avideasyDeliverCached(items, callback, runKey) {
             continue;
         }
         state.delivered[deliverKey] = true;
-        var label = avideasyDisplayName(item.rank);
-        console.log('[RN-Fetch][AVIDEASY-DELIVER] rank=' + item.rank + ' host=' + item.host + ' label=' + label);
+        console.log('[RN-Fetch][AVIDEASY-DELIVER] rank=' + item.rank + ' host=' + item.host + ' source=' + AVIDEASY_PROVIDER + '-' + item.rank);
         libs.embed_callback(item.file, AVIDEASY_PROVIDER, item.host, 'Hls', callback, item.rank, item.tracks, item.directQuality, item.headers, {
             type: 'm3u8',
-            provider: label,
-            source: 'V-' + item.rank,
         });
     }
 }
