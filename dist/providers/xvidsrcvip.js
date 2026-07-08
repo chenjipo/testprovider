@@ -42,6 +42,11 @@ function xvidsrcvipGetEncCache() {
     }
     return libs.__xvipEncCache;
 }
+function xvidsrcvipSortByQuality(directQuality) {
+    return directQuality.slice().sort(function (left, right) {
+        return (right.quality || 0) - (left.quality || 0);
+    });
+}
 function xvidsrcvipSleep(ms) {
     return new Promise(function (resolve) {
         setTimeout(resolve, ms);
@@ -1124,7 +1129,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 if (directQuality.length > 0) {
                     libs.log({ directQuality: directQuality }, PROVIDER, "DIRECT QUALITY");
-                    directQuality = _.orderBy(directQuality, ['quality'], ['desc']);
+                    directQuality = xvidsrcvipSortByQuality(directQuality);
                     libs.embed_callback(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank++, [], directQuality, headers);
                 }
                 return [3, 13];
@@ -1161,7 +1166,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!directQuality || directQuality.length == 0) {
                     return [3, 13];
                 }
-                directQuality = _.orderBy(directQuality, ['quality'], ['desc']);
+                directQuality = xvidsrcvipSortByQuality(directQuality);
                 libs.log({ directQuality: directQuality }, PROVIDER, "ORDERED DIRECT QUALITY");
                 libs.embed_callback(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank++, [], directQuality, headers, {
                     "type": "m3u8"

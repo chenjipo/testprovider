@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v10-callback-redeliver';
+var AVIDEASY_VERSION = 'v11-orderby-fix';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
@@ -118,6 +118,11 @@ function avideasyBuildSourceUrl(serverPath, movieInfo, seed) {
 function avideasyParseQuality(rawQuality) {
     var match = String(rawQuality || '').match(/([0-9]+)/i);
     return match ? Number(match[1]) : 1080;
+}
+function avideasySortByQuality(directQuality) {
+    return directQuality.slice().sort(function (left, right) {
+        return (right.quality || 0) - (left.quality || 0);
+    });
 }
 function avideasySleep(ms) {
     return new Promise(function (resolve) {
@@ -450,7 +455,7 @@ function avideasyCollectLinks(movieInfo, liveCallback, runKey, deliveryGen) { re
                 if (!directQuality.length) {
                     return [3, 8];
                 }
-                directQuality = _.orderBy(directQuality, ['quality'], ['desc']);
+                directQuality = avideasySortByQuality(directQuality);
                 rank += 1;
                 okCount += 1;
                 console.log('[RN-Fetch][AVIDEASY-OK] server=' + server.name + ' sources=' + directQuality.length + ' rank=' + rank);
