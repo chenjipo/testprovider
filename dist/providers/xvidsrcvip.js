@@ -1083,6 +1083,152 @@ function xvidsrcvipFetchApi(urlovo, headers) {
     };
     return attemptFetch(3);
 }
+var XVIP_URL_KEY_HEX = '7f3e9c2a8b5d1f4e6a9c3b7d2e5f8a1c4b6d9e2f5a8c1b4d7e9f2a5c8b1d4e7f';
+function xvidsrcvipHexToBytes(hex) {
+    var out = new Uint8Array(hex.length / 2);
+    for (var i = 0; i < out.length; i++) {
+        out[i] = parseInt(hex.substr(i * 2, 2), 16);
+    }
+    return out;
+}
+function xvidsrcvipBase64UrlToBytes(value) {
+    var normalized = String(value || '').replace(/-/g, '+').replace(/_/g, '/');
+    var mod = normalized.length % 4;
+    if (mod === 2) {
+        normalized += '==';
+    }
+    else if (mod === 3) {
+        normalized += '=';
+    }
+    else if (mod === 1) {
+        throw new Error('invalid base64url length');
+    }
+    if (typeof atob === 'undefined') {
+        throw new Error('atob unavailable');
+    }
+    var binary = atob(normalized);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) {
+        bytes[i] = binary.charCodeAt(i);
+    }
+    return bytes;
+}
+function xvidsrcvipGetGcmKeyPromise() {
+    if (!libs.__xvipGcmKeyPromise) {
+        libs.__xvipGcmKeyPromise = (function () {
+            if (typeof crypto === 'undefined' || !crypto.subtle) {
+                return Promise.resolve(null);
+            }
+            var keyBytes = xvidsrcvipHexToBytes(XVIP_URL_KEY_HEX);
+            return crypto.subtle.importKey('raw', keyBytes, { name: 'AES-GCM' }, false, ['decrypt']);
+        })();
+    }
+    return libs.__xvipGcmKeyPromise;
+}
+function xvidsrcvipDecodeToken(token) {
+    return __awaiter(_this, void 0, void 0, function () {
+        var key, allBytes, iv, cipher, ivBuf, cipherBuf, plainBuf, plain, decodeErr_1;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    _a.trys.push([0, 3, , 4]);
+                    return [4, xvidsrcvipGetGcmKeyPromise()];
+                case 1:
+                    key = _a.sent();
+                    if (!key) {
+                        return [2, ''];
+                    }
+                    allBytes = xvidsrcvipBase64UrlToBytes(token);
+                    if (allBytes.length < 28) {
+                        return [2, ''];
+                    }
+                    iv = allBytes.slice(0, 12);
+                    cipher = allBytes.slice(12);
+                    ivBuf = iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength);
+                    cipherBuf = cipher.buffer.slice(cipher.byteOffset, cipher.byteOffset + cipher.byteLength);
+                    return [4, crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivBuf }, key, cipherBuf)];
+                case 2:
+                    plainBuf = _a.sent();
+                    plain = new TextDecoder().decode(plainBuf);
+                    return [2, plain];
+                case 3:
+                    decodeErr_1 = _a.sent();
+                    console.log('[RN-Fetch][XVIP-DECODE-ERR] ' + String(decodeErr_1 && decodeErr_1.message ? decodeErr_1.message : decodeErr_1));
+                    return [2, ''];
+                case 4: return [2];
+            }
+        });
+    });
+}
+function xvidsrcvipLooksLikeHttp(url) {
+    return /^https?:\/\//i.test(String(url || ''));
+}
+function xvidsrcvipResolvePlayUrl(rawUrl) {
+    return __awaiter(_this, void 0, void 0, function () {
+        var decoded;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    if (!rawUrl) {
+                        return [2, ''];
+                    }
+                    if (xvidsrcvipLooksLikeHttp(rawUrl)) {
+                        return [2, rawUrl];
+                    }
+                    return [4, xvidsrcvipDecodeToken(rawUrl)];
+                case 1:
+                    decoded = _a.sent();
+                    if (decoded) {
+                        console.log('[RN-Fetch][XVIP-DECODE] ok host=' + String(decoded).split('/')[2]);
+                    }
+                    else {
+                        console.log('[RN-Fetch][XVIP-DECODE] fail');
+                    }
+                    return [2, decoded];
+            }
+        });
+    });
+}
+function xvidsrcvipNeedsQualityFetch(playUrl) {
+    return playUrl.indexOf('vdrk.site') !== -1 || playUrl.indexOf('/playlist/') !== -1;
+}
+function xvidsrcvipFetchJsonQuality(playUrl, headers) {
+    return fetch(playUrl, { headers: headers, method: 'GET' }).then(function (response) {
+        var contentType = response.headers && response.headers.get ? response.headers.get('content-type') : '';
+        if (!contentType || contentType.indexOf('application/json') === -1) {
+            return null;
+        }
+        return response.json();
+    }).then(function (json) {
+        if (!Array.isArray(json) || !json.length || !json[0].resolution || !json[0].url) {
+            return null;
+        }
+        return json.slice().sort(function (left, right) {
+            return (right.resolution || 0) - (left.resolution || 0);
+        });
+    }).catch(function () {
+        return null;
+    });
+}
+function xvidsrcvipLoadQualityList(playUrl, headers) {
+    if (playUrl.indexOf('vdrk.site') !== -1 && libs.request_get) {
+        return Promise.resolve(libs.request_get(playUrl, headers));
+    }
+    return xvidsrcvipFetchJsonQuality(playUrl, headers);
+}
+function xvidsrcvipBuildDirectQuality(qualityData) {
+    var directQuality = [];
+    for (var i = 0; i < (qualityData || []).length; i++) {
+        var qItem = qualityData[i];
+        if (qItem.resolution && qItem.url) {
+            directQuality.push({
+                file: qItem.url,
+                quality: qItem.resolution,
+            });
+        }
+    }
+    return xvidsrcvipSortByQuality(directQuality);
+}
 function xvidsrcvipEnsureApiJson(runKey, urlovo, headers) {
     var state = xvidsrcvipGetState();
     if (state.apiCache[runKey]) {
@@ -1138,7 +1284,7 @@ function xvidsrcvipTryDeliver(fileUrl, provider, host, quality, callback, rank, 
     return true;
 }
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, DOMAIN, headers, urlovo, json, xvipKeyList, xvipIdx, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, xvipRunKey, fetchGen, e_1;
+    var PROVIDER, DOMAIN, headers, urlovo, json, xvipKeyList, xvipIdx, _i, item, source, playUrl, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, deliverOptions, errorRequest_1, rank, xvipRunKey, fetchGen, e_1;
     return __generator(this, function (_g) {
         switch (_g.label) {
             case 0:
@@ -1149,13 +1295,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v13-all-servers');
+                console.log('[RN-Fetch][XVIP-VERSION] v14-token-decrypt');
                 xvipRunKey = xvidsrcvipRunKey(movieInfo);
                 xvidsrcvipBeginRun(xvipRunKey);
                 fetchGen = String(Date.now()) + '-' + String(Math.floor(Math.random() * 100000));
                 _g.label = 1;
             case 1:
-                _g.trys.push([1, 14, , 15]);
+                _g.trys.push([1, 16, , 17]);
                 if (!movieInfo || !movieInfo.tmdb_id) {
                     console.log('[RN-Fetch][XVIP-SKIP] movieinfo-empty tmdb=' + String(movieInfo && movieInfo.tmdb_id));
                     return [2];
@@ -1192,58 +1338,55 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 _i = 0;
                 _g.label = 5;
             case 5:
-                if (!(_i < xvipKeyList.length)) return [3, 15];
+                if (!(_i < xvipKeyList.length)) return [3, 17];
                 item = xvipKeyList[_i];
                 rank = _i + 1;
                 _g.label = 6;
             case 6:
-                _g.trys.push([6, 12, , 13]);
+                _g.trys.push([6, 14, , 15]);
                 source = json[item];
                 if (!source.url) {
-                    return [3, 13];
+                    return [3, 15];
                 }
-                if (!(source.url.indexOf("vdrk.site") != -1)) return [3, 8];
-                return [4, libs.request_get(source.url, headers)];
+                return [4, xvidsrcvipResolvePlayUrl(source.url)];
             case 7:
+                playUrl = _g.sent();
+                if (!playUrl) {
+                    console.log('[RN-Fetch][XVIP-SKIP] playurl-empty host=' + item);
+                    return [3, 15];
+                }
+                if (!xvidsrcvipNeedsQualityFetch(playUrl)) return [3, 9];
+                return [4, xvidsrcvipLoadQualityList(playUrl, headers)];
+            case 8:
                 qualityData = _g.sent();
                 libs.log({ qualityData: qualityData }, PROVIDER, "QUALITY DATA");
-                directQuality = [];
-                for (_d = 0, _e = qualityData || []; _d < _e.length; _d++) {
-                    qItem = _e[_d];
-                    libs.log({ qItem: qItem }, PROVIDER, "QUALITY ITEM");
-                    if (qItem.resolution && qItem.url) {
-                        directQuality.push({
-                            file: qItem.url,
-                            quality: qItem.resolution,
-                        });
-                    }
-                }
+                directQuality = xvidsrcvipBuildDirectQuality(qualityData);
                 if (directQuality.length > 0) {
                     libs.log({ directQuality: directQuality }, PROVIDER, "DIRECT QUALITY");
-                    directQuality = xvidsrcvipSortByQuality(directQuality);
-                    xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, {}, xvipRunKey, fetchGen);
+                    deliverOptions = directQuality[0].file.indexOf('.m3u8') !== -1 ? { type: 'm3u8' } : {};
+                    xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, deliverOptions, xvipRunKey, fetchGen);
                 }
-                return [3, 13];
-            case 8:
-                if (!(source.url.indexOf("/playlist.m3u8") != -1)) return [3, 11];
-                return [4, fetch(source.url, {
+                return [3, 15];
+            case 9:
+                if (!(playUrl.indexOf("/playlist.m3u8") != -1)) return [3, 13];
+                return [4, fetch(playUrl, {
                         headers: headers,
                         method: "GET"
                     })];
-            case 9:
+            case 10:
                 dataQuality = _g.sent();
                 return [4, dataQuality.text()];
-            case 10:
+            case 11:
                 textQuality = _g.sent();
                 textQuality = textQuality.split("\n").filter(function (line) { return line.indexOf("/playlist.m3u8") != -1; });
                 libs.log({ textQuality: textQuality }, PROVIDER, "TEXT QUALITY");
                 if (!textQuality) {
-                    return [3, 13];
+                    return [3, 15];
                 }
                 directQuality = [];
                 for (_f = 0, textQuality_1 = textQuality; _f < textQuality_1.length; _f++) {
                     line = textQuality_1[_f];
-                    directURl = source.url.split("/playlist.m3u8")[0] + "/" + line.trim();
+                    directURl = playUrl.split("/playlist.m3u8")[0] + "/" + line.trim();
                     quality = line.trim().split("/")[0] || 1080;
                     libs.log({ directURl: directURl, quality: quality }, PROVIDER, "DIRECT URL AND QUALITY");
                     if (directURl && quality) {
@@ -1255,31 +1398,33 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 libs.log({ directQuality: directQuality }, PROVIDER, "DIRECT QUALITY");
                 if (!directQuality || directQuality.length == 0) {
-                    return [3, 13];
+                    return [3, 15];
                 }
                 directQuality = xvidsrcvipSortByQuality(directQuality);
                 libs.log({ directQuality: directQuality }, PROVIDER, "ORDERED DIRECT QUALITY");
                 xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, {
                     "type": "m3u8"
                 }, xvipRunKey, fetchGen);
-                return [3, 13];
-            case 11:
-                xvidsrcvipTryDeliver(source.url, PROVIDER, item, 'Hls', callback, rank, [], [{ file: source.url, quality: 1080 }], headers, source.url.indexOf(".m3u8") != -1 ? {
-                    type: "m3u8"
-                } : {}, xvipRunKey, fetchGen);
-                return [3, 13];
-            case 12:
-                errorRequest_1 = _g.sent();
-                return [3, 13];
+                return [3, 15];
             case 13:
+                deliverOptions = (source.type === 'hls' || playUrl.indexOf('.m3u8') != -1) ? {
+                    type: "m3u8"
+                } : {};
+                xvidsrcvipTryDeliver(playUrl, PROVIDER, item, 'Hls', callback, rank, [], [{ file: playUrl, quality: 1080 }], headers, deliverOptions, xvipRunKey, fetchGen);
+                return [3, 15];
+            case 14:
+                errorRequest_1 = _g.sent();
+                console.log('[RN-Fetch][XVIP-SOURCE-ERR] host=' + item + ' ' + String(errorRequest_1 && errorRequest_1.message ? errorRequest_1.message : errorRequest_1));
+                return [3, 15];
+            case 15:
                 _i++;
                 return [3, 5];
-            case 14:
+            case 16:
                 e_1 = _g.sent();
                 libs.log({ e: e_1 }, PROVIDER, "ERROR");
                 console.log('[RN-Fetch][XVIP-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
-                return [3, 15];
-            case 15: return [2];
+                return [3, 17];
+            case 17: return [2];
         }
     });
 }); };
