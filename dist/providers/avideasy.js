@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v9-server-a-slot';
+var AVIDEASY_VERSION = 'v10-callback-redeliver';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
@@ -173,17 +173,21 @@ function avideasySetCacheEntry(runKey, items) {
         libs.__avideasyCache = state.cache;
     }
 }
-function avideasyDeliverCached(items, callback, runKey) {
+function avideasyCreateDeliveryGen() {
+    return String(Date.now()) + '-' + String(Math.floor(Math.random() * 1000000));
+}
+function avideasyDeliverCached(items, callback, runKey, deliveryGen) {
     var state = avideasyGetState();
+    var scope = (runKey || 'global') + '|' + (deliveryGen || 'legacy');
     for (var i = 0; i < items.length; i++) {
         var item = items[i];
-        var deliverKey = (runKey || 'global') + '|' + item.rank;
+        var deliverKey = scope + '|' + item.rank;
         if (state.delivered[deliverKey]) {
             continue;
         }
         state.delivered[deliverKey] = true;
         var streamMeta = avideasyStreamMeta(item.file);
-        console.log('[RN-Fetch][AVIDEASY-DELIVER] rank=' + item.rank + ' host=' + item.host + ' label=Server A' + item.rank + ' type=' + (streamMeta.type || 'direct'));
+        console.log('[RN-Fetch][AVIDEASY-DELIVER] gen=' + deliveryGen + ' rank=' + item.rank + ' host=' + item.host + ' label=Server A' + item.rank + ' type=' + (streamMeta.type || 'direct'));
         libs.embed_callback(item.file, AVIDEASY_PROVIDER, item.host, streamMeta.quality, callback, item.rank, item.tracks, item.directQuality, item.headers, streamMeta.type ? { type: streamMeta.type } : {});
     }
 }
@@ -374,7 +378,7 @@ function avideasyFetchServerSource(server, movieInfo, seed, headers, attempt) {
         });
     });
 }
-function avideasyCollectLinks(movieInfo, liveCallback, runKey) { return __awaiter(_this, void 0, void 0, function () {
+function avideasyCollectLinks(movieInfo, liveCallback, runKey, deliveryGen) { return __awaiter(_this, void 0, void 0, function () {
     var runKey, cached, headers, seed, okCount, rank, delivered, _i, AVIDEASY_SERVERS_1, server, payload, directQuality, tracks, _a, _b, itemDirect, _c, _d, itemSubtitle, lang, serverError_1;
     return __generator(this, function (_e) {
         switch (_e.label) {
@@ -460,7 +464,7 @@ function avideasyCollectLinks(movieInfo, liveCallback, runKey) { return __awaite
                 };
                 delivered.push(deliveredItem);
                 if (liveCallback) {
-                    avideasyDeliverCached([deliveredItem], liveCallback, runKey);
+                    avideasyDeliverCached([deliveredItem], liveCallback, runKey, deliveryGen);
                 }
                 return [3, 8];
             case 7:
@@ -476,14 +480,14 @@ function avideasyCollectLinks(movieInfo, liveCallback, runKey) { return __awaite
         }
     });
 }); }
-function avideasyEnsureInflight(runKey, movieInfo, callback) {
+function avideasyEnsureInflight(runKey, movieInfo, callback, deliveryGen) {
     var state = avideasyGetState();
     if (state.inflight[runKey]) {
-        console.log('[RN-Fetch][AVIDEASY-WAIT] ' + runKey);
+        console.log('[RN-Fetch][AVIDEASY-WAIT] ' + runKey + ' gen=' + deliveryGen);
         return state.inflight[runKey];
     }
     var task = Promise.resolve().then(function () {
-        return avideasyCollectLinks(movieInfo, callback, runKey);
+        return avideasyCollectLinks(movieInfo, callback, runKey, deliveryGen);
     }).then(function (items) {
         if (items.length) {
             avideasySetCacheEntry(runKey, items);
@@ -512,23 +516,24 @@ source.getResource = function (movieInfo, config, callback) {
         return Promise.resolve();
     }
     var runKey = avideasyRunKey(movieInfo);
+    var deliveryGen = avideasyCreateDeliveryGen();
     var cached = avideasyGetCacheEntry(runKey);
     if (cached && cached.items.length) {
-        console.log('[RN-Fetch][AVIDEASY-CACHE] hit count=' + cached.items.length);
-        avideasyDeliverCached(cached.items, callback, runKey);
+        console.log('[RN-Fetch][AVIDEASY-CACHE] hit count=' + cached.items.length + ' gen=' + deliveryGen);
+        avideasyDeliverCached(cached.items, callback, runKey, deliveryGen);
         return Promise.resolve();
     }
-    return avideasyEnsureInflight(runKey, movieInfo, callback).then(function (items) {
+    return avideasyEnsureInflight(runKey, movieInfo, callback, deliveryGen).then(function (items) {
         if (!items.length) {
             var lateCache = avideasyGetCacheEntry(runKey);
             if (lateCache && lateCache.items.length) {
-                console.log('[RN-Fetch][AVIDEASY-CACHE-LATE] count=' + lateCache.items.length);
-                avideasyDeliverCached(lateCache.items, callback, runKey);
+                console.log('[RN-Fetch][AVIDEASY-CACHE-LATE] count=' + lateCache.items.length + ' gen=' + deliveryGen);
+                avideasyDeliverCached(lateCache.items, callback, runKey, deliveryGen);
                 return;
             }
             console.log('[RN-Fetch][AVIDEASY-MISS] no sources tmdb=' + movieInfo.tmdb_id);
             return;
         }
-        avideasyDeliverCached(items, callback, runKey);
+        avideasyDeliverCached(items, callback, runKey, deliveryGen);
     });
 };
