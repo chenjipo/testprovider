@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v11-orderby-fix';
+var AVIDEASY_VERSION = 'v12-dedup-callback';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
@@ -152,6 +152,10 @@ function avideasyGetState() {
     }
     return root.__avideasyState;
 }
+(function avideasyResetDeliveredOnReload() {
+    var state = avideasyGetState();
+    state.delivered = {};
+})();
 function avideasyRunKey(movieInfo) {
     return [
         String(movieInfo.tmdb_id || ''),
@@ -183,10 +187,9 @@ function avideasyCreateDeliveryGen() {
 }
 function avideasyDeliverCached(items, callback, runKey, deliveryGen) {
     var state = avideasyGetState();
-    var scope = (runKey || 'global') + '|' + (deliveryGen || 'legacy');
     for (var i = 0; i < items.length; i++) {
         var item = items[i];
-        var deliverKey = scope + '|' + item.rank;
+        var deliverKey = (runKey || 'global') + '|' + item.rank;
         if (state.delivered[deliverKey]) {
             continue;
         }

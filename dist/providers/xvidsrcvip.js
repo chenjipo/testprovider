@@ -1038,8 +1038,45 @@ function xvidsrcvipBuildEncWithRetry(movieInfo) {
         console.log('[RN-Fetch][XVIP-AES-WARM] ' + String(warmErr && warmErr.message ? warmErr.message : warmErr));
     }
 })();
+function xvidsrcvipGetState() {
+    var root = typeof globalThis !== 'undefined' ? globalThis : (typeof global !== 'undefined' ? global : {});
+    if (!root.__xvipState) {
+        root.__xvipState = { delivered: {} };
+    }
+    return root.__xvipState;
+}
+(function xvidsrcvipResetDeliveredOnReload() {
+    var state = xvidsrcvipGetState();
+    state.delivered = {};
+})();
+function xvidsrcvipRunKey(movieInfo) {
+    return [
+        String(movieInfo.tmdb_id || ''),
+        String(movieInfo.type || 'movie'),
+        String(movieInfo.season || '0'),
+        String(movieInfo.episode || '0'),
+    ].join('|');
+}
+function xvidsrcvipShouldDeliver(runKey, fileUrl) {
+    var state = xvidsrcvipGetState();
+    var deliverKey = runKey + '|' + String(fileUrl || '');
+    if (state.delivered[deliverKey]) {
+        return false;
+    }
+    state.delivered[deliverKey] = true;
+    return true;
+}
+function xvidsrcvipTryDeliver(fileUrl, provider, host, quality, callback, rank, subs, directQuality, headers, options, runKey) {
+    if (!xvidsrcvipShouldDeliver(runKey, fileUrl)) {
+        console.log('[RN-Fetch][XVIP-DELIVER-SKIP] dup rank=' + rank);
+        return false;
+    }
+    console.log('[RN-Fetch][XVIP-DELIVER] rank=' + rank + ' host=' + host + ' label=Server X' + rank);
+    libs.embed_callback(fileUrl, provider, host, quality, callback, rank, subs, directQuality, headers, options);
+    return true;
+}
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, DOMAIN, headers, enc, urlovo, response, json, xvipKeyList, xvipLastKey, xvipIdx, _a, _b, _c, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, e_1;
+    var PROVIDER, DOMAIN, headers, enc, urlovo, response, json, xvipKeyList, xvipLastKey, xvipIdx, _a, _b, _c, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, xvipRunKey, e_1;
     return __generator(this, function (_g) {
         switch (_g.label) {
             case 0:
@@ -1050,7 +1087,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v8-last-source-only');
+                console.log('[RN-Fetch][XVIP-VERSION] v9-rank1-dedup');
+                xvipRunKey = xvidsrcvipRunKey(movieInfo);
                 _g.label = 1;
             case 1:
                 _g.trys.push([1, 14, , 15]);
@@ -1066,7 +1104,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ enc: enc }, PROVIDER, "ENCODED");
                 urlovo = "".concat(DOMAIN, "/api/").concat(movieInfo.type, "/").concat(encodeURIComponent(enc));
                 libs.log({ urlovo: urlovo }, PROVIDER, "URL");
-                rank = 0;
+                rank = 1;
                 return [4, fetch(urlovo)];
             case 3:
                 response = _g.sent();
@@ -1130,7 +1168,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (directQuality.length > 0) {
                     libs.log({ directQuality: directQuality }, PROVIDER, "DIRECT QUALITY");
                     directQuality = xvidsrcvipSortByQuality(directQuality);
-                    libs.embed_callback(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank++, [], directQuality, headers);
+                    xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, {}, xvipRunKey);
                 }
                 return [3, 13];
             case 8:
@@ -1168,14 +1206,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 directQuality = xvidsrcvipSortByQuality(directQuality);
                 libs.log({ directQuality: directQuality }, PROVIDER, "ORDERED DIRECT QUALITY");
-                libs.embed_callback(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank++, [], directQuality, headers, {
+                xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, {
                     "type": "m3u8"
-                });
+                }, xvipRunKey);
                 return [3, 13];
             case 11:
-                libs.embed_callback(source.url, PROVIDER, item, 'Hls', callback, rank++, [], [{ file: source.url, quality: 1080 }], headers, source.url.indexOf(".m3u8") != -1 ? {
+                xvidsrcvipTryDeliver(source.url, PROVIDER, item, 'Hls', callback, rank, [], [{ file: source.url, quality: 1080 }], headers, source.url.indexOf(".m3u8") != -1 ? {
                     type: "m3u8"
-                } : {});
+                } : {}, xvipRunKey);
                 return [3, 13];
             case 12:
                 errorRequest_1 = _g.sent();
