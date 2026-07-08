@@ -1041,14 +1041,17 @@ function xvidsrcvipBuildEncWithRetry(movieInfo) {
 function xvidsrcvipGetState() {
     var root = typeof globalThis !== 'undefined' ? globalThis : (typeof global !== 'undefined' ? global : {});
     if (!root.__xvipState) {
-        root.__xvipState = { delivered: {} };
+        root.__xvipState = { delivered: {}, activeRunKey: '' };
     }
     return root.__xvipState;
 }
-(function xvidsrcvipResetDeliveredOnReload() {
+function xvidsrcvipBeginRun(runKey) {
     var state = xvidsrcvipGetState();
-    state.delivered = {};
-})();
+    if (state.activeRunKey !== runKey) {
+        state.delivered = {};
+        state.activeRunKey = runKey;
+    }
+}
 function xvidsrcvipRunKey(movieInfo) {
     return [
         String(movieInfo.tmdb_id || ''),
@@ -1087,8 +1090,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v9-rank1-dedup');
+                console.log('[RN-Fetch][XVIP-VERSION] v10-runkey-direct');
                 xvipRunKey = xvidsrcvipRunKey(movieInfo);
+                xvidsrcvipBeginRun(xvipRunKey);
                 _g.label = 1;
             case 1:
                 _g.trys.push([1, 14, , 15]);
