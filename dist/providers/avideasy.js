@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v7-global-cache';
+var AVIDEASY_VERSION = 'v7-fetch-decrypt';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
@@ -258,15 +258,37 @@ function avideasyExtractSubtitles(decryptData) {
 function avideasyDecryptBlob(movieInfo, encryptedText, seed) {
     var state = avideasyGetState();
     var work = state.decryptMutex.then(function () {
-        return libs.request_post(AVIDEASY_DEC_URL, {
-            'content-type': 'application/json',
-            'user-agent': AVIDEASY_USER_AGENT,
-            referer: AVIDEASY_PLAYER_ORIGIN + '/',
-        }, {
-            text: encryptedText,
-            id: String(movieInfo.tmdb_id),
-            seed: seed,
-        }, false, false);
+        var timeout = new Promise(function (_, reject) {
+            setTimeout(function () {
+                reject(new Error('decrypt-timeout'));
+            }, AVIDEASY_FETCH_TIMEOUT_MS);
+        });
+        return Promise.race([
+            fetch(AVIDEASY_DEC_URL, {
+                method: 'POST',
+                headers: {
+                    'content-type': 'application/json',
+                    'user-agent': AVIDEASY_USER_AGENT,
+                    referer: AVIDEASY_PLAYER_ORIGIN + '/',
+                },
+                body: JSON.stringify({
+                    text: encryptedText,
+                    id: String(movieInfo.tmdb_id),
+                    seed: seed,
+                }),
+            }).then(function (response) {
+                return response.json().then(function (data) {
+                    if (!response.ok) {
+                        throw new Error('decrypt-http-' + response.status);
+                    }
+                    return data;
+                });
+            }),
+            timeout,
+        ]).catch(function (err) {
+            console.log('[RN-Fetch][AVIDEASY-DECRYPT-ERR] ' + String(err && err.message ? err.message : err));
+            return '';
+        });
     });
     state.decryptMutex = work.catch(function () { });
     return work;
