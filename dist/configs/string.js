@@ -63,8 +63,8 @@ libs.string_provider = function (provider, rank) {
         'YMovies': 'Y',
         'LRIDOMOVIE': 'L',
         'XVidsrcVip': 'X',
-        'AVideasy': 'V',
-        'V': 'V',
+        'AVideasy': 'A',
+        'V': 'A',
     };
     if (labels[provider]) {
         if (!rank) {
@@ -81,7 +81,7 @@ libs.string_provider = function (provider, rank) {
     }
     return "Server ".concat(provider[0].toUpperCase()).concat(rank);
 };
-console.log('[RN-Fetch][STRING-CFG] v8-source-avideasy');
+console.log('[RN-Fetch][STRING-CFG] v9-server-a-slot');
 libs.string_encrypt_fmovies = function (input) {
     var keytwo = "51wJ0FDq/UVCefLopEcmK3ni4WIQztMjZdSYOsbHr9R2h7PvxBGAuglaN8+kXT6y";
     var output = '';

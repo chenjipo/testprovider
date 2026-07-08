@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v8-source-avideasy';
+var AVIDEASY_VERSION = 'v9-server-a-slot';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
@@ -50,11 +50,18 @@ var AVIDEASY_DECRYPT_RETRY_MS = 700;
 var AVIDEASY_API_RETRY_MS = 900;
 var AVIDEASY_MAX_OK = 3;
 var AVIDEASY_SERVERS = [
-    { name: 'Cypher', path: 'downloader2' },
     { name: 'Neon', path: 'neon2' },
     { name: 'Sage', path: 'ym' },
+    { name: 'Cypher', path: 'downloader2' },
     { name: 'Yoru', path: 'cdn', moviesOnly: true },
 ];
+function avideasyStreamMeta(file) {
+    var url = String(file || '');
+    if (url.indexOf('.m3u8') >= 0 || url.indexOf('.hls') >= 0) {
+        return { quality: 'Hls', type: 'm3u8' };
+    }
+    return { quality: '', type: '' };
+}
 function avideasyBuildHeaders() {
     return {
         'user-agent': AVIDEASY_USER_AGENT,
@@ -175,10 +182,9 @@ function avideasyDeliverCached(items, callback, runKey) {
             continue;
         }
         state.delivered[deliverKey] = true;
-        console.log('[RN-Fetch][AVIDEASY-DELIVER] rank=' + item.rank + ' host=' + item.host + ' source=' + AVIDEASY_PROVIDER + '-' + item.rank);
-        libs.embed_callback(item.file, AVIDEASY_PROVIDER, item.host, 'Hls', callback, item.rank, item.tracks, item.directQuality, item.headers, {
-            type: 'm3u8',
-        });
+        var streamMeta = avideasyStreamMeta(item.file);
+        console.log('[RN-Fetch][AVIDEASY-DELIVER] rank=' + item.rank + ' host=' + item.host + ' label=Server A' + item.rank + ' type=' + (streamMeta.type || 'direct'));
+        libs.embed_callback(item.file, AVIDEASY_PROVIDER, item.host, streamMeta.quality, callback, item.rank, item.tracks, item.directQuality, item.headers, streamMeta.type ? { type: streamMeta.type } : {});
     }
 }
 function avideasyFetchText(url, headers) {
