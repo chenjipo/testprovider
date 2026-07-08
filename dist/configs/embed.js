@@ -142,6 +142,15 @@ if (!libs.__embedCallbackDeliver) {
             console.log({ subs: subs }, "SUBDATAPARSE");
         }
         var linkRank = rank || 0;
+        if (libs.__isVodYaxSyncProvider && libs.__isVodYaxSyncProvider(provider) && linkRank > 0) {
+            libs.__embedSlotDelivered = libs.__embedSlotDelivered || {};
+            var slotKey = libs.__embedSlotDeliverKey(provider, linkRank);
+            if (libs.__embedSlotDelivered[slotKey]) {
+                console.log('[RN-Fetch][EMBED-SLOT-SKIP] ' + slotKey);
+                return;
+            }
+            libs.__embedSlotDelivered[slotKey] = true;
+        }
         var displayProvider = libs.string_provider(provider, linkRank);
         var linkSource = String(provider || '');
         var linkHost = String(host || provider || '');
@@ -364,7 +373,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v13-yax-sync-batch';
+libs.__embedSyncVersion = 'v14-slot-dedup';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -416,7 +425,14 @@ libs.__vodSyncHasProvider = function (provider) {
     return false;
 };
 libs.__vodSyncItemKey = function (provider, rank, urlDirect) {
-    return String(provider || '') + '|' + String(rank || 0) + '|' + libs.__vodStormKey(urlDirect);
+    var linkRank = rank || 0;
+    if (libs.__isVodYaxSyncProvider(provider) && linkRank > 0) {
+        return String(provider || '') + '|' + String(linkRank);
+    }
+    return String(provider || '') + '|' + String(linkRank) + '|' + libs.__vodStormKey(urlDirect);
+};
+libs.__embedSlotDeliverKey = function (provider, rank) {
+    return String(provider || '') + '|' + String(rank || 0);
 };
 libs.__vodSyncHasItemKey = function (itemKey) {
     var bag = libs.__getVodSyncBag();
@@ -728,6 +744,7 @@ libs.beginVodLinkSession = function () {
         libs.__vodSyncFlushed = false;
         libs.__vidlinkDelivered = {};
         libs.__vidlinkPlayLock = {};
+        libs.__embedSlotDelivered = {};
         console.log('[RN-Fetch][SYNC-SESSION] start version=' + libs.__embedSyncVersion);
         libs.__ensureSyncPoller();
         libs.__scheduleSyncFlush();

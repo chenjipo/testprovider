@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v12-dedup-callback';
+var AVIDEASY_VERSION = 'v13-m3u8-slot';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
@@ -145,6 +145,7 @@ function avideasyGetState() {
             cache: {},
             inflight: {},
             delivered: {},
+            activeRunKey: '',
             seedMutex: Promise.resolve(),
             decryptMutex: Promise.resolve(),
             lastSeedAt: 0,
@@ -152,10 +153,13 @@ function avideasyGetState() {
     }
     return root.__avideasyState;
 }
-(function avideasyResetDeliveredOnReload() {
+function avideasyBeginRun(runKey) {
     var state = avideasyGetState();
-    state.delivered = {};
-})();
+    if (state.activeRunKey !== runKey) {
+        state.delivered = {};
+        state.activeRunKey = runKey;
+    }
+}
 function avideasyRunKey(movieInfo) {
     return [
         String(movieInfo.tmdb_id || ''),
@@ -459,6 +463,11 @@ function avideasyCollectLinks(movieInfo, liveCallback, runKey, deliveryGen) { re
                     return [3, 8];
                 }
                 directQuality = avideasySortByQuality(directQuality);
+                var topStreamMeta = avideasyStreamMeta(directQuality[0].file);
+                if (topStreamMeta.type !== 'm3u8') {
+                    console.log('[RN-Fetch][AVIDEASY-SKIP] server=' + server.name + ' reason=non-m3u8');
+                    return [3, 8];
+                }
                 rank += 1;
                 okCount += 1;
                 console.log('[RN-Fetch][AVIDEASY-OK] server=' + server.name + ' sources=' + directQuality.length + ' rank=' + rank);
@@ -524,6 +533,7 @@ source.getResource = function (movieInfo, config, callback) {
         return Promise.resolve();
     }
     var runKey = avideasyRunKey(movieInfo);
+    avideasyBeginRun(runKey);
     var deliveryGen = avideasyCreateDeliveryGen();
     var cached = avideasyGetCacheEntry(runKey);
     if (cached && cached.items.length) {
