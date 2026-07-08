@@ -1041,14 +1041,59 @@ function xvidsrcvipBuildEncWithRetry(movieInfo) {
 function xvidsrcvipGetState() {
     var root = typeof globalThis !== 'undefined' ? globalThis : (typeof global !== 'undefined' ? global : {});
     if (!root.__xvipState) {
-        root.__xvipState = { delivered: {}, activeRunKey: '' };
+        root.__xvipState = { delivered: {}, activeRunKey: '', apiInflight: {}, apiCache: {} };
     }
     return root.__xvipState;
+}
+function xvidsrcvipFetchApi(urlovo, headers) {
+    var attemptFetch = function (left) {
+        if (left <= 0) {
+            console.log('[RN-Fetch][XVIP-SKIP] api-failed');
+            return Promise.resolve(null);
+        }
+        var current = 4 - left;
+        return fetch(urlovo, { headers: headers, method: 'GET' }).then(function (response) {
+            if (!response.ok) {
+                console.log('[RN-Fetch][XVIP-API-ERR] status=' + response.status + ' attempt=' + current);
+                return xvidsrcvipSleep(500 * current).then(function () {
+                    return attemptFetch(left - 1);
+                });
+            }
+            return response.json();
+        }).catch(function (err) {
+            console.log('[RN-Fetch][XVIP-API-ERR] attempt=' + current + ' ' + String(err && err.message ? err.message : err));
+            return xvidsrcvipSleep(500 * current).then(function () {
+                return attemptFetch(left - 1);
+            });
+        });
+    };
+    return attemptFetch(3);
+}
+function xvidsrcvipEnsureApiJson(runKey, urlovo, headers) {
+    var state = xvidsrcvipGetState();
+    if (state.apiCache[runKey]) {
+        console.log('[RN-Fetch][XVIP-API-CACHE] hit');
+        return Promise.resolve(state.apiCache[runKey]);
+    }
+    if (state.apiInflight[runKey]) {
+        console.log('[RN-Fetch][XVIP-API-WAIT] ' + runKey);
+        return state.apiInflight[runKey];
+    }
+    var task = xvidsrcvipFetchApi(urlovo, headers).then(function (json) {
+        delete state.apiInflight[runKey];
+        if (json) {
+            state.apiCache[runKey] = json;
+        }
+        return json;
+    });
+    state.apiInflight[runKey] = task;
+    return task;
 }
 function xvidsrcvipBeginRun(runKey) {
     var state = xvidsrcvipGetState();
     if (state.activeRunKey !== runKey) {
         state.delivered = {};
+        state.apiCache = {};
         state.activeRunKey = runKey;
     }
 }
@@ -1060,17 +1105,17 @@ function xvidsrcvipRunKey(movieInfo) {
         String(movieInfo.episode || '0'),
     ].join('|');
 }
-function xvidsrcvipShouldDeliver(runKey, fileUrl) {
+function xvidsrcvipShouldDeliver(runKey, fileUrl, fetchGen) {
     var state = xvidsrcvipGetState();
-    var deliverKey = runKey + '|' + String(fileUrl || '');
+    var deliverKey = runKey + '|' + String(fetchGen || 0) + '|' + String(fileUrl || '');
     if (state.delivered[deliverKey]) {
         return false;
     }
     state.delivered[deliverKey] = true;
     return true;
 }
-function xvidsrcvipTryDeliver(fileUrl, provider, host, quality, callback, rank, subs, directQuality, headers, options, runKey) {
-    if (!xvidsrcvipShouldDeliver(runKey, fileUrl)) {
+function xvidsrcvipTryDeliver(fileUrl, provider, host, quality, callback, rank, subs, directQuality, headers, options, runKey, fetchGen) {
+    if (!xvidsrcvipShouldDeliver(runKey, fileUrl, fetchGen)) {
         console.log('[RN-Fetch][XVIP-DELIVER-SKIP] dup rank=' + rank);
         return false;
     }
@@ -1079,7 +1124,7 @@ function xvidsrcvipTryDeliver(fileUrl, provider, host, quality, callback, rank, 
     return true;
 }
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, DOMAIN, headers, enc, urlovo, response, json, xvipKeyList, xvipLastKey, xvipIdx, _a, _b, _c, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, xvipRunKey, e_1;
+    var PROVIDER, DOMAIN, headers, enc, urlovo, json, xvipKeyList, xvipLastKey, xvipIdx, _a, _b, _c, _i, item, source, qualityData, directQuality, _d, _e, qItem, dataQuality, textQuality, directQuality, _f, textQuality_1, line, directURl, quality, errorRequest_1, rank, xvipRunKey, fetchGen, e_1;
     return __generator(this, function (_g) {
         switch (_g.label) {
             case 0:
@@ -1090,9 +1135,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v10-runkey-direct');
+                console.log('[RN-Fetch][XVIP-VERSION] v11-api-retry');
                 xvipRunKey = xvidsrcvipRunKey(movieInfo);
                 xvidsrcvipBeginRun(xvipRunKey);
+                fetchGen = String(Date.now()) + '-' + String(Math.floor(Math.random() * 100000));
                 _g.label = 1;
             case 1:
                 _g.trys.push([1, 14, , 15]);
@@ -1109,15 +1155,12 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 urlovo = "".concat(DOMAIN, "/api/").concat(movieInfo.type, "/").concat(encodeURIComponent(enc));
                 libs.log({ urlovo: urlovo }, PROVIDER, "URL");
                 rank = 1;
-                return [4, fetch(urlovo)];
+                return [4, xvidsrcvipEnsureApiJson(xvipRunKey, urlovo, headers)];
             case 3:
-                response = _g.sent();
-                if (!response.ok) {
+                json = _g.sent();
+                if (!json) {
                     return [2];
                 }
-                return [4, response.json()];
-            case 4:
-                json = _g.sent();
                 libs.log({ json: json }, PROVIDER, "JSON");
                 _a = json;
                 _b = [];
@@ -1172,7 +1215,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (directQuality.length > 0) {
                     libs.log({ directQuality: directQuality }, PROVIDER, "DIRECT QUALITY");
                     directQuality = xvidsrcvipSortByQuality(directQuality);
-                    xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, {}, xvipRunKey);
+                    xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, {}, xvipRunKey, fetchGen);
                 }
                 return [3, 13];
             case 8:
@@ -1212,12 +1255,12 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ directQuality: directQuality }, PROVIDER, "ORDERED DIRECT QUALITY");
                 xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, {
                     "type": "m3u8"
-                }, xvipRunKey);
+                }, xvipRunKey, fetchGen);
                 return [3, 13];
             case 11:
                 xvidsrcvipTryDeliver(source.url, PROVIDER, item, 'Hls', callback, rank, [], [{ file: source.url, quality: 1080 }], headers, source.url.indexOf(".m3u8") != -1 ? {
                     type: "m3u8"
-                } : {}, xvipRunKey);
+                } : {}, xvipRunKey, fetchGen);
                 return [3, 13];
             case 12:
                 errorRequest_1 = _g.sent();

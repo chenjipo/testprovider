@@ -320,7 +320,7 @@ libs.__isVodYaxSyncProvider = function (provider) {
 };
 libs.__isVodYaxBatchProvider = function (provider) {
     var p = String(provider || '');
-    return p === 'YMovies' || p === 'AVideasy';
+    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip';
 };
 libs.__isVodBatchProvider = function (provider) {
     if (libs.__vodSyncYaxEnabled && libs.__isVodYaxBatchProvider(provider)) {
@@ -368,10 +368,10 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v16-x-direct';
+libs.__embedSyncVersion = 'v17-x-sync-late';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
-libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy'];
+libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 12000;
 libs.__vodSyncWvMaxMs = 45000;
@@ -379,7 +379,7 @@ libs.__vodSyncSingleMs = 16000;
 libs.__vodSyncCoalesceMs = 4500;
 libs.__vodRnWaitMs = 0;
 libs.__vodSyncTargetCount = 3;
-libs.__vodSyncYaxMinFamilies = 2;
+libs.__vodSyncYaxMinFamilies = 3;
 libs.__vodSyncYaxMinElapsedMs = 2000;
 libs.__getVodSyncBag = function () {
     if (!libs.__vodSyncBag) {
@@ -452,7 +452,7 @@ libs.__vodSyncFamilyCount = function (items) {
     return count;
 };
 libs.__vodSyncSortItems = function (items) {
-    var order = { 'YMovies': 100, 'AVideasy': 200 };
+    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300 };
     return items.slice().sort(function (left, right) {
         var leftBase = order[left[1]] || 500;
         var rightBase = order[right[1]] || 500;
