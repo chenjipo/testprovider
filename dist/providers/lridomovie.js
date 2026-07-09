@@ -36,15 +36,31 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var PROVIDER = 'LRIDOMOVIE';
-var DOMAIN = 'https://ridomovies.is';
-var USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
+var DOMAIN = 'https://ridomovies.su';
+var USER_AGENT = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 function buildSiteHeaders(referer) {
     return {
         'user-agent': USER_AGENT,
         referer: referer || DOMAIN + '/',
+        Referer: referer || DOMAIN + '/',
         origin: DOMAIN,
+        Origin: DOMAIN,
         Accept: '*/*',
+        'Accept-Language': 'en-US,en;q=0.9',
     };
+}
+function lridomovieIsCfChallenge(text) {
+    if (!text) {
+        return true;
+    }
+    text = String(text);
+    if (text.indexOf('Just a moment') >= 0 || text.indexOf('cf-browser-verification') >= 0) {
+        return true;
+    }
+    if (text.indexOf('<html') >= 0 && text.indexOf('challenges.cloudflare.com') >= 0) {
+        return true;
+    }
+    return false;
 }
 function decodeHtmlEntities(text) {
     if (!text) {
@@ -302,7 +318,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                console.log('[RN-Fetch][RIDO-VERSION] v8-rn-embed-raw');
+                console.log('[RN-Fetch][RIDO-VERSION] v9-rn-mobile-su-sync');
                 headers = buildSiteHeaders(DOMAIN + '/');
                 _b.label = 1;
             case 1:
@@ -330,9 +346,17 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     })];
             case 3:
                 pageHtml = _b.sent();
+                if (!pageHtml || !pageHtml.ok) {
+                    console.log('[RN-Fetch][RIDO-PAGE-BLOCK] status=' + (pageHtml ? pageHtml.status : 0));
+                    return [2];
+                }
                 return [4, pageHtml.text()];
             case 4:
                 pageHtml = _b.sent();
+                if (lridomovieIsCfChallenge(pageHtml)) {
+                    console.log('[RN-Fetch][RIDO-PAGE-BLOCK] cf-challenge');
+                    return [2];
+                }
                 pageStream = extractStreamFromText(pageHtml);
                 if (pageStream) {
                     console.log('[RN-Fetch][RIDO-DIRECT] page m3u8');

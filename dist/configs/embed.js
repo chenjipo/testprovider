@@ -249,6 +249,12 @@ libs.__resolveVodBatchProvider = function (urlDirect, provider, host) {
     if (p === 'closeload-embed' || h === 'closeload-embed') {
         return 'LRIDOMOVIE';
     }
+    if (p === 'LRIDOMOVIE' || p === 'closeload' || h === 'closeload') {
+        return 'LRIDOMOVIE';
+    }
+    if (url.indexOf('closeload.top') >= 0 || url.indexOf('ridorapid.closeload') >= 0) {
+        return 'LRIDOMOVIE';
+    }
     if (p === 'yesmovies-embed' || h === 'yesmovies-embed' || p === 'ployan' || h === 'ployan') {
         return 'IYesMovies';
     }
@@ -315,11 +321,11 @@ libs.__vodStormKey = function (url) {
 };
 libs.__isVodYaxSyncProvider = function (provider) {
     var p = String(provider || '');
-    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip';
+    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE';
 };
 libs.__isVodYaxBatchProvider = function (provider) {
     var p = String(provider || '');
-    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip';
+    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE';
 };
 libs.__isVodBatchProvider = function (provider) {
     if (libs.__vodSyncYaxEnabled && libs.__isVodYaxBatchProvider(provider)) {
@@ -367,10 +373,10 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v20-source-slot';
+libs.__embedSyncVersion = 'v21-lrido-sync';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
-libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
+libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE'];
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 18000;
 libs.__vodSyncHardMaxMs = 26000;
@@ -452,7 +458,7 @@ libs.__vodSyncFamilyCount = function (items) {
     return count;
 };
 libs.__vodSyncSortItems = function (items) {
-    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300 };
+    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300, 'LRIDOMOVIE': 400 };
     return items.slice().sort(function (left, right) {
         var leftBase = order[left[1]] || 500;
         var rightBase = order[right[1]] || 500;
