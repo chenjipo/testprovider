@@ -368,12 +368,12 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v17-x-sync-late';
+libs.__embedSyncVersion = 'v18-late-direct';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
 libs.__vodSyncFlushMs = 3500;
-libs.__vodSyncMaxMs = 12000;
+libs.__vodSyncMaxMs = 18000;
 libs.__vodSyncWvMaxMs = 45000;
 libs.__vodSyncSingleMs = 16000;
 libs.__vodSyncCoalesceMs = 4500;
@@ -861,6 +861,9 @@ libs.embed_callback = function (urlDirect, provider, host, quality, callback, ra
         if (libs.__shouldSyncVodLinks()) {
             if (libs.__tryPushVodSyncLink(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options)) {
                 return;
+            }
+            if (libs.__getVodSyncBag().flushed) {
+                console.log('[RN-Fetch][SYNC-LATE-DIRECT] provider=' + provider + ' rank=' + rank);
             }
         }
         else if (libs.__getVodSyncBag().flushed) {

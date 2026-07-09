@@ -1037,6 +1037,13 @@ function xvidsrcvipBuildEncWithRetry(movieInfo) {
     catch (warmErr) {
         console.log('[RN-Fetch][XVIP-AES-WARM] ' + String(warmErr && warmErr.message ? warmErr.message : warmErr));
     }
+    try {
+        var gcmBundle = xvidsrcvipEnsureGcmBundle();
+        console.log('[RN-Fetch][XVIP-GCM] warm-ok pure=' + (gcmBundle && gcmBundle.decryptVidrockToken ? 'yes' : 'no'));
+    }
+    catch (gcmWarmErr) {
+        console.log('[RN-Fetch][XVIP-GCM-WARM] ' + String(gcmWarmErr && gcmWarmErr.message ? gcmWarmErr.message : gcmWarmErr));
+    }
 })();
 function xvidsrcvipGetState() {
     var root = typeof globalThis !== 'undefined' ? globalThis : (typeof global !== 'undefined' ? global : {});
@@ -1113,6 +1120,34 @@ function xvidsrcvipBase64UrlToBytes(value) {
     }
     return bytes;
 }
+function xvidsrcvipEnsureGcmBundle() {
+    if (libs.__xvipGcmPure && libs.__xvipGcmPure.decryptVidrockToken) {
+        return libs.__xvipGcmPure;
+    }
+    if (typeof atob === 'undefined') {
+        var rootAtob = typeof globalThis !== 'undefined' ? globalThis : (typeof global !== 'undefined' ? global : {});
+        rootAtob.atob = function (input) {
+            var chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=';
+            var str = String(input || '').replace(/=+$/, '');
+            var output = '';
+            if (str.length % 4 === 1) {
+                throw new Error('invalid base64');
+            }
+            for (var bc = 0, bs = 0, buffer, i = 0; (buffer = str.charAt(i++)); ~buffer && (bs = bc % 4 ? bs * 64 + buffer : buffer, bc++ % 4) ? output += String.fromCharCode(255 & bs >> (-2 * bc & 6)) : 0) {
+                buffer = chars.indexOf(buffer);
+            }
+            return output;
+        };
+    }
+var __xvipGcmBundle=(()=>{var V=Object.defineProperty;var it=Object.getOwnPropertyDescriptor;var ft=Object.getOwnPropertyNames;var lt=Object.prototype.hasOwnProperty;var ut=(t,n)=>{for(var e in n)V(t,e,{get:n[e],enumerable:!0})},ht=(t,n,e,o)=>{if(n&&typeof n=="object"||typeof n=="function")for(let r of ft(n))!lt.call(t,r)&&r!==e&&V(t,r,{get:()=>n[r],enumerable:!(o=it(n,r))||o.enumerable});return t};var at=t=>ht(V({},"__esModule",{value:!0}),t);var It={};ut(It,{decryptVidrockToken:()=>Ct});function j(t){return t instanceof Uint8Array||ArrayBuffer.isView(t)&&t.constructor.name==="Uint8Array"}function d(t,...n){if(!j(t))throw new Error("Uint8Array expected");if(n.length>0&&!n.includes(t.length))throw new Error("Uint8Array expected of length "+n+", got length="+t.length)}function I(t,n=!0){if(t.destroyed)throw new Error("Hash instance has been destroyed");if(n&&t.finished)throw new Error("Hash#digest() has already been called")}function H(t,n){d(t);let e=n.outputLen;if(t.length<e)throw new Error("digestInto() expects output buffer of length at least "+e)}var $=t=>new Uint8Array(t.buffer,t.byteOffset,t.byteLength),B=t=>new Uint32Array(t.buffer,t.byteOffset,Math.floor(t.byteLength/4)),v=t=>new DataView(t.buffer,t.byteOffset,t.byteLength),gt=new Uint8Array(new Uint32Array([287454020]).buffer)[0]===68;if(!gt)throw new Error("Non little-endian hardware is not supported");function pt(t){if(typeof t!="string")throw new Error("string expected");return new Uint8Array(new TextEncoder().encode(t))}function S(t){if(typeof t=="string")t=pt(t);else if(j(t))t=T(t);else throw new Error("Uint8Array expected, got "+typeof t);return t}function G(t,n){if(t.length!==n.length)return!1;let e=0;for(let o=0;o<t.length;o++)e|=t[o]^n[o];return e===0}var J=(t,n)=>{function e(o,...r){if(d(o),t.nonceLength!==void 0){let u=r[0];if(!u)throw new Error("nonce / iv required");t.varSizeNonce?d(u):d(u,t.nonceLength)}let s=t.tagLength;s&&r[1]!==void 0&&d(r[1]);let i=n(o,...r),f=(u,h)=>{if(h!==void 0){if(u!==2)throw new Error("cipher output not supported");d(h)}},c=!1;return{encrypt(u,h){if(c)throw new Error("cannot encrypt() twice with same key + nonce");return c=!0,d(u),f(i.encrypt.length,h),i.encrypt(u,h)},decrypt(u,h){if(d(u),s&&u.length<s)throw new Error("invalid ciphertext length: smaller than tagLength="+s);return f(i.decrypt.length,h),i.decrypt(u,h)}}}return Object.assign(e,t),e};function Q(t,n,e=!0){if(n===void 0)return new Uint8Array(t);if(n.length!==t)throw new Error("invalid output length, expected "+t+", got: "+n.length);if(e&&!K(n))throw new Error("invalid output, must be aligned");return n}function z(t,n,e,o){if(typeof t.setBigUint64=="function")return t.setBigUint64(n,e,o);let r=BigInt(32),s=BigInt(4294967295),i=Number(e>>r&s),f=Number(e&s),c=o?4:0,l=o?0:4;t.setUint32(n+c,i,o),t.setUint32(n+l,f,o)}function K(t){return t.byteOffset%4===0}function T(t){return Uint8Array.from(t)}function U(...t){for(let n=0;n<t.length;n++)t[n].fill(0)}var L=16,q=new Uint8Array(16),A=B(q),yt=225,wt=(t,n,e,o)=>{let r=o&1;return{s3:e<<31|o>>>1,s2:n<<31|e>>>1,s1:t<<31|n>>>1,s0:t>>>1^yt<<24&-(r&1)}},x=t=>(t>>>0&255)<<24|(t>>>8&255)<<16|(t>>>16&255)<<8|t>>>24&255|0;function dt(t){t.reverse();let n=t[15]&1,e=0;for(let o=0;o<t.length;o++){let r=t[o];t[o]=r>>>1|e,e=(r&1)<<7}return t[0]^=-n&225,t}var bt=t=>t>64*1024?8:t>1024?4:2,k=class{constructor(n,e){this.blockLen=L,this.outputLen=L,this.s0=0,this.s1=0,this.s2=0,this.s3=0,this.finished=!1,n=S(n),d(n,16);let o=v(n),r=o.getUint32(0,!1),s=o.getUint32(4,!1),i=o.getUint32(8,!1),f=o.getUint32(12,!1),c=[];for(let p=0;p<128;p++)c.push({s0:x(r),s1:x(s),s2:x(i),s3:x(f)}),{s0:r,s1:s,s2:i,s3:f}=wt(r,s,i,f);let l=bt(e||1024);if(![1,2,4,8].includes(l))throw new Error("ghash: invalid window size, expected 2, 4 or 8");this.W=l;let h=128/l,a=this.windowSize=2**l,g=[];for(let p=0;p<h;p++)for(let w=0;w<a;w++){let b=0,m=0,y=0,_=0;for(let E=0;E<l;E++){if(!(w>>>l-E-1&1))continue;let{s0:W,s1:rt,s2:st,s3:ct}=c[l*p+E];b^=W,m^=rt,y^=st,_^=ct}g.push({s0:b,s1:m,s2:y,s3:_})}this.t=g}_updateBlock(n,e,o,r){n^=this.s0,e^=this.s1,o^=this.s2,r^=this.s3;let{W:s,t:i,windowSize:f}=this,c=0,l=0,u=0,h=0,a=(1<<s)-1,g=0;for(let p of[n,e,o,r])for(let w=0;w<4;w++){let b=p>>>8*w&255;for(let m=8/s-1;m>=0;m--){let y=b>>>s*m&a,{s0:_,s1:E,s2:C,s3:W}=i[g*f+y];c^=_,l^=E,u^=C,h^=W,g+=1}}this.s0=c,this.s1=l,this.s2=u,this.s3=h}update(n){n=S(n),I(this);let e=B(n),o=Math.floor(n.length/L),r=n.length%L;for(let s=0;s<o;s++)this._updateBlock(e[s*4+0],e[s*4+1],e[s*4+2],e[s*4+3]);return r&&(q.set(n.subarray(o*L)),this._updateBlock(A[0],A[1],A[2],A[3]),U(A)),this}destroy(){let{t:n}=this;for(let e of n)e.s0=0,e.s1=0,e.s2=0,e.s3=0}digestInto(n){I(this),H(n,this),this.finished=!0;let{s0:e,s1:o,s2:r,s3:s}=this,i=B(n);return i[0]=e,i[1]=o,i[2]=r,i[3]=s,n}digest(){let n=new Uint8Array(L);return this.digestInto(n),this.destroy(),n}},Z=class extends k{constructor(n,e){n=S(n);let o=dt(T(n));super(o,e),U(o)}update(n){n=S(n),I(this);let e=B(n),o=n.length%L,r=Math.floor(n.length/L);for(let s=0;s<r;s++)this._updateBlock(x(e[s*4+3]),x(e[s*4+2]),x(e[s*4+1]),x(e[s*4+0]));return o&&(q.set(n.subarray(r*L)),this._updateBlock(x(A[3]),x(A[2]),x(A[1]),x(A[0])),U(A)),this}digestInto(n){I(this),H(n,this),this.finished=!0;let{s0:e,s1:o,s2:r,s3:s}=this,i=B(n);return i[0]=e,i[1]=o,i[2]=r,i[3]=s,n.reverse()}};function X(t){let n=(o,r)=>t(r,o.length).update(S(o)).digest(),e=t(new Uint8Array(16),0);return n.outputLen=e.outputLen,n.blockLen=e.blockLen,n.create=(o,r)=>t(o,r),n}var R=X((t,n)=>new k(t,n)),xt=X((t,n)=>new Z(t,n));var F=16,mt=4,N=new Uint8Array(F),Et=283;function D(t){return t<<1^Et&-(t>>7)}function tt(t,n){let e=0;for(;n>0;n>>=1)e^=t&-(n&1),t=D(t);return e}var Bt=(()=>{let t=new Uint8Array(256);for(let e=0,o=1;e<256;e++,o^=D(o))t[e]=o;let n=new Uint8Array(256);n[0]=99;for(let e=0;e<255;e++){let o=t[255-e];o|=o<<8,n[t[e]]=(o^o>>4^o>>5^o>>6^o>>7^99)&255}return U(t),n})();var Ut=t=>t<<24|t>>>8,Y=t=>t<<8|t>>>24;function At(t,n){if(t.length!==256)throw new Error("Wrong sbox length");let e=new Uint32Array(256).map((l,u)=>n(t[u])),o=e.map(Y),r=o.map(Y),s=r.map(Y),i=new Uint32Array(256*256),f=new Uint32Array(256*256),c=new Uint16Array(256*256);for(let l=0;l<256;l++)for(let u=0;u<256;u++){let h=l*256+u;i[h]=e[l]^o[u],f[h]=r[l]^s[u],c[h]=t[l]<<8|t[u]}return{sbox:t,sbox2:c,T0:e,T1:o,T2:r,T3:s,T01:i,T23:f}}var et=At(Bt,t=>tt(t,3)<<24|t<<16|t<<8|tt(t,2));var Lt=(()=>{let t=new Uint8Array(16);for(let n=0,e=1;n<16;n++,e=D(e))t[n]=e;return t})();function Tt(t){d(t);let n=t.length;if(![16,24,32].includes(n))throw new Error("aes: invalid key size, should be 16, 24 or 32, got "+n);let{sbox2:e}=et,o=[];K(t)||o.push(t=T(t));let r=B(t),s=r.length,i=c=>O(e,c,c,c,c),f=new Uint32Array(n+28);f.set(r);for(let c=s;c<f.length;c++){let l=f[c-1];c%s===0?l=i(Ut(l))^Lt[c/s-1]:s>6&&c%s===4&&(l=i(l)),f[c]=f[c-s]^l}return U(...o),f}function M(t,n,e,o,r,s){return t[e<<8&65280|o>>>8&255]^n[r>>>8&65280|s>>>24&255]}function O(t,n,e,o,r){return t[n&255|e&65280]|t[o>>>16&255|r>>>16&65280]<<16}function nt(t,n,e,o,r){let{sbox2:s,T01:i,T23:f}=et,c=0;n^=t[c++],e^=t[c++],o^=t[c++],r^=t[c++];let l=t.length/4-2;for(let p=0;p<l;p++){let w=t[c++]^M(i,f,n,e,o,r),b=t[c++]^M(i,f,e,o,r,n),m=t[c++]^M(i,f,o,r,n,e),y=t[c++]^M(i,f,r,n,e,o);n=w,e=b,o=m,r=y}let u=t[c++]^O(s,n,e,o,r),h=t[c++]^O(s,e,o,r,n),a=t[c++]^O(s,o,r,n,e),g=t[c++]^O(s,r,n,e,o);return{s0:u,s1:h,s2:a,s3:g}}function P(t,n,e,o,r){d(e,F),d(o),r=Q(o.length,r);let s=e,i=B(s),f=v(s),c=B(o),l=B(r),u=n?0:12,h=o.length,a=f.getUint32(u,n),{s0:g,s1:p,s2:w,s3:b}=nt(t,i[0],i[1],i[2],i[3]);for(let y=0;y+4<=c.length;y+=4)l[y+0]=c[y+0]^g,l[y+1]=c[y+1]^p,l[y+2]=c[y+2]^w,l[y+3]=c[y+3]^b,a=a+1>>>0,f.setUint32(u,a,n),{s0:g,s1:p,s2:w,s3:b}=nt(t,i[0],i[1],i[2],i[3]);let m=F*Math.floor(c.length/mt);if(m<h){let y=new Uint32Array([g,p,w,b]),_=$(y);for(let E=m,C=0;E<h;E++,C++)r[E]=o[E]^_[C];U(y)}return r}function _t(t,n,e,o,r){let s=r==null?0:r.length,i=t.create(e,o.length+s);r&&i.update(r),i.update(o);let f=new Uint8Array(16),c=v(f);r&&z(c,0,BigInt(s*8),n),z(c,8,BigInt(o.length*8),n),i.update(f);let l=i.digest();return U(f),l}var ot=J({blockSize:16,nonceLength:12,tagLength:16,varSizeNonce:!0},function(n,e,o){if(e.length<8)throw new Error("aes/gcm: invalid nonce length");let r=16;function s(f,c,l){let u=_t(R,!1,f,l,o);for(let h=0;h<c.length;h++)u[h]^=c[h];return u}function i(){let f=Tt(n),c=N.slice(),l=N.slice();if(P(f,!1,l,l,c),e.length===12)l.set(e);else{let h=N.slice(),a=v(h);z(a,8,BigInt(e.length*8),!1);let g=R.create(c).update(e).update(h);g.digestInto(l),g.destroy()}let u=P(f,!1,l,N);return{xk:f,authKey:c,counter:l,tagMask:u}}return{encrypt(f){let{xk:c,authKey:l,counter:u,tagMask:h}=i(),a=new Uint8Array(f.length+r),g=[c,l,u,h];K(f)||g.push(f=T(f)),P(c,!1,u,f,a.subarray(0,f.length));let p=s(l,h,a.subarray(0,a.length-r));return g.push(p),a.set(p,f.length),U(...g),a},decrypt(f){let{xk:c,authKey:l,counter:u,tagMask:h}=i(),a=[c,l,h,u];K(f)||a.push(f=T(f));let g=f.subarray(0,-r),p=f.subarray(-r),w=s(l,h,g);if(a.push(w),!G(w,p))throw new Error("aes/gcm: invalid ghash tag");let b=P(c,!1,u,g);return U(...a),b}}});function vt(t){let n=new Uint8Array(t.length/2);for(let e=0;e<n.length;e++)n[e]=parseInt(t.substr(e*2,2),16);return n}function St(t){let n=String(t||"").replace(/-/g,"+").replace(/_/g,"/"),e=n.length%4;if(e===2)n+="==";else if(e===3)n+="=";else if(e===1)throw new Error("invalid base64url length");let o=atob(n),r=new Uint8Array(o.length);for(let s=0;s<o.length;s++)r[s]=o.charCodeAt(s);return r}function Ct(t,n){let e=vt(n),o=St(t);if(o.length<28)throw new Error("ciphertext too short");let r=o.slice(0,12),s=o.slice(12),i=ot(e,r);return new TextDecoder().decode(i.decrypt(s))}return at(It);})();
+/*! Bundled license information:
+
+@noble/ciphers/esm/utils.js:
+  (*! noble-ciphers - MIT License (c) 2023 Paul Miller (paulmillr.com) *)
+*/
+    libs.__xvipGcmPure = typeof __xvipGcmBundle !== 'undefined' ? __xvipGcmBundle : null;
+    return libs.__xvipGcmPure;
+}
 function xvidsrcvipGetGcmKeyPromise() {
     if (!libs.__xvipGcmKeyPromise) {
         libs.__xvipGcmKeyPromise = (function () {
@@ -1125,15 +1160,36 @@ function xvidsrcvipGetGcmKeyPromise() {
     }
     return libs.__xvipGcmKeyPromise;
 }
+function xvidsrcvipDecodeTokenPure(token) {
+    var bundle = xvidsrcvipEnsureGcmBundle();
+    if (!bundle || !bundle.decryptVidrockToken) {
+        return '';
+    }
+    return bundle.decryptVidrockToken(token, XVIP_URL_KEY_HEX);
+}
 function xvidsrcvipDecodeToken(token) {
     return __awaiter(_this, void 0, void 0, function () {
-        var key, allBytes, iv, cipher, ivBuf, cipherBuf, plainBuf, plain, decodeErr_1;
+        var plain, key, allBytes, iv, cipher, ivBuf, cipherBuf, plainBuf, pureErr_1, decodeErr_1;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    _a.trys.push([0, 3, , 4]);
-                    return [4, xvidsrcvipGetGcmKeyPromise()];
+                    _a.trys.push([0, 2, , 3]);
+                    plain = xvidsrcvipDecodeTokenPure(token);
+                    if (plain) {
+                        console.log('[RN-Fetch][XVIP-DECODE] mode=pure host=' + String(plain).split('/')[2]);
+                        return [2, plain];
+                    }
+                    return [3, 3];
                 case 1:
+                    pureErr_1 = _a.sent();
+                    console.log('[RN-Fetch][XVIP-DECODE-PURE-ERR] ' + String(pureErr_1 && pureErr_1.message ? pureErr_1.message : pureErr_1));
+                    return [3, 3];
+                case 2:
+                    return [3, 3];
+                case 3:
+                    _a.trys.push([3, 6, , 7]);
+                    return [4, xvidsrcvipGetGcmKeyPromise()];
+                case 4:
                     key = _a.sent();
                     if (!key) {
                         return [2, ''];
@@ -1147,15 +1203,16 @@ function xvidsrcvipDecodeToken(token) {
                     ivBuf = iv.buffer.slice(iv.byteOffset, iv.byteOffset + iv.byteLength);
                     cipherBuf = cipher.buffer.slice(cipher.byteOffset, cipher.byteOffset + cipher.byteLength);
                     return [4, crypto.subtle.decrypt({ name: 'AES-GCM', iv: ivBuf }, key, cipherBuf)];
-                case 2:
+                case 5:
                     plainBuf = _a.sent();
                     plain = new TextDecoder().decode(plainBuf);
+                    console.log('[RN-Fetch][XVIP-DECODE] mode=subtle host=' + String(plain).split('/')[2]);
                     return [2, plain];
-                case 3:
+                case 6:
                     decodeErr_1 = _a.sent();
                     console.log('[RN-Fetch][XVIP-DECODE-ERR] ' + String(decodeErr_1 && decodeErr_1.message ? decodeErr_1.message : decodeErr_1));
                     return [2, ''];
-                case 4: return [2];
+                case 7: return [2];
             }
         });
     });
@@ -1295,7 +1352,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v14-token-decrypt');
+                console.log('[RN-Fetch][XVIP-VERSION] v15-pure-gcm');
                 xvipRunKey = xvidsrcvipRunKey(movieInfo);
                 xvidsrcvipBeginRun(xvipRunKey);
                 fetchGen = String(Date.now()) + '-' + String(Math.floor(Math.random() * 100000));
@@ -1326,7 +1383,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     if (!Object.prototype.hasOwnProperty.call(json, xvipIdx)) {
                         continue;
                     }
-                    if (json[xvipIdx] && json[xvipIdx].url) {
+                    if (json[xvipIdx] && json[xvipIdx].url && json[xvipIdx].type) {
                         xvipKeyList.push(xvipIdx);
                     }
                 }
@@ -1334,8 +1391,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     console.log('[RN-Fetch][XVIP-SKIP] sources-empty');
                     return [2];
                 }
+                xvipKeyList.sort(function (leftKey, rightKey) {
+                                    var leftType = json[leftKey] && json[leftKey].type === 'hls' ? 0 : 1;
+                                    var rightType = json[rightKey] && json[rightKey].type === 'hls' ? 0 : 1;
+                                    return leftType - rightType;
+                                });
                 console.log('[RN-Fetch][XVIP-PICK] total=' + xvipKeyList.length + ' keys=' + xvipKeyList.join(','));
-                _i = 0;
+                                _i = 0;
                 _g.label = 5;
             case 5:
                 if (!(_i < xvipKeyList.length)) return [3, 17];
