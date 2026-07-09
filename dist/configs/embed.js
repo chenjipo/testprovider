@@ -368,12 +368,13 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v18-late-direct';
+libs.__embedSyncVersion = 'v19-yax-wait-a';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 18000;
+libs.__vodSyncHardMaxMs = 26000;
 libs.__vodSyncWvMaxMs = 45000;
 libs.__vodSyncSingleMs = 16000;
 libs.__vodSyncCoalesceMs = 4500;
@@ -630,8 +631,10 @@ libs.__scheduleSyncFlush = function () {
     libs.__vodSyncFlushed = bag.flushed;
     if (libs.__vodSyncYaxEnabled) {
         if (items.length >= 1 && elapsed >= libs.__vodSyncMaxMs) {
-            console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' families=' + familyCount + ' reason=yax-max');
-            libs.__flushVodSyncItems();
+            if (familyCount >= libs.__vodSyncYaxMinFamilies || elapsed >= (libs.__vodSyncHardMaxMs || 26000)) {
+                console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' families=' + familyCount + ' reason=yax-max');
+                libs.__flushVodSyncItems();
+            }
             return;
         }
         if (elapsed >= libs.__vodSyncMaxMs) {
@@ -656,8 +659,10 @@ libs.__scheduleSyncFlush = function () {
                     return;
                 }
                 if (liveElapsed >= libs.__vodSyncMaxMs) {
-                    console.log('[RN-Fetch][SYNC-READY] elapsed=' + liveElapsed + 'ms queued=' + liveItems.length + ' families=' + liveFamilies + ' reason=yax-coalesce-max');
-                    libs.__flushVodSyncItems();
+                    if (liveFamilies >= libs.__vodSyncYaxMinFamilies || liveElapsed >= (libs.__vodSyncHardMaxMs || 26000)) {
+                        console.log('[RN-Fetch][SYNC-READY] elapsed=' + liveElapsed + 'ms queued=' + liveItems.length + ' families=' + liveFamilies + ' reason=yax-coalesce-max');
+                        libs.__flushVodSyncItems();
+                    }
                 }
             }, libs.__vodSyncCoalesceMs);
         }

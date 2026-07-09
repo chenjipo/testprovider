@@ -1384,7 +1384,7 @@ function xvidsrcvipTryDeliver(fileUrl, provider, host, quality, callback, rank, 
         return false;
     }
     console.log('[RN-Fetch][XVIP-DELIVER] rank=' + rank + ' host=' + host + ' label=Server X' + rank);
-    libs.embed_callback(fileUrl, provider, host, quality, callback, rank, subs, directQuality, headers, options);
+    libs.embed_callback(fileUrl, provider, host, quality, callback, rank, subs, [], headers, options);
     return true;
 }
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
@@ -1399,7 +1399,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v16-rn-gcm');
+                console.log('[RN-Fetch][XVIP-VERSION] v17-hls-only');
                 xvipRunKey = xvidsrcvipRunKey(movieInfo);
                 xvidsrcvipBeginRun(xvipRunKey);
                 fetchGen = String(Date.now()) + '-' + String(Math.floor(Math.random() * 100000));
@@ -1443,6 +1443,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                                     var rightType = json[rightKey] && json[rightKey].type === 'hls' ? 0 : 1;
                                     return leftType - rightType;
                                 });
+                xvipKeyList = xvipKeyList.filter(function (key) {
+                    return json[key] && json[key].type === 'hls';
+                }).slice(0, 3);
+                if (!xvipKeyList.length) {
+                    console.log('[RN-Fetch][XVIP-SKIP] hls-sources-empty');
+                    return [2];
+                }
                 console.log('[RN-Fetch][XVIP-PICK] total=' + xvipKeyList.length + ' keys=' + xvipKeyList.join(','));
                                 _i = 0;
                 _g.label = 5;
@@ -1472,7 +1479,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 directQuality = xvidsrcvipBuildDirectQuality(qualityData);
                 if (directQuality.length > 0) {
                     libs.log({ directQuality: directQuality }, PROVIDER, "DIRECT QUALITY");
-                    deliverOptions = directQuality[0].file.indexOf('.m3u8') !== -1 ? { type: 'm3u8' } : {};
+                    if (directQuality[0].file.indexOf('.m3u8') < 0) {
+                        console.log('[RN-Fetch][XVIP-SKIP] host=' + item + ' reason=non-m3u8');
+                        return [3, 15];
+                    }
+                    deliverOptions = { type: 'm3u8' };
                     xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, deliverOptions, xvipRunKey, fetchGen);
                 }
                 return [3, 15];

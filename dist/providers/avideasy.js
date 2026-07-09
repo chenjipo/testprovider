@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v13-m3u8-slot';
+var AVIDEASY_VERSION = 'v14-single-slot';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
@@ -200,7 +200,7 @@ function avideasyDeliverCached(items, callback, runKey, deliveryGen) {
         state.delivered[deliverKey] = true;
         var streamMeta = avideasyStreamMeta(item.file);
         console.log('[RN-Fetch][AVIDEASY-DELIVER] gen=' + deliveryGen + ' rank=' + item.rank + ' host=' + item.host + ' label=Server A' + item.rank + ' type=' + (streamMeta.type || 'direct'));
-        libs.embed_callback(item.file, AVIDEASY_PROVIDER, item.host, streamMeta.quality, callback, item.rank, item.tracks, item.directQuality, item.headers, streamMeta.type ? { type: streamMeta.type } : {});
+        libs.embed_callback(item.file, AVIDEASY_PROVIDER, item.host, streamMeta.quality, callback, item.rank, item.tracks, [], item.headers, streamMeta.type ? { type: streamMeta.type } : {});
     }
 }
 function avideasyFetchText(url, headers) {
