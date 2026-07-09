@@ -1384,7 +1384,7 @@ function xvidsrcvipTryDeliver(fileUrl, provider, host, quality, callback, rank, 
         return false;
     }
     console.log('[RN-Fetch][XVIP-DELIVER] rank=' + rank + ' host=' + host + ' label=Server X' + rank);
-    libs.embed_callback(fileUrl, provider, host, quality, callback, rank, subs, [], headers, options);
+    libs.embed_callback(fileUrl, provider, host, quality, callback, rank, subs, [{ file: fileUrl, quality: 1080 }], headers, options);
     return true;
 }
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
@@ -1399,7 +1399,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     'referer': "https://vidrock.ru/",
                     'origin': "https://vidrock.ru"
                 };
-                console.log('[RN-Fetch][XVIP-VERSION] v17-hls-only');
+                console.log('[RN-Fetch][XVIP-VERSION] v18-slot-quality');
                 xvipRunKey = xvidsrcvipRunKey(movieInfo);
                 xvidsrcvipBeginRun(xvipRunKey);
                 fetchGen = String(Date.now()) + '-' + String(Math.floor(Math.random() * 100000));
