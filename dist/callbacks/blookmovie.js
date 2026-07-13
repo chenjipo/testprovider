@@ -81,7 +81,7 @@ callbacksEmbed["blookmovie"] = function (dataCallback, provider, host, callback,
             if (sortDirect.length == 0) {
                 return [2];
             }
-            libs.embed_callback(sortDirect[0].file, 'BlookMovie', host, 'Hls', callback, ++rank, tracks, sortDirect);
+            libs.embed_callback(sortDirect[0].file, 'BlookMovie', host, 'Hls', callback, ++rank, tracks, [{ file: sortDirect[0].file, quality: 1080 }]);
         }
         return [2];
     });

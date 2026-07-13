@@ -242,11 +242,25 @@ function lookmovieBuildDirectQuality(streams) {
     var sortDirect = [];
     var directIndex;
     var sizeQuality;
+    var preferOrder = ['1080p', '1080', '720p', '720', '480p', '480'];
+    var pi;
     if (!streams) {
         return sortDirect;
     }
+    for (pi = 0; pi < preferOrder.length; pi++) {
+        if (streams[preferOrder[pi]]) {
+            sizeQuality = preferOrder[pi].match(/([0-9]+)/i);
+            sortDirect.push({
+                quality: sizeQuality ? Number(sizeQuality[1]) : preferOrder[pi],
+                file: streams[preferOrder[pi]],
+            });
+        }
+    }
     for (directIndex in streams) {
         if (directIndex === 'auto' || !streams[directIndex]) {
+            continue;
+        }
+        if (preferOrder.indexOf(directIndex) >= 0) {
             continue;
         }
         sizeQuality = directIndex.match(/([0-9]+)/i);
@@ -263,6 +277,12 @@ function lookmovieBuildDirectQuality(streams) {
         return Number(b.quality) - Number(a.quality);
     });
     return sortDirect;
+}
+function lookmovieBuildDisplayQuality(sortDirect) {
+    if (!sortDirect.length) {
+        return [];
+    }
+    return [{ file: sortDirect[0].file, quality: 1080 }];
 }
 function lookmovieResolveSlug(movieInfo) {
     return __awaiter(_this, void 0, void 0, function () {
@@ -364,8 +384,8 @@ function lookmovieFetchMovieAccess(slug, callback) {
                     }
                     streamHeaders = buildSiteHeaders(playUrl);
                     libs.log({ slug: slug, storage: storage, sortDirect: sortDirect }, PROVIDER, 'MOVIE STREAM');
-                    console.log('[RN-Fetch][BLOOKMOVIE-PLAY] quality=' + sortDirect[0].quality);
-                    libs.embed_callback(sortDirect[0].file, PROVIDER, PROVIDER, 'Hls', callback, 0, lookmovieBuildTracks(accessJson.subtitles), sortDirect, streamHeaders, { type: 'm3u8' });
+                    console.log('[RN-Fetch][BLOOKMOVIE-PLAY] api=' + sortDirect.map(function (item) { return item.quality; }).join('/') + ' display=1080');
+                    libs.embed_callback(sortDirect[0].file, PROVIDER, PROVIDER, 'Hls', callback, 0, lookmovieBuildTracks(accessJson.subtitles), lookmovieBuildDisplayQuality(sortDirect), streamHeaders, { type: 'm3u8' });
                     return [2, true];
             }
         });
@@ -415,8 +435,8 @@ function lookmovieFetchEpisodeAccess(slug, season, episode, callback) {
                     }
                     streamHeaders = buildSiteHeaders(epUrl);
                     libs.log({ slug: slug, idEpisode: idEpisode, sortDirect: sortDirect }, PROVIDER, 'EPISODE STREAM');
-                    console.log('[RN-Fetch][BLOOKMOVIE-PLAY] s' + season + 'e' + episode + ' quality=' + sortDirect[0].quality);
-                    libs.embed_callback(sortDirect[0].file, PROVIDER, PROVIDER, 'Hls', callback, 0, lookmovieBuildTracks(accessJson.subtitles), sortDirect, streamHeaders, { type: 'm3u8' });
+                    console.log('[RN-Fetch][BLOOKMOVIE-PLAY] s' + season + 'e' + episode + ' api=' + sortDirect.map(function (item) { return item.quality; }).join('/') + ' display=1080');
+                    libs.embed_callback(sortDirect[0].file, PROVIDER, PROVIDER, 'Hls', callback, 0, lookmovieBuildTracks(accessJson.subtitles), lookmovieBuildDisplayQuality(sortDirect), streamHeaders, { type: 'm3u8' });
                     return [2, true];
             }
         });
@@ -427,7 +447,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][BLOOKMOVIE-VERSION] v2-rn-blookmovie-sync');
+                console.log('[RN-Fetch][BLOOKMOVIE-VERSION] v3-rn-display-1080');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 7, , 8]);
