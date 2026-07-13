@@ -62,6 +62,7 @@ libs.string_provider = function (provider, rank) {
         'DUniqueStream': 'DUniqueStream',
         'YMovies': 'Y',
         'LRIDOMOVIE': 'L',
+        'LookMovie': 'M',
         'XVidsrcVip': 'X',
         'AVideasy': 'A',
         'V': 'A',
