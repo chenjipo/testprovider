@@ -62,7 +62,8 @@ libs.string_provider = function (provider, rank) {
         'DUniqueStream': 'DUniqueStream',
         'YMovies': 'Y',
         'LRIDOMOVIE': 'L',
-        'LookMovie': 'M',
+        'BlookMovie': 'B',
+        'blookmovie': 'B',
         'XVidsrcVip': 'X',
         'AVideasy': 'A',
         'V': 'A',
@@ -82,7 +83,7 @@ libs.string_provider = function (provider, rank) {
     }
     return "Server ".concat(provider[0].toUpperCase()).concat(rank);
 };
-console.log('[RN-Fetch][STRING-CFG] v9-server-a-slot');
+console.log('[RN-Fetch][STRING-CFG] v10-server-b-blookmovie');
 libs.string_encrypt_fmovies = function (input) {
     var keytwo = "51wJ0FDq/UVCefLopEcmK3ni4WIQztMjZdSYOsbHr9R2h7PvxBGAuglaN8+kXT6y";
     var output = '';

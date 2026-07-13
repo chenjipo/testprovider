@@ -505,7 +505,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 }
                 if (directUrl && directUrl.indexOf('http') === 0) {
                     console.log('[RN-Fetch][CLOSELOAD-DIRECT] ' + directUrl.substring(0, 120));
-                    libs.embed_callback(directUrl, provider, callbackHost, 'Hls', callback, 1, [], [{ file: directUrl, quality: 1080 }], {
+                    libs.embed_callback(directUrl, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: directUrl, quality: 1080 }], {
                         referer: activeUrl,
                         'user-agent': embedHeaders['user-agent'],
                     }, {
@@ -564,7 +564,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                     return [3, 1];
                 }
                 console.log('[RN-Fetch][CLOSELOAD-PLAY] ' + parseDirect.substring(0, 120));
-                libs.embed_callback(parseDirect, provider, callbackHost, 'Hls', callback, 1, [], [{ file: parseDirect, quality: 1080 }], {
+                libs.embed_callback(parseDirect, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: parseDirect, quality: 1080 }], {
                     referer: activeUrl,
                     'user-agent': embedHeaders['user-agent'],
                 }, {

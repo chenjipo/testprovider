@@ -35,7 +35,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-callbacksEmbed["lookmovie"] = function (dataCallback, provider, host, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
+callbacksEmbed["blookmovie"] = function (dataCallback, provider, host, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
     var parseCallback, parseDirect, rank, sortDirect, tracks, _i, _a, item, directIndex, sizeQuality;
     return __generator(this, function (_b) {
         parseCallback = JSON.parse(dataCallback);
@@ -81,7 +81,7 @@ callbacksEmbed["lookmovie"] = function (dataCallback, provider, host, callback, 
             if (sortDirect.length == 0) {
                 return [2];
             }
-            libs.embed_callback(sortDirect[0].file, provider, host, 'Hls', callback, ++rank, tracks, sortDirect);
+            libs.embed_callback(sortDirect[0].file, 'BlookMovie', host, 'Hls', callback, ++rank, tracks, sortDirect);
         }
         return [2];
     });

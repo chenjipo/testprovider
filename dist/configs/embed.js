@@ -255,6 +255,12 @@ libs.__resolveVodBatchProvider = function (urlDirect, provider, host) {
     if (url.indexOf('closeload.top') >= 0 || url.indexOf('ridorapid.closeload') >= 0) {
         return 'LRIDOMOVIE';
     }
+    if (p === 'LookMovie' || p === 'lookmovie' || p === 'BlookMovie' || p === 'blookmovie') {
+        return 'BlookMovie';
+    }
+    if (url.indexOf('valking.store') >= 0) {
+        return 'BlookMovie';
+    }
     if (p === 'yesmovies-embed' || h === 'yesmovies-embed' || p === 'ployan' || h === 'ployan') {
         return 'IYesMovies';
     }
@@ -321,11 +327,11 @@ libs.__vodStormKey = function (url) {
 };
 libs.__isVodYaxSyncProvider = function (provider) {
     var p = String(provider || '');
-    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE';
+    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie';
 };
 libs.__isVodYaxBatchProvider = function (provider) {
     var p = String(provider || '');
-    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE';
+    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie';
 };
 libs.__isVodBatchProvider = function (provider) {
     if (libs.__vodSyncYaxEnabled && libs.__isVodYaxBatchProvider(provider)) {
@@ -373,10 +379,11 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v21-lrido-sync';
+libs.__embedSyncVersion = 'v23-blookmovie-sync';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
-libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE'];
+libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
+libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie'];
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 18000;
 libs.__vodSyncHardMaxMs = 26000;
@@ -457,8 +464,43 @@ libs.__vodSyncFamilyCount = function (items) {
     }
     return count;
 };
+libs.__vodSyncCoreFamilyCount = function (items) {
+    var seen = {};
+    var core = libs.__vodSyncYaxCoreProviders || [];
+    var count = 0;
+    for (var i = 0; i < items.length; i++) {
+        var provider = items[i][1];
+        if (seen[provider]) {
+            continue;
+        }
+        seen[provider] = true;
+        for (var j = 0; j < core.length; j++) {
+            if (core[j] === provider) {
+                count += 1;
+                break;
+            }
+        }
+    }
+    return count;
+};
+libs.__vodSyncIsYaxReady = function (items, elapsed) {
+    var coreFamilies = libs.__vodSyncCoreFamilyCount(items);
+    var minCore = (libs.__vodSyncYaxCoreProviders || []).length;
+    var minElapsed = libs.__vodSyncYaxMinElapsedMs || 2000;
+    var hardMax = libs.__vodSyncHardMaxMs || 26000;
+    if (coreFamilies >= minCore && elapsed >= minElapsed) {
+        return true;
+    }
+    if (elapsed >= hardMax && coreFamilies >= 2) {
+        return true;
+    }
+    if (elapsed >= (hardMax + 4000) && coreFamilies >= 1 && items.length >= 1) {
+        return true;
+    }
+    return false;
+};
 libs.__vodSyncSortItems = function (items) {
-    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300, 'LRIDOMOVIE': 400 };
+    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300, 'LRIDOMOVIE': 400, 'BlookMovie': 500 };
     return items.slice().sort(function (left, right) {
         var leftBase = order[left[1]] || 500;
         var rightBase = order[right[1]] || 500;
@@ -486,7 +528,7 @@ libs.__pushVodSyncItem = function (urlDirect, provider, host, quality, callback,
     libs.__vodSyncItems = bag.items;
     libs.__vodSyncStartMs = bag.startMs;
     libs.__vodSyncFlushed = bag.flushed;
-    console.log('[RN-Fetch][SYNC-QUEUE] provider=' + provider + ' rank=' + rank + ' total=' + bag.items.length + ' families=' + libs.__vodSyncFamilyCount(bag.items));
+    console.log('[RN-Fetch][SYNC-QUEUE] provider=' + provider + ' rank=' + rank + ' total=' + bag.items.length + ' families=' + libs.__vodSyncFamilyCount(bag.items) + ' core=' + libs.__vodSyncCoreFamilyCount(bag.items));
     libs.__scheduleSyncFlush();
 };
 libs.__tryPushVodSyncLink = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
@@ -636,8 +678,8 @@ libs.__scheduleSyncFlush = function () {
     libs.__vodSyncFlushed = bag.flushed;
     if (libs.__vodSyncYaxEnabled) {
         if (items.length >= 1 && elapsed >= libs.__vodSyncMaxMs) {
-            if (familyCount >= libs.__vodSyncYaxMinFamilies || elapsed >= (libs.__vodSyncHardMaxMs || 26000)) {
-                console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' families=' + familyCount + ' reason=yax-max');
+            if (libs.__vodSyncIsYaxReady(items, elapsed)) {
+                console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' families=' + familyCount + ' core=' + libs.__vodSyncCoreFamilyCount(items) + ' reason=yax-max');
                 libs.__flushVodSyncItems();
             }
             return;
@@ -655,17 +697,18 @@ libs.__scheduleSyncFlush = function () {
                 var liveItems = liveBag.items;
                 var liveElapsed = liveBag.startMs ? Date.now() - liveBag.startMs : 0;
                 var liveFamilies = libs.__vodSyncFamilyCount(liveItems);
+                var liveCoreFamilies = libs.__vodSyncCoreFamilyCount(liveItems);
                 if (!liveItems.length || liveBag.flushed) {
                     return;
                 }
-                if (liveFamilies >= libs.__vodSyncYaxMinFamilies && liveElapsed >= libs.__vodSyncYaxMinElapsedMs) {
-                    console.log('[RN-Fetch][SYNC-READY] elapsed=' + liveElapsed + 'ms queued=' + liveItems.length + ' families=' + liveFamilies + ' reason=yax-coalesce');
+                if (libs.__vodSyncIsYaxReady(liveItems, liveElapsed)) {
+                    console.log('[RN-Fetch][SYNC-READY] elapsed=' + liveElapsed + 'ms queued=' + liveItems.length + ' families=' + liveFamilies + ' core=' + liveCoreFamilies + ' reason=yax-coalesce');
                     libs.__flushVodSyncItems();
                     return;
                 }
                 if (liveElapsed >= libs.__vodSyncMaxMs) {
-                    if (liveFamilies >= libs.__vodSyncYaxMinFamilies || liveElapsed >= (libs.__vodSyncHardMaxMs || 26000)) {
-                        console.log('[RN-Fetch][SYNC-READY] elapsed=' + liveElapsed + 'ms queued=' + liveItems.length + ' families=' + liveFamilies + ' reason=yax-coalesce-max');
+                    if (libs.__vodSyncIsYaxReady(liveItems, liveElapsed)) {
+                        console.log('[RN-Fetch][SYNC-READY] elapsed=' + liveElapsed + 'ms queued=' + liveItems.length + ' families=' + liveFamilies + ' core=' + liveCoreFamilies + ' reason=yax-coalesce-max');
                         libs.__flushVodSyncItems();
                     }
                 }
@@ -737,7 +780,7 @@ libs.beginVodLinkSession = function () {
         }
     }
     var elapsed = bag.startMs ? now - bag.startMs : 999999;
-    var needNew = !bag.startMs || (bag.flushed && elapsed > 8000) || elapsed > 90000;
+    var needNew = !bag.startMs || (bag.flushed && elapsed > 30000) || elapsed > 90000;
     if (needNew) {
         bag.startMs = now;
         bag.items = [];

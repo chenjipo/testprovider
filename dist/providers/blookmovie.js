@@ -35,7 +35,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-var PROVIDER = 'LookMovie';
+var PROVIDER = 'BlookMovie';
 var DOMAIN = 'https://www.lookmovie2.to';
 var USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
 function buildSiteHeaders(referer, csrf) {
@@ -280,14 +280,14 @@ function lookmovieResolveSlug(movieInfo) {
                 case 1:
                     if (!(qi < queries.length)) return [3, 4];
                     urlSearch = DOMAIN + searchPath + encodeURIComponent(queries[qi]);
-                    console.log('[RN-Fetch][LOOKMOVIE-SEARCH] ' + urlSearch);
+                    console.log('[RN-Fetch][BLOOKMOVIE-SEARCH] ' + urlSearch);
                     return [4, lookmovieFetchJson(urlSearch, DOMAIN + '/', '')];
                 case 2:
                     searchJson = _a.sent();
                     rows = lookmovieNormalizeSearchRows(searchJson, movieInfo.type);
                     picked = lookmoviePickSearchRow(rows, movieInfo);
                     if (picked && picked.slug) {
-                        console.log('[RN-Fetch][LOOKMOVIE-SLUG] search ' + picked.slug + ' title=' + picked.title);
+                        console.log('[RN-Fetch][BLOOKMOVIE-SLUG] search ' + picked.slug + ' title=' + picked.title);
                         return [2, picked.slug];
                     }
                     _a.label = 3;
@@ -309,7 +309,7 @@ function lookmovieResolveSlug(movieInfo) {
                         ? viewHtml.indexOf('id_show') >= 0
                         : viewHtml.indexOf('id_movie') >= 0 || viewHtml.indexOf('movie_storage') >= 0;
                     if (!(viewHtml && hasId)) return [3, 7];
-                    console.log('[RN-Fetch][LOOKMOVIE-SLUG] guess-view ' + candidates[ci]);
+                    console.log('[RN-Fetch][BLOOKMOVIE-SLUG] guess-view ' + candidates[ci]);
                     return [2, candidates[ci]];
                 case 7:
                     playUrl = DOMAIN + '/' + typePath + '/play/' + candidates[ci];
@@ -317,7 +317,7 @@ function lookmovieResolveSlug(movieInfo) {
                 case 8:
                     playHtml = _a.sent();
                     if (playHtml && (playHtml.indexOf('movie_storage') >= 0 || playHtml.indexOf('show_storage') >= 0 || playHtml.indexOf('window.seasons') >= 0)) {
-                        console.log('[RN-Fetch][LOOKMOVIE-SLUG] guess-play ' + candidates[ci]);
+                        console.log('[RN-Fetch][BLOOKMOVIE-SLUG] guess-play ' + candidates[ci]);
                         return [2, candidates[ci]];
                     }
                     _a.label = 9;
@@ -336,35 +336,35 @@ function lookmovieFetchMovieAccess(slug, callback) {
             switch (_a.label) {
                 case 0:
                     playUrl = DOMAIN + '/movies/play/' + slug;
-                    console.log('[RN-Fetch][LOOKMOVIE-PAGE] ' + playUrl);
+                    console.log('[RN-Fetch][BLOOKMOVIE-PAGE] ' + playUrl);
                     return [4, lookmovieFetchText(playUrl, DOMAIN + '/', '')];
                 case 1:
                     pageHtml = _a.sent();
                     csrf = lookmovieParseCsrf(pageHtml);
                     storage = lookmovieParseStorageBlock(pageHtml, 'movie_storage');
                     if (!storage || !storage.id_movie || !storage.hash || !storage.expires) {
-                        console.log('[RN-Fetch][LOOKMOVIE-SKIP] movie-storage-miss');
+                        console.log('[RN-Fetch][BLOOKMOVIE-SKIP] movie-storage-miss');
                         return [2, false];
                     }
                     accessUrl = DOMAIN + '/api/v1/security/movie-access?id_movie=' + storage.id_movie
                         + '&hash=' + encodeURIComponent(storage.hash)
                         + '&expires=' + storage.expires;
-                    console.log('[RN-Fetch][LOOKMOVIE-ACCESS] ' + accessUrl);
+                    console.log('[RN-Fetch][BLOOKMOVIE-ACCESS] ' + accessUrl);
                     return [4, lookmovieFetchJson(accessUrl, playUrl, csrf)];
                 case 2:
                     accessJson = _a.sent();
                     if (!accessJson || !accessJson.success || !accessJson.streams) {
-                        console.log('[RN-Fetch][LOOKMOVIE-SKIP] movie-access-fail reason=' + (accessJson && accessJson.reason ? accessJson.reason : 'none'));
+                        console.log('[RN-Fetch][BLOOKMOVIE-SKIP] movie-access-fail reason=' + (accessJson && accessJson.reason ? accessJson.reason : 'none'));
                         return [2, false];
                     }
                     sortDirect = lookmovieBuildDirectQuality(accessJson.streams);
                     if (!sortDirect.length) {
-                        console.log('[RN-Fetch][LOOKMOVIE-SKIP] movie-stream-empty');
+                        console.log('[RN-Fetch][BLOOKMOVIE-SKIP] movie-stream-empty');
                         return [2, false];
                     }
                     streamHeaders = buildSiteHeaders(playUrl);
                     libs.log({ slug: slug, storage: storage, sortDirect: sortDirect }, PROVIDER, 'MOVIE STREAM');
-                    console.log('[RN-Fetch][LOOKMOVIE-PLAY] quality=' + sortDirect[0].quality);
+                    console.log('[RN-Fetch][BLOOKMOVIE-PLAY] quality=' + sortDirect[0].quality);
                     libs.embed_callback(sortDirect[0].file, PROVIDER, PROVIDER, 'Hls', callback, 0, lookmovieBuildTracks(accessJson.subtitles), sortDirect, streamHeaders, { type: 'm3u8' });
                     return [2, true];
             }
@@ -378,7 +378,7 @@ function lookmovieFetchEpisodeAccess(slug, season, episode, callback) {
             switch (_a.label) {
                 case 0:
                     epUrl = DOMAIN + '/shows/play/' + slug;
-                    console.log('[RN-Fetch][LOOKMOVIE-PAGE] ' + epUrl);
+                    console.log('[RN-Fetch][BLOOKMOVIE-PAGE] ' + epUrl);
                     return [4, lookmovieFetchText(epUrl, DOMAIN + '/shows', '')];
                 case 1:
                     pageHtml = _a.sent();
@@ -390,7 +390,7 @@ function lookmovieFetchEpisodeAccess(slug, season, episode, callback) {
                         idEpisode = (pageHtml.match(/id_episode:\s*(\d+)/) || pageHtml.match(/currentEpisodeID\s*=\s*(\d+)/) || [])[1] || '';
                     }
                     if (!idEpisode) {
-                        console.log('[RN-Fetch][LOOKMOVIE-SKIP] episode-id-miss s' + season + 'e' + episode);
+                        console.log('[RN-Fetch][BLOOKMOVIE-SKIP] episode-id-miss s' + season + 'e' + episode);
                         return [2, false];
                     }
                     accessUrl = DOMAIN + '/api/v1/security/episode-access?id_episode=' + encodeURIComponent(idEpisode);
@@ -400,22 +400,22 @@ function lookmovieFetchEpisodeAccess(slug, season, episode, callback) {
                     if (showStorage && showStorage.expires) {
                         accessUrl += '&expires=' + showStorage.expires;
                     }
-                    console.log('[RN-Fetch][LOOKMOVIE-ACCESS] ' + accessUrl);
+                    console.log('[RN-Fetch][BLOOKMOVIE-ACCESS] ' + accessUrl);
                     return [4, lookmovieFetchJson(accessUrl, epUrl, csrf)];
                 case 2:
                     accessJson = _a.sent();
                     if (!accessJson || !accessJson.streams) {
-                        console.log('[RN-Fetch][LOOKMOVIE-SKIP] episode-access-fail');
+                        console.log('[RN-Fetch][BLOOKMOVIE-SKIP] episode-access-fail');
                         return [2, false];
                     }
                     sortDirect = lookmovieBuildDirectQuality(accessJson.streams);
                     if (!sortDirect.length) {
-                        console.log('[RN-Fetch][LOOKMOVIE-SKIP] episode-stream-empty');
+                        console.log('[RN-Fetch][BLOOKMOVIE-SKIP] episode-stream-empty');
                         return [2, false];
                     }
                     streamHeaders = buildSiteHeaders(epUrl);
                     libs.log({ slug: slug, idEpisode: idEpisode, sortDirect: sortDirect }, PROVIDER, 'EPISODE STREAM');
-                    console.log('[RN-Fetch][LOOKMOVIE-PLAY] s' + season + 'e' + episode + ' quality=' + sortDirect[0].quality);
+                    console.log('[RN-Fetch][BLOOKMOVIE-PLAY] s' + season + 'e' + episode + ' quality=' + sortDirect[0].quality);
                     libs.embed_callback(sortDirect[0].file, PROVIDER, PROVIDER, 'Hls', callback, 0, lookmovieBuildTracks(accessJson.subtitles), sortDirect, streamHeaders, { type: 'm3u8' });
                     return [2, true];
             }
@@ -427,7 +427,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][LOOKMOVIE-VERSION] v1-rn-direct-access');
+                console.log('[RN-Fetch][BLOOKMOVIE-VERSION] v2-rn-blookmovie-sync');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 7, , 8]);
@@ -438,7 +438,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             case 3:
                 slug = _a.sent();
                 if (!slug) {
-                    console.log('[RN-Fetch][LOOKMOVIE-SKIP] slug-not-found');
+                    console.log('[RN-Fetch][BLOOKMOVIE-SKIP] slug-not-found');
                     return [2];
                 }
                 if (!(movieInfo.type === 'tv')) return [3, 5];
@@ -452,13 +452,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 return [3, 7];
             case 7:
                 if (!ok) {
-                    console.log('[RN-Fetch][LOOKMOVIE-MISS] slug=' + slug);
+                    console.log('[RN-Fetch][BLOOKMOVIE-MISS] slug=' + slug);
                 }
                 return [2, !!ok];
             case 8:
                 e_1 = _a.sent();
                 libs.log({ e: e_1 }, PROVIDER, 'ERROR');
-                console.log('[RN-Fetch][LOOKMOVIE-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
+                console.log('[RN-Fetch][BLOOKMOVIE-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 return [2];
         }
     });

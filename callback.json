@@ -1,7 +1,7 @@
 {
   "callbacks": [
     "dist/callbacks/vidcloud.js",
-    "dist/callbacks/lookmovie.js",
+    "dist/callbacks/blookmovie.js",
     "dist/callbacks/m4ufree.js",
     "dist/callbacks/mcloud.js",
     "dist/callbacks/rabbitstream.js",
