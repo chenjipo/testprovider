@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v15-quality-slot';
+var AVIDEASY_VERSION = 'v16-cdn-first-skip-neon';
 var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
 var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
@@ -49,20 +49,36 @@ var AVIDEASY_FETCH_TIMEOUT_MS = 22000;
 var AVIDEASY_DECRYPT_RETRY_MS = 700;
 var AVIDEASY_API_RETRY_MS = 900;
 var AVIDEASY_MAX_OK = 3;
+// Neon(neon2) currently returns playable-looking m3u8, but child URIs miss https://
+// and .ts segments on interkh.com return HTTP 410 — skip until CDN recovers.
 var AVIDEASY_SERVERS = [
-    { name: 'Neon', path: 'neon2' },
-    { name: 'Sage', path: 'ym' },
+    { name: 'Yoru', path: 'cdn' },
     { name: 'Cypher', path: 'downloader2' },
-    { name: 'Yoru', path: 'cdn', moviesOnly: true },
+    { name: 'Sage', path: 'ym' },
 ];
 function avideasyStreamMeta(file) {
     var url = String(file || '');
     if (url.indexOf('.m3u8') >= 0 || url.indexOf('.hls') >= 0) {
         return { quality: 'Hls', type: 'm3u8' };
     }
+    if (url.indexOf('.mp4') >= 0 || url.indexOf('/mp4/') >= 0) {
+        return { quality: '', type: 'mp4' };
+    }
     return { quality: '', type: '' };
 }
+function avideasyIsPlayableSource(file) {
+    var meta = avideasyStreamMeta(file);
+    return meta.type === 'm3u8' || meta.type === 'mp4';
+}
 function avideasyBuildHeaders() {
+    return {
+        'user-agent': AVIDEASY_USER_AGENT,
+        accept: '*/*',
+        referer: AVIDEASY_PLAYER_ORIGIN + '/',
+        Referer: AVIDEASY_PLAYER_ORIGIN + '/',
+    };
+}
+function avideasyBuildApiHeaders() {
     return {
         'user-agent': AVIDEASY_USER_AGENT,
         accept: '*/*',
@@ -220,7 +236,7 @@ function avideasyFetchText(url, headers) {
     ]);
 }
 function avideasyFetchSeedRaw(tmdbId, attempt) {
-    return avideasyFetchText(AVIDEASY_SEED_URL + '?mediaId=' + encodeURIComponent(String(tmdbId)), avideasyBuildHeaders()).then(function (result) {
+    return avideasyFetchText(AVIDEASY_SEED_URL + '?mediaId=' + encodeURIComponent(String(tmdbId)), avideasyBuildApiHeaders()).then(function (result) {
         var data = null;
         try {
             data = JSON.parse(result.text);
@@ -402,7 +418,7 @@ function avideasyCollectLinks(movieInfo, liveCallback, runKey, deliveryGen) { re
                     console.log('[RN-Fetch][AVIDEASY-COLLECT-SKIP] cache count=' + cached.items.length);
                     return [2, cached.items];
                 }
-                headers = avideasyBuildHeaders();
+                headers = avideasyBuildApiHeaders();
                 console.log('[RN-Fetch][AVIDEASY-COLLECT] start tmdb=' + movieInfo.tmdb_id);
                 return [4, avideasyFetchSeed(movieInfo.tmdb_id)];
             case 1:
@@ -464,9 +480,8 @@ function avideasyCollectLinks(movieInfo, liveCallback, runKey, deliveryGen) { re
                     return [3, 8];
                 }
                 directQuality = avideasySortByQuality(directQuality);
-                var topStreamMeta = avideasyStreamMeta(directQuality[0].file);
-                if (topStreamMeta.type !== 'm3u8') {
-                    console.log('[RN-Fetch][AVIDEASY-SKIP] server=' + server.name + ' reason=non-m3u8');
+                if (!avideasyIsPlayableSource(directQuality[0].file)) {
+                    console.log('[RN-Fetch][AVIDEASY-SKIP] server=' + server.name + ' reason=non-playable');
                     return [3, 8];
                 }
                 rank += 1;
@@ -478,7 +493,7 @@ function avideasyCollectLinks(movieInfo, liveCallback, runKey, deliveryGen) { re
                     rank: rank,
                     tracks: tracks,
                     directQuality: directQuality,
-                    headers: headers,
+                    headers: avideasyBuildHeaders(),
                 };
                 delivered.push(deliveredItem);
                 if (liveCallback) {
