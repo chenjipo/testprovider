@@ -36,9 +36,9 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var AVIDEASY_PROVIDER = 'AVideasy';
-var AVIDEASY_VERSION = 'v16-cdn-first-skip-neon';
-var AVIDEASY_SEED_URL = 'https://api.wingsdatabase.com/seed';
-var AVIDEASY_API_BASE = 'https://api.wingsdatabase.com';
+var AVIDEASY_VERSION = 'v17-speedracelight';
+var AVIDEASY_SEED_URL = 'https://api.speedracelight.com/seed';
+var AVIDEASY_API_BASE = 'https://api.speedracelight.com';
 var AVIDEASY_DEC_URL = 'https://enc-dec.app/api/dec-videasy';
 var AVIDEASY_PLAYER_ORIGIN = 'https://player.videasy.to';
 var AVIDEASY_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
@@ -49,12 +49,12 @@ var AVIDEASY_FETCH_TIMEOUT_MS = 22000;
 var AVIDEASY_DECRYPT_RETRY_MS = 700;
 var AVIDEASY_API_RETRY_MS = 900;
 var AVIDEASY_MAX_OK = 3;
-// Neon(neon2) currently returns playable-looking m3u8, but child URIs miss https://
-// and .ts segments on interkh.com return HTTP 410 — skip until CDN recovers.
+// api.wingsdatabase.com DNS gone (ENOTFOUND). Official sample now uses api.speedracelight.com.
 var AVIDEASY_SERVERS = [
     { name: 'Yoru', path: 'cdn' },
-    { name: 'Cypher', path: 'downloader2' },
-    { name: 'Sage', path: 'ym' },
+    { name: 'Breach', path: 'm4uhd' },
+    { name: 'Neon', path: 'vsrc' },
+    { name: 'Vyse', path: 'hdmovie' },
 ];
 function avideasyStreamMeta(file) {
     var url = String(file || '');
