@@ -379,7 +379,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v23-blookmovie-sync';
+libs.__embedSyncVersion = 'v24-defer-wv-after-sync';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -592,6 +592,11 @@ libs.__flushVodSyncItems = function () {
         deliver.apply(libs, items[i]);
     }
     libs.__vodSyncReleasing = false;
+    if (typeof libs.__runDeferredProviderWebviews === 'function') {
+        setTimeout(function () {
+            libs.__runDeferredProviderWebviews();
+        }, 0);
+    }
 };
 libs.__deferProviderWebview = function (provider, task) {
     libs.__vodDeferredWebviews = libs.__vodDeferredWebviews || {};
@@ -667,6 +672,11 @@ libs.__finishSyncSession = function (reason) {
         bag.coalesceTimer = null;
     }
     console.log('[RN-Fetch][SYNC-END] reason=' + reason + ' queued=0');
+    if (typeof libs.__runDeferredProviderWebviews === 'function') {
+        setTimeout(function () {
+            libs.__runDeferredProviderWebviews();
+        }, 0);
+    }
 };
 libs.__scheduleSyncFlush = function () {
     var bag = libs.__getVodSyncBag();

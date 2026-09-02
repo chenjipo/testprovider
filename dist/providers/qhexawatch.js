@@ -303,7 +303,7 @@ function qhexaScheduleCapWebview(movieInfo) {
         handler(QHEXA_REFERER, movieInfo || {}, QHEXA_PROVIDER, {
             pageUrl: 'https://hexa.su/?_cap=' + Date.now() + '_' + Math.floor(Math.random() * 1000000),
         }, function () { });
-    }, 20000);
+    }, 90000);
 }
 libs.__qhexaOnCapToken = function (token, movieInfo, callback) {
     if (!token) {
@@ -542,7 +542,7 @@ function qhexaCapFetchChallengeAndRedeem() { return __awaiter(_this, void 0, voi
                     return [2, { token: '', source: 'failed', reason: 'challenge-' + challengeResult.status }];
                 }
                 if (qhexaCapHasInstrumentation(challengeResp)) {
-                    console.log('[RN-Fetch][QHEXA-TOKEN-ERR] instrumentation-required');
+                    console.log('[RN-Fetch][QHEXA-TOKEN-ERR] instrumentation-required fallback=wv');
                     return [2, { token: '', source: 'failed', reason: 'instrumentation-required' }];
                 }
                 return [4, qhexaCapSolveChallenges(challengeResp)];
@@ -591,7 +591,7 @@ function qhexaFetchCapToken() { return __awaiter(_this, void 0, void 0, function
     });
 }); }
 function qhexaFetchCapTokenInner() { return __awaiter(_this, void 0, void 0, function () {
-    var cached, attempt, webviewResult, lastReason;
+    var cached, directResult, attempt, webviewResult, lastReason;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -600,16 +600,25 @@ function qhexaFetchCapTokenInner() { return __awaiter(_this, void 0, void 0, fun
                     console.log('[RN-Fetch][QHEXA-TOKEN] source=cache ' + cached.substring(0, 40) + '...');
                     return [2, { token: cached, source: 'cache' }];
                 }
+                return [4, qhexaCapFetchChallengeAndRedeem()];
+            case 1:
+                directResult = _a.sent();
+                if (directResult && directResult.token) {
+                    return [2, directResult];
+                }
+                if (directResult && directResult.reason) {
+                    console.log('[RN-Fetch][QHEXA-TOKEN-FALLBACK] reason=' + directResult.reason);
+                }
                 attempt = 0;
                 lastReason = '';
-                _a.label = 1;
-            case 1:
-                if (!(attempt < QHEXA_TOKEN_RETRY_MAX)) return [3, 7];
+                _a.label = 2;
+            case 2:
+                if (!(attempt < QHEXA_TOKEN_RETRY_MAX)) return [3, 8];
                 attempt++;
                 if (!libs.__qhexaTokenWaitPromise) {
                     libs.__qhexaTokenWaitPromise = new Promise(function (resolve) {
                         libs.__qhexaCapTokenResolve = resolve;
-                        console.log('[RN-Fetch][QHEXA-TOKEN-WAIT] start attempt=' + attempt + ' timeout=45s');
+                        console.log('[RN-Fetch][QHEXA-TOKEN-WAIT] start attempt=' + attempt + ' timeout=90s');
                         qhexaScheduleCapWebview(libs.__qhexaPendingMovieInfo || null);
                         setTimeout(function () {
                             if (!libs.__qhexaCapTokenResolve) {
@@ -619,25 +628,25 @@ function qhexaFetchCapTokenInner() { return __awaiter(_this, void 0, void 0, fun
                             libs.__qhexaCapWebviewQueued = false;
                             libs.__qhexaCapTokenResolve({ token: '', source: 'failed', reason: 'cap-wv-timeout' });
                             libs.__qhexaCapTokenResolve = null;
-                        }, 45000);
+                        }, 90000);
                     }).finally(function () {
                         libs.__qhexaTokenWaitPromise = null;
                     });
                 }
                 return [4, libs.__qhexaTokenWaitPromise];
-            case 2:
+            case 3:
                 webviewResult = _a.sent();
                 if (webviewResult && webviewResult.token) {
                     return [2, webviewResult];
                 }
                 lastReason = webviewResult && webviewResult.reason ? webviewResult.reason : 'token-empty';
-                if (!(attempt < QHEXA_TOKEN_RETRY_MAX)) return [3, 4];
+                if (!(attempt < QHEXA_TOKEN_RETRY_MAX)) return [3, 5];
                 return [4, qhexaSleep(QHEXA_TOKEN_RETRY_MS)];
-            case 3:
+            case 4:
                 _a.sent();
-                return [3, 1];
-            case 4: return [3, 7];
-            case 7:
+                return [3, 2];
+            case 5: return [3, 8];
+            case 8:
                 console.log('[RN-Fetch][QHEXA-SKIP] token-failed ' + lastReason);
                 return [2, { token: '', source: 'failed' }];
         }
@@ -648,7 +657,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][QHEXA-VERSION] v7-cap-wv-unique-url');
+                console.log('[RN-Fetch][QHEXA-VERSION] v8-cap-auto-solve');
                 rawTmdb = movieInfo && movieInfo.tmdb_id !== undefined && movieInfo.tmdb_id !== null ? String(movieInfo.tmdb_id) : '';
                 console.log('[RN-Fetch][QHEXA-TMDB] type=' + movieInfo.type + ' id=' + rawTmdb + ' imdb=' + String(movieInfo.imdb_id || '') + (movieInfo.type == 'tv' ? ' s' + movieInfo.season + 'e' + movieInfo.episode : ''));
                 _a.label = 1;

@@ -55,7 +55,7 @@ hosts["ployan"] = function (url, movieInfo, provider, config, callback) { return
         eid = (config && config.eid) ? config.eid : '';
         sv = (config && config.sv) ? config.sv : '1';
         yesLoc = (config && config.yesLoc) ? config.yesLoc : 'US';
-        yesReferer = (config && config.yesReferer) ? config.yesReferer : 'https://ww.yesmovies.ag/';
+        yesReferer = (config && config.yesReferer) ? config.yesReferer : 'https://ww2.yesmovies.ag/';
         watchBase = (config && config.watchUrl) ? config.watchUrl : String(url || '').split('#')[0];
         loadUrl = watchBase;
         if (urix) {
@@ -63,7 +63,7 @@ hosts["ployan"] = function (url, movieInfo, provider, config, callback) { return
         }
         headers = {
             'Referer': yesReferer,
-            'Origin': 'https://ww.yesmovies.ag',
+            'Origin': 'https://ww2.yesmovies.ag',
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
         };
         beforeLoadScript = buildPloyanInjectScript(urix, mid, eid, sv, yesLoc);

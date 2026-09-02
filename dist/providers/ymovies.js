@@ -36,13 +36,52 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var PROVIDER = 'YMovies';
-var DOMAIN = 'https://ww.ymovies.vip';
+var DOMAIN_CANDIDATES = [
+    'https://ww.ymovies.vip',
+    'https://ymovies.vip',
+];
+var DOMAIN = DOMAIN_CANDIDATES[0];
+var FSTREAM365_HOST_URLS = [
+    'https://raw.githubusercontent.com/chenjipo/testprovider/main/dist/hosts/fstream365.js',
+    'https://raw.githubusercontent.com/chenjipo/myprovider/main/dist/hosts/fstream365.js',
+];
 var USER_AGENT = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
-function buildSiteHeaders(referer) {
+function ymoviesHostFromUrl(url) {
+    try {
+        return String(url || '').replace(/^https?:\/\//i, '').split('/')[0];
+    }
+    catch (e) {
+        return String(url || '');
+    }
+}
+function ymoviesIsDomainDownHtml(html, status) {
+    var source = String(html || '');
+    if (status === 403 || status === 404 || status === 521 || status === 522 || status === 523) {
+        return true;
+    }
+    if (source.indexOf('521: Web server is down') >= 0) {
+        return true;
+    }
+    if (source.indexOf('522: Connection timed out') >= 0) {
+        return true;
+    }
+    if (source.indexOf('403 Forbidden') >= 0) {
+        return true;
+    }
+    if (source.indexOf('404 Not Found') >= 0) {
+        return true;
+    }
+    if (source.indexOf('Just a moment') >= 0) {
+        return true;
+    }
+    return false;
+}
+function buildSiteHeaders(referer, siteDomain) {
+    var activeDomain = siteDomain || DOMAIN;
     return {
         'user-agent': USER_AGENT,
-        referer: referer || DOMAIN + '/',
-        origin: DOMAIN,
+        referer: referer || activeDomain + '/',
+        origin: activeDomain,
         Accept: 'text/html,application/json,*/*',
         'x-requested-with': 'XMLHttpRequest',
     };
@@ -65,20 +104,79 @@ function extractFilmId(linkDetail) {
     var parts = slug.split('-');
     return parts[parts.length - 1] || '';
 }
-function fetchHtml(url, referer) {
+function fetchHtml(url, referer, siteDomain) {
     return fetch(url, {
-        headers: buildSiteHeaders(referer),
+        headers: buildSiteHeaders(referer, siteDomain),
         method: 'GET',
     }).then(function (response) {
-        return response.text();
+        return response.text().then(function (text) {
+            return {
+                status: response.status,
+                text: text,
+            };
+        });
     });
 }
-function fetchJson(url, referer) {
+function fetchJson(url, referer, siteDomain) {
     return fetch(url, {
-        headers: buildSiteHeaders(referer),
+        headers: buildSiteHeaders(referer, siteDomain),
         method: 'GET',
     }).then(function (response) {
-        return response.json();
+        return response.json().then(function (json) {
+            return {
+                status: response.status,
+                json: json,
+            };
+        });
+    });
+}
+function ymoviesResolveDomain(movieInfo) {
+    return __awaiter(_this, void 0, void 0, function () {
+        var slug, _i, DOMAIN_CANDIDATES_1, candidate, urlSearch, result, searchHtml, linkDetail, host;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    slug = libs.url_slug_search(movieInfo, '+');
+                    _i = 0, DOMAIN_CANDIDATES_1 = DOMAIN_CANDIDATES;
+                    _a.label = 1;
+                case 1:
+                    if (!(_i < DOMAIN_CANDIDATES_1.length)) return [3, 4];
+                    candidate = DOMAIN_CANDIDATES_1[_i];
+                    urlSearch = candidate + '/movie/search/' + slug;
+                    console.log('[RN-Fetch][YMOVIES-DOMAIN-TRY] ' + urlSearch);
+                    return [4, fetchHtml(urlSearch, candidate + '/', candidate)];
+                case 2:
+                    result = _a.sent();
+                    searchHtml = result.text || '';
+                    host = ymoviesHostFromUrl(candidate);
+                    if (ymoviesIsDomainDownHtml(searchHtml, result.status)) {
+                        console.log('[RN-Fetch][YMOVIES-DOMAIN-FAIL] status=' + result.status + ' host=' + host);
+                        return [3, 3];
+                    }
+                    if (!searchHtml || searchHtml.indexOf('ml-item') < 0) {
+                        console.log('[RN-Fetch][YMOVIES-DOMAIN-FAIL] status=' + result.status + ' host=' + host + ' reason=no-ml-item');
+                        return [3, 3];
+                    }
+                    linkDetail = resolveYmoviesDetailLink(searchHtml, movieInfo, candidate);
+                    if (!linkDetail) {
+                        console.log('[RN-Fetch][YMOVIES-DOMAIN-FAIL] status=' + result.status + ' host=' + host + ' reason=no-match');
+                        return [3, 3];
+                    }
+                    DOMAIN = candidate;
+                    console.log('[RN-Fetch][YMOVIES-DOMAIN-OK] ' + candidate);
+                    return [2, {
+                            domain: candidate,
+                            searchHtml: searchHtml,
+                            linkDetail: linkDetail,
+                        }];
+                case 3:
+                    _i++;
+                    return [3, 1];
+                case 4:
+                    console.log('[RN-Fetch][YMOVIES-SKIP] all-domains-down');
+                    return [2, null];
+            }
+        });
     });
 }
 function parseAttrFromTag(tag, attrName) {
@@ -283,8 +381,12 @@ function ymoviesEnsureFstreamHandler() {
                     _a.label = 2;
                 case 2:
                     _a.trys.push([2, 4, , 5]);
-                    return [4, fetch('https://raw.githubusercontent.com/chenjipo/myprovider/main/dist/hosts/fstream365.js').then(function (response) {
+                    return [4, fetch(FSTREAM365_HOST_URLS[0]).then(function (response) {
                             return response.text();
+                        }).catch(function () {
+                            return fetch(FSTREAM365_HOST_URLS[1]).then(function (response) {
+                                return response.text();
+                            });
                         })];
                 case 3:
                     code = _a.sent();
@@ -338,7 +440,8 @@ function ymoviesRedirectEmbed(embedUrl, movieInfo, linkDetail, streamHeaders, ca
         });
     });
 }
-function resolveYmoviesDetailLink(searchHtml, movieInfo) {
+function resolveYmoviesDetailLink(searchHtml, movieInfo, siteDomain) {
+    var activeDomain = siteDomain || DOMAIN;
     var linkDetail = '';
     var itemRegex = /<div\b[^>]*class="[^"]*ml-item[^"]*"[^>]*>[\s\S]*?<\/div>\s*<\/div>/gi;
     var itemMatch;
@@ -359,33 +462,49 @@ function resolveYmoviesDetailLink(searchHtml, movieInfo) {
             continue;
         }
         if (movieInfo.type == 'movie' && type == 'movie' && String(movieInfo.year) == String(year)) {
-            linkDetail = normalizeDetailUrl(href);
+            linkDetail = normalizeDetailUrlForDomain(href, activeDomain);
         }
         if (movieInfo.type == 'tv' && type == 'tv') {
-            linkDetail = normalizeDetailUrl(href);
+            linkDetail = normalizeDetailUrlForDomain(href, activeDomain);
         }
     }
     return linkDetail;
 }
+function normalizeDetailUrlForDomain(href, siteDomain) {
+    var activeDomain = siteDomain || DOMAIN;
+    if (!href) {
+        return '';
+    }
+    if (href.indexOf('http') === 0) {
+        return href;
+    }
+    if (href.indexOf('/') === 0) {
+        return activeDomain + href;
+    }
+    return activeDomain + '/' + href;
+}
 source.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var urlSearch, searchHtml, linkDetail, filmId, hrefEpisode, dataEpisode, tokens_2, streamHeaders, _i, tokens_1, item, urlEmbed, dataEmbed, e_1;
+    var domainResult, searchHtml, linkDetail, filmId, hrefEpisode, episodeResult, dataEpisode, tokens_2, streamHeaders, _i, tokens_1, item, sourceResult, dataEmbed, e_1;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][YMOVIES-VERSION] v6-rn-crypto-global');
+                console.log('[RN-Fetch][YMOVIES-VERSION] v8-rn-domain-probe');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 9, , 10]);
-                urlSearch = DOMAIN + '/movie/search/' + libs.url_slug_search(movieInfo, '+');
-                console.log('[RN-Fetch][YMOVIES-SEARCH] ' + urlSearch);
-                return [4, fetchHtml(urlSearch)];
+                return [4, ymoviesResolveDomain(movieInfo)];
             case 2:
-                searchHtml = _a.sent();
+                domainResult = _a.sent();
+                if (!domainResult) {
+                    return [2];
+                }
+                searchHtml = domainResult.searchHtml;
+                linkDetail = domainResult.linkDetail;
+                console.log('[RN-Fetch][YMOVIES-SEARCH] ' + DOMAIN + '/movie/search/' + libs.url_slug_search(movieInfo, '+'));
                 if (!searchHtml) {
                     console.log('[RN-Fetch][YMOVIES-SKIP] search-empty');
                     return [2];
                 }
-                linkDetail = resolveYmoviesDetailLink(searchHtml, movieInfo);
                 libs.log({ linkDetail: linkDetail }, PROVIDER, 'LINK DETAIL');
                 console.log('[RN-Fetch][YMOVIES-DETAIL] ' + (linkDetail || 'none'));
                 if (!linkDetail) {
@@ -407,12 +526,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     hrefEpisode = DOMAIN + '/ajax/movie/episode/servers/' + filmId + '_' + movieInfo.season + '_' + movieInfo.episode;
                 }
                 console.log('[RN-Fetch][YMOVIES-SERVERS] ' + hrefEpisode);
-                return [4, fetchJson(hrefEpisode, linkDetail)];
+                return [4, fetchJson(hrefEpisode, linkDetail, DOMAIN)];
             case 3:
-                dataEpisode = _a.sent();
+                episodeResult = _a.sent();
+                dataEpisode = episodeResult.json;
                 libs.log({ dataEpisode: dataEpisode }, PROVIDER, 'DATA EPISODE');
                 if (!dataEpisode || !dataEpisode.status || !dataEpisode.html) {
-                    console.log('[RN-Fetch][YMOVIES-SKIP] servers-empty');
+                    console.log('[RN-Fetch][YMOVIES-SKIP] servers-empty status=' + episodeResult.status);
                     return [2];
                 }
                 tokens_2 = parseServerTokens(dataEpisode.html);
@@ -433,9 +553,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 item = tokens_1[_i];
                 urlEmbed = DOMAIN + '/ajax/movie/episode/server/sources/' + item.id + '_' + item.name;
                 console.log('[RN-Fetch][YMOVIES-SOURCE] ' + item.name);
-                return [4, fetchJson(urlEmbed, linkDetail)];
+                return [4, fetchJson(urlEmbed, linkDetail, DOMAIN)];
             case 5:
-                dataEmbed = _a.sent();
+                sourceResult = _a.sent();
+                dataEmbed = sourceResult.json;
                 if (!dataEmbed || !dataEmbed.status || !dataEmbed.src) {
                     return [3, 7];
                 }

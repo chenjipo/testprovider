@@ -56,7 +56,7 @@ hosts['yesmovies-embed'] = function (url, movieInfo, provider, config, callback)
         epNum = (config && config.epNum) ? config.epNum : eid;
         headers = {
             'Referer': detailUrl,
-            'Origin': 'https://ww.yesmovies.ag',
+            'Origin': 'https://ww2.yesmovies.ag',
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
         };
         beforeLoadScript = buildYesmoviesEmbedScript(mid, eid, sv, epNum);
