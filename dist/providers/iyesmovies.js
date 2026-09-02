@@ -287,6 +287,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL) {
         var watchBase = '';
         var useParse = '';
+        var yesLocLocal = 'US';
+        var tsx = 0;
+        var plain = '';
         try {
             useParse = (typeof parseURL === 'string' && parseURL) ? parseURL : 'https://ployan.me';
         }
@@ -294,39 +297,55 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             useParse = 'https://ployan.me';
         }
         watchBase = String(useParse).replace(/\/$/, '') + '/watch/?v' + String(sv || '1') + String(eid || '1');
-        // Detail pages no longer expose setSRC; open ployan watch directly so inject can /get/.
-        if (hosts && hosts['ployan']) {
-            console.log('[RN-Fetch][YESMOVIES-EMBED] queue ployan webview mid=' + mid + ' eid=' + eid + ' url=' + watchBase.substring(0, 100));
+        if (!(hosts && hosts['ployan'])) {
+            if (!(LINK_DETAIL && mid && hosts && hosts['yesmovies-embed'])) {
+                console.log('[RN-Fetch][YESMOVIES-EMBED] skip host-missing');
+                return Promise.resolve(false);
+            }
+            console.log('[RN-Fetch][YESMOVIES-EMBED] queue detail webview mid=' + mid + ' eid=' + eid);
             scheduleYesmoviesWebview(function () {
-                console.log('[RN-Fetch][YESMOVIES-EMBED] start ployan webview');
+                console.log('[RN-Fetch][YESMOVIES-EMBED] start webview');
+                hosts['yesmovies-embed'](LINK_DETAIL, movieInfo || {}, PROVIDER, {
+                    detailUrl: LINK_DETAIL,
+                    mid: mid,
+                    eid: eid,
+                    sv: sv,
+                    epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
+                    yesLoc: yesLocLocal,
+                    watchUrl: watchBase
+                }, callback);
+            });
+            return Promise.resolve(true);
+        }
+        tsx = Math.floor((new Date()).getTime() / 1000);
+        plain = String(mid) + '+' + String(eid) + '+' + String(sv || '1') + '+' + yesLocLocal + '+' + tsx;
+        console.log('[RN-Fetch][YESMOVIES-EMBED] build urix plain=' + plain);
+        scheduleYesmoviesWebview(function () {
+            console.log('[RN-Fetch][YESMOVIES-EMBED] start ployan webview (encox)');
+            encox(plain, yesLocLocal).then(function (enc) {
+                var urix = base64EncodeUri(enc);
+                console.log('[RN-Fetch][YESMOVIES-EMBED] urixLen=' + (urix ? urix.length : 0) + ' url=' + watchBase.substring(0, 100));
+                hosts['ployan'](watchBase, movieInfo || {}, PROVIDER, {
+                    urix: urix || '',
+                    mid: mid,
+                    eid: eid,
+                    sv: sv,
+                    yesReferer: LINK_DETAIL || (DOMAIN + '/'),
+                    yesLoc: yesLocLocal,
+                    watchUrl: watchBase
+                }, callback);
+            }).catch(function (encErr) {
+                console.log('[RN-Fetch][YESMOVIES-EMBED] urix-fail ' + String(encErr && encErr.message ? encErr.message : encErr));
                 hosts['ployan'](watchBase, movieInfo || {}, PROVIDER, {
                     urix: '',
                     mid: mid,
                     eid: eid,
                     sv: sv,
                     yesReferer: LINK_DETAIL || (DOMAIN + '/'),
-                    yesLoc: 'US',
+                    yesLoc: yesLocLocal,
                     watchUrl: watchBase
                 }, callback);
             });
-            return Promise.resolve(true);
-        }
-        if (!(LINK_DETAIL && mid && hosts && hosts['yesmovies-embed'])) {
-            console.log('[RN-Fetch][YESMOVIES-EMBED] skip host-missing');
-            return Promise.resolve(false);
-        }
-        console.log('[RN-Fetch][YESMOVIES-EMBED] queue detail webview mid=' + mid + ' eid=' + eid);
-        scheduleYesmoviesWebview(function () {
-            console.log('[RN-Fetch][YESMOVIES-EMBED] start webview');
-            hosts['yesmovies-embed'](LINK_DETAIL, movieInfo || {}, PROVIDER, {
-                detailUrl: LINK_DETAIL,
-                mid: mid,
-                eid: eid,
-                sv: sv,
-                epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
-                yesLoc: 'US',
-                watchUrl: watchBase
-            }, callback);
         });
         return Promise.resolve(true);
     }
@@ -1115,7 +1134,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v57-ployan-direct-wv');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v58-urix-webview');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
@@ -1162,7 +1181,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         }
                     });
                 }); };
-                urlSearch = "".concat(DOMAIN, "/searching?q=").concat(movieInfo.title.replace(/\s+/ig, '+'), "&limit=40&offset=0");
+                urlSearch = "".concat(DOMAIN, "/searching?q=").concat(String(movieInfo.title || '').replace(/&/g, 'and').replace(/\s+/ig, '+'), "&limit=40&offset=0");
                 LINK_DETAIL = '';
                 libs.log({ urlSearch: urlSearch }, PROVIDER, 'URL SEARCH');
                 return [4, libs.request_get(urlSearch, {
@@ -1204,12 +1223,39 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         season: season,
                         type: type
                     }, PROVIDER, 'SEARCH INFO');
-                    if (libs.string_matching_title(movieInfo, title) && !LINK_DETAIL) {
+                    if (!LINK_DETAIL && libs.string_matching_title(movieInfo, title)) {
                         if (movieInfo.type == 'movie' && type == 'movie') {
                             LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(href, ".html");
                         }
                         else if (movieInfo.type == 'tv' && type == 'tv' && Number(season) === Number(movieInfo.season)) {
                             LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(href, ".html");
+                        }
+                    }
+                }
+                if (!LINK_DETAIL && movieInfo.type == 'tv') {
+                    for (_i = 0; _i < _a.length; _i++) {
+                        searchItem = _a[_i];
+                        title = String(searchItem.t || '').replace(/\- *season *[0-9]+/i, '').trim();
+                        href = searchItem.s;
+                        season = searchItem.n ? Number(searchItem.n) : 0;
+                        type = (searchItem.d === 's' || searchItem.d === 'tv' || season) ? 'tv' : 'movie';
+                        if (type == 'tv' && libs.string_matching_title(movieInfo, title)) {
+                            LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(href, ".html");
+                            console.log('[RN-Fetch][YESMOVIES-SEARCH] season-fallback href=' + href + ' season=' + season);
+                            break;
+                        }
+                    }
+                }
+                if (!LINK_DETAIL && movieInfo.type == 'movie') {
+                    for (_i = 0; _i < _a.length; _i++) {
+                        searchItem = _a[_i];
+                        title = String(searchItem.t || '').replace(/\- *season *[0-9]+/i, '').trim();
+                        href = searchItem.s;
+                        type = (searchItem.d === 's' || searchItem.d === 'tv') ? 'tv' : 'movie';
+                        if (type == 'movie' && libs.string_matching_title(movieInfo, title.replace(/&/g, 'and'))) {
+                            LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(href, ".html");
+                            console.log('[RN-Fetch][YESMOVIES-SEARCH] movie-fallback href=' + href);
+                            break;
                         }
                     }
                 }
