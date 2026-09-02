@@ -1089,7 +1089,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v55-ww2-defer-wv');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v56-ww2-defer-wv-nofallthrough');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
@@ -1263,7 +1263,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!parseURL || !loc) {
                     debugLog('LOC_EMPTY', 'webview fallback');
                     console.log('[RN-Fetch][PLOYAN-FALLBACK] loc empty → webview deferred');
-                    return [4, openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
+                    openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
+                    return [2, true];
                 }
                 hashTs = Math.floor((new Date()).getTime() / 1000);
                 debugLog('HASH_TS', String(hashTs));
@@ -1279,7 +1280,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!deHash) {
                     debugLog('HASH_EMPTY', 'webview fallback');
                     console.log('[RN-Fetch][PLOYAN-FALLBACK] hash empty → webview deferred');
-                    return [4, openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
+                    openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
+                    return [2, true];
                 }
                 hashURL = "".concat(parseURL, "/get/").concat(deHash);
                 debugLog('GET_REQ', hashURL.substring(0, 120));
@@ -1301,13 +1303,18 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 debugLog('GET_FALLBACK', 'webview pending');
                 console.log('[RN-Fetch][PLOYAN-FALLBACK] /get/ miss → webview deferred');
-                return [4, openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL)];
+                openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
+                return [2, true];
             case 11:
                 e_1 = _b.sent();
                 debugLog('ERROR', String(e_1 && e_1.message ? e_1.message : e_1));
                 console.log('[RN-Fetch][PLOYAN-ERR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 libs.log({ e: e_1, message: e_1 && e_1.message ? e_1.message : e_1 }, PROVIDER, 'ERROR CATCH');
-                if (watchEmbedUrl) {
+                if (mid && LINK_DETAIL) {
+                    console.log('[RN-Fetch][PLOYAN-EMBED] error fallback → deferred webview');
+                    openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
+                }
+                else if (watchEmbedUrl) {
                     console.log('[RN-Fetch][PLOYAN-EMBED] error fallback');
                     openPloyanWebView(watchEmbedUrl, watchUrix, mid, eid, sv, movieInfo, callback, streamHeaders, LINK_DETAIL, yesLoc);
                 }
