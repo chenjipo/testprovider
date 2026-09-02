@@ -269,7 +269,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             console.log('[RN-Fetch][YESMOVIES-EMBED] defer webview after sync');
             libs.__deferProviderWebview(PROVIDER, function () {
                 if (libs.scheduleEmbedWebview) {
-                    libs.scheduleEmbedWebview(PROVIDER, task, 25000);
+                    libs.scheduleEmbedWebview(PROVIDER, task, 50000);
                 }
                 else {
                     task();
@@ -278,13 +278,39 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             return;
         }
         if (libs.scheduleEmbedWebview) {
-            libs.scheduleEmbedWebview(PROVIDER, task, 25000);
+            libs.scheduleEmbedWebview(PROVIDER, task, 50000);
         }
         else {
             task();
         }
     }
     function openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL) {
+        var watchBase = '';
+        var useParse = '';
+        try {
+            useParse = (typeof parseURL === 'string' && parseURL) ? parseURL : 'https://ployan.me';
+        }
+        catch (eParse) {
+            useParse = 'https://ployan.me';
+        }
+        watchBase = String(useParse).replace(/\/$/, '') + '/watch/?v' + String(sv || '1') + String(eid || '1');
+        // Detail pages no longer expose setSRC; open ployan watch directly so inject can /get/.
+        if (hosts && hosts['ployan']) {
+            console.log('[RN-Fetch][YESMOVIES-EMBED] queue ployan webview mid=' + mid + ' eid=' + eid + ' url=' + watchBase.substring(0, 100));
+            scheduleYesmoviesWebview(function () {
+                console.log('[RN-Fetch][YESMOVIES-EMBED] start ployan webview');
+                hosts['ployan'](watchBase, movieInfo || {}, PROVIDER, {
+                    urix: '',
+                    mid: mid,
+                    eid: eid,
+                    sv: sv,
+                    yesReferer: LINK_DETAIL || (DOMAIN + '/'),
+                    yesLoc: 'US',
+                    watchUrl: watchBase
+                }, callback);
+            });
+            return Promise.resolve(true);
+        }
         if (!(LINK_DETAIL && mid && hosts && hosts['yesmovies-embed'])) {
             console.log('[RN-Fetch][YESMOVIES-EMBED] skip host-missing');
             return Promise.resolve(false);
@@ -299,7 +325,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 sv: sv,
                 epNum: movieInfo && movieInfo.episode ? movieInfo.episode : eid,
                 yesLoc: 'US',
-                watchUrl: ''
+                watchUrl: watchBase
             }, callback);
         });
         return Promise.resolve(true);
@@ -1089,7 +1115,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v56-ww2-defer-wv-nofallthrough');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v57-ployan-direct-wv');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,

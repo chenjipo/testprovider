@@ -67,7 +67,7 @@ hosts["ployan"] = function (url, movieInfo, provider, config, callback) { return
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
         };
         beforeLoadScript = buildPloyanInjectScript(urix, mid, eid, sv, yesLoc);
-        console.log('[RN-Fetch][PLOYAN-HOST] v2 block-hls ' + loadUrl.substring(0, 120));
+        console.log('[RN-Fetch][PLOYAN-HOST] v3-yes-direct ' + loadUrl.substring(0, 120));
         try {
             callback({
                 callback: {
