@@ -266,20 +266,35 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
         var shouldDefer = !!(libs.__deferProviderWebview && libs.__shouldSyncVodLinks && libs.__shouldSyncVodLinks() && bag && bag.startMs && !bag.flushed);
         var nowMs = Date.now();
+        var lockMs = 60000;
         if (libs.__iyesWvBusyUntil && nowMs < libs.__iyesWvBusyUntil) {
             console.log('[RN-Fetch][YESMOVIES-EMBED] skip-busy keep wv remain=' + (libs.__iyesWvBusyUntil - nowMs) + 'ms (do not switch title)');
             return;
         }
+        // Lock immediately at queue time (not at run), so a fast title switch cannot steal the slot.
+        libs.__iyesWvBusyUntil = nowMs + lockMs;
+        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-lock ' + (lockMs / 1000) + 's — stay on this title');
         var wrapped = function () {
-            libs.__iyesWvBusyUntil = Date.now() + 25000;
-            console.log('[RN-Fetch][YESMOVIES-EMBED] wv-lock 25s — stay on this title');
-            task();
+            var left = libs.__iyesWvBusyUntil ? (libs.__iyesWvBusyUntil - Date.now()) : 0;
+            if (libs.__iyesWvOpenedOnce && left > 0 && libs.__iyesWvOpening) {
+                console.log('[RN-Fetch][YESMOVIES-EMBED] skip-reopen remain=' + left + 'ms');
+                return;
+            }
+            libs.__iyesWvOpening = true;
+            libs.__iyesWvOpenedOnce = true;
+            console.log('[RN-Fetch][YESMOVIES-EMBED] wv-run');
+            try {
+                task();
+            }
+            finally {
+                libs.__iyesWvOpening = false;
+            }
         };
         if (shouldDefer) {
             console.log('[RN-Fetch][YESMOVIES-EMBED] defer webview after sync');
             libs.__deferProviderWebview(PROVIDER, function () {
                 if (libs.scheduleEmbedWebview) {
-                    libs.scheduleEmbedWebview(PROVIDER, wrapped, 50000);
+                    libs.scheduleEmbedWebview(PROVIDER, wrapped, 55000);
                 }
                 else {
                     wrapped();
@@ -288,7 +303,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             return;
         }
         if (libs.scheduleEmbedWebview) {
-            libs.scheduleEmbedWebview(PROVIDER, wrapped, 50000);
+            libs.scheduleEmbedWebview(PROVIDER, wrapped, 55000);
         }
         else {
             wrapped();
@@ -1163,7 +1178,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v62-direct-kick');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v63-wv-lock60');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
