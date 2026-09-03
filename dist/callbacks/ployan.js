@@ -83,11 +83,15 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                         'Referer': 'https://ployan.me/',
                         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
                     };
-                    libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {
-                        is_end_webview: true,
-                        url_webview: metadata && metadata.url_webview ? metadata.url_webview : ''
-                    });
+                    // Deliver Server I WITHOUT is_end_webview on the same tick as the file.
+                    // Bundling end+file made the App finalize the source list while A/X/L/B were still arriving.
+                    libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {});
                     console.log('[RN-Fetch][PLOYAN-DELIVER] Server I file=' + directUrl.substring(0, 100));
+                    setTimeout(function () {
+                        if (typeof libs.__closeEmbedWebview === 'function') {
+                            libs.__closeEmbedWebview(callback, metadata);
+                        }
+                    }, 300);
                 }
             }
         }

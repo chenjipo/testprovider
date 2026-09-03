@@ -381,7 +381,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v28-reopen-preserve-defer';
+libs.__embedSyncVersion = 'v29-iyes-after-yax';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -609,13 +609,24 @@ libs.__deferProviderWebview = function (provider, task) {
     libs.__vodDeferredWebviews = libs.__vodDeferredWebviews || {};
     libs.__vodDeferredWebviews[provider] = task;
     console.log('[RN-Fetch][SYNC-DEFER-WV] provider=' + provider);
-    // If YAX flush never fires (stuck slot / empty bag / yax-ready), still open I WV.
-    setTimeout(function () {
+    // Wait for YAX flush (A/X/L/B first). Only open I after flush or hard deadline.
+    // v28's fixed 7s FALLBACK opened I before sync and is_end_webview could freeze the UI on Server I only.
+    var startedAt = Date.now();
+    var maxWaitMs = (libs.__vodSyncHardMaxMs || 26000) + 2000;
+    var pollMs = 1000;
+    var tryRun = function () {
         var map = libs.__vodDeferredWebviews || {};
         if (map[provider] !== task) {
             return;
         }
-        console.log('[RN-Fetch][SYNC-DEFER-FALLBACK] provider=' + provider);
+        var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
+        var elapsed = bag && bag.startMs ? (Date.now() - bag.startMs) : (Date.now() - startedAt);
+        var flushed = !!(bag && bag.flushed);
+        if (!flushed && elapsed < maxWaitMs) {
+            setTimeout(tryRun, pollMs);
+            return;
+        }
+        console.log('[RN-Fetch][SYNC-DEFER-FALLBACK] provider=' + provider + ' flushed=' + (flushed ? 1 : 0) + ' elapsed=' + elapsed + 'ms');
         delete map[provider];
         try {
             task();
@@ -623,7 +634,8 @@ libs.__deferProviderWebview = function (provider, task) {
         catch (eFb) {
             console.log('[RN-Fetch][SYNC-DEFER-FALLBACK-ERR] provider=' + provider + ' ' + String(eFb && eFb.message ? eFb.message : eFb));
         }
-    }, 7000);
+    };
+    setTimeout(tryRun, Math.min(libs.__vodSyncCoalesceMs || 4500, 5000));
 };
 libs.__runDeferredProviderWebviews = function () {
     var map = libs.__vodDeferredWebviews || {};
