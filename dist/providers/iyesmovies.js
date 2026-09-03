@@ -266,29 +266,33 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
         var shouldDefer = !!(libs.__deferProviderWebview && libs.__shouldSyncVodLinks && libs.__shouldSyncVodLinks() && bag && bag.startMs && !bag.flushed);
         var nowMs = Date.now();
-        var lockMs = 60000;
-        if (libs.__iyesWvBusyUntil && nowMs < libs.__iyesWvBusyUntil) {
-            console.log('[RN-Fetch][YESMOVIES-EMBED] skip-busy keep wv remain=' + (libs.__iyesWvBusyUntil - nowMs) + 'ms (do not switch title)');
+        var lockMs = 180000;
+        if (libs.__iyesWvActive || (libs.__iyesWvBusyUntil && nowMs < libs.__iyesWvBusyUntil)) {
+            var remain = libs.__iyesWvBusyUntil ? Math.max(0, libs.__iyesWvBusyUntil - nowMs) : 0;
+            console.log('[RN-Fetch][YESMOVIES-EMBED] skip-busy active=' + !!libs.__iyesWvActive + ' remain=' + remain + 'ms (do not switch title)');
             return;
         }
-        // Lock immediately at queue time (not at run), so a fast title switch cannot steal the slot.
+        libs.__iyesWvActive = true;
         libs.__iyesWvBusyUntil = nowMs + lockMs;
-        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-lock ' + (lockMs / 1000) + 's — stay on this title');
+        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-lock ' + (lockMs / 1000) + 's — stay on this title until get-ok');
+        try {
+            if (libs.__iyesWvUnlockTimer) {
+                clearTimeout(libs.__iyesWvUnlockTimer);
+            }
+            libs.__iyesWvUnlockTimer = setTimeout(function () {
+                libs.__iyesWvActive = false;
+                libs.__iyesWvBusyUntil = 0;
+                console.log('[RN-Fetch][YESMOVIES-EMBED] wv-unlock timeout');
+            }, lockMs);
+        }
+        catch (eTimer) { }
         var wrapped = function () {
-            var left = libs.__iyesWvBusyUntil ? (libs.__iyesWvBusyUntil - Date.now()) : 0;
-            if (libs.__iyesWvOpenedOnce && left > 0 && libs.__iyesWvOpening) {
-                console.log('[RN-Fetch][YESMOVIES-EMBED] skip-reopen remain=' + left + 'ms');
+            if (!libs.__iyesWvActive) {
+                console.log('[RN-Fetch][YESMOVIES-EMBED] skip-reopen inactive');
                 return;
             }
-            libs.__iyesWvOpening = true;
-            libs.__iyesWvOpenedOnce = true;
             console.log('[RN-Fetch][YESMOVIES-EMBED] wv-run');
-            try {
-                task();
-            }
-            finally {
-                libs.__iyesWvOpening = false;
-            }
+            task();
         };
         if (shouldDefer) {
             console.log('[RN-Fetch][YESMOVIES-EMBED] defer webview after sync');
@@ -1178,7 +1182,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v63-wv-lock60');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v64-bridge-true');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,

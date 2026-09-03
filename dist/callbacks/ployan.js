@@ -68,6 +68,16 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                     info = json.info;
                     directUrl = 'https://ployan.me/hls/' + info + '/master.m3u8';
                     console.log('[RN-Fetch][PLOYAN-GET-CB] ' + directUrl);
+                    try {
+                        libs.__iyesWvActive = false;
+                        libs.__iyesWvBusyUntil = 0;
+                        if (libs.__iyesWvUnlockTimer) {
+                            clearTimeout(libs.__iyesWvUnlockTimer);
+                            libs.__iyesWvUnlockTimer = null;
+                        }
+                        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-unlock after get-ok');
+                    }
+                    catch (eUnlock) { }
                     streamHeaders = {
                         'Referer': 'https://ployan.me/',
                         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
