@@ -381,7 +381,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v27-force-session-iyes';
+libs.__embedSyncVersion = 'v28-reopen-preserve-defer';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -609,6 +609,21 @@ libs.__deferProviderWebview = function (provider, task) {
     libs.__vodDeferredWebviews = libs.__vodDeferredWebviews || {};
     libs.__vodDeferredWebviews[provider] = task;
     console.log('[RN-Fetch][SYNC-DEFER-WV] provider=' + provider);
+    // If YAX flush never fires (stuck slot / empty bag / yax-ready), still open I WV.
+    setTimeout(function () {
+        var map = libs.__vodDeferredWebviews || {};
+        if (map[provider] !== task) {
+            return;
+        }
+        console.log('[RN-Fetch][SYNC-DEFER-FALLBACK] provider=' + provider);
+        delete map[provider];
+        try {
+            task();
+        }
+        catch (eFb) {
+            console.log('[RN-Fetch][SYNC-DEFER-FALLBACK-ERR] provider=' + provider + ' ' + String(eFb && eFb.message ? eFb.message : eFb));
+        }
+    }, 7000);
 };
 libs.__runDeferredProviderWebviews = function () {
     var map = libs.__vodDeferredWebviews || {};
@@ -698,6 +713,12 @@ libs.__scheduleSyncFlush = function () {
             if (libs.__vodSyncIsYaxReady(items, elapsed)) {
                 console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' families=' + familyCount + ' core=' + libs.__vodSyncCoreFamilyCount(items) + ' reason=yax-max');
                 libs.__flushVodSyncItems();
+                return;
+            }
+            // Hard deadline: never leave A/X stuck in SYNC-QUEUE (L/B-only used to hang forever).
+            if (elapsed >= ((libs.__vodSyncHardMaxMs || 26000) + 4000)) {
+                console.log('[RN-Fetch][SYNC-READY] elapsed=' + elapsed + 'ms queued=' + items.length + ' families=' + familyCount + ' core=' + libs.__vodSyncCoreFamilyCount(items) + ' reason=yax-deadline');
+                libs.__flushVodSyncItems();
             }
             return;
         }
@@ -784,6 +805,30 @@ libs.__ensureSyncPoller = function () {
         }
     }, 2000);
 };
+libs.__resetIyesWvLocks = function () {
+    try {
+        libs.__iyesWvActive = false;
+        libs.__iyesWvBusyUntil = 0;
+        libs.__iyesWvLockKey = '';
+        if (libs.__iyesWvUnlockTimer) {
+            clearTimeout(libs.__iyesWvUnlockTimer);
+            libs.__iyesWvUnlockTimer = null;
+        }
+    }
+    catch (eUnlock) { }
+};
+libs.__resetEmbedWebviewSlot = function () {
+    var slot = libs.__embedWebviewSlot;
+    if (!slot) {
+        libs.__embedWebviewSlot = { busyUntil: 0, pumping: false, queue: [], multiSourceBatch: false };
+        return;
+    }
+    slot.queue = [];
+    slot.pumping = false;
+    slot.busyUntil = 0;
+    slot.multiSourceBatch = false;
+    console.log('[RN-Fetch][EMBED-SLOT] reset');
+};
 libs.beginVodLinkSession = function (forceNew) {
     var bag = libs.__getVodSyncBag();
     var now = Date.now();
@@ -798,27 +843,16 @@ libs.beginVodLinkSession = function (forceNew) {
     // resets its own WV locks so it can re-queue into the same round.
     if (bag.startMs && !bag.flushed && elapsed < 90000) {
         if (forceNew) {
-            libs.__vodDeferredWebviews = libs.__vodDeferredWebviews || {};
-            try {
-                libs.__iyesWvActive = false;
-                libs.__iyesWvBusyUntil = 0;
-                libs.__iyesWvLockKey = '';
-                if (libs.__iyesWvUnlockTimer) {
-                    clearTimeout(libs.__iyesWvUnlockTimer);
-                    libs.__iyesWvUnlockTimer = null;
-                }
-            }
-            catch (eJoin) { }
+            libs.__resetIyesWvLocks();
+            // Prior I WV may still hold the embed slot after user re-opens quickly.
+            libs.__resetEmbedWebviewSlot();
             console.log('[RN-Fetch][SYNC-SESSION] join-iyes version=' + libs.__embedSyncVersion);
         }
         return;
     }
-    // After flush, late A/X/L/B must NOT open a new session (that wiped deferred I WV
-    // → skip-reopen inactive). Only forceNew (IYesMovies getResource) starts next round.
-    if (bag.flushed && !forceNew) {
-        return;
-    }
-    needNew = !bag.startMs || forceNew || elapsed > 90000;
+    // After flush, A/X/L/B MUST be allowed to open the next round (v27 blocked this and
+    // killed all links on reopen). Preserve pending I deferred/WV locks unless forceNew.
+    needNew = !bag.startMs || bag.flushed || forceNew || elapsed > 90000;
     if (needNew) {
         bag.startMs = now;
         bag.items = [];
@@ -829,17 +863,11 @@ libs.beginVodLinkSession = function (forceNew) {
         libs.__vodSyncDeliveredProviders = {};
         libs.__vidlinkDelivered = {};
         libs.__vidlinkPlayLock = {};
-        libs.__vodDeferredWebviews = {};
-        try {
-            libs.__iyesWvActive = false;
-            libs.__iyesWvBusyUntil = 0;
-            libs.__iyesWvLockKey = '';
-            if (libs.__iyesWvUnlockTimer) {
-                clearTimeout(libs.__iyesWvUnlockTimer);
-                libs.__iyesWvUnlockTimer = null;
-            }
+        if (forceNew) {
+            libs.__vodDeferredWebviews = {};
+            libs.__resetIyesWvLocks();
+            libs.__resetEmbedWebviewSlot();
         }
-        catch (eUnlock) { }
         console.log('[RN-Fetch][SYNC-SESSION] start version=' + libs.__embedSyncVersion + ' force=' + (forceNew ? 1 : 0));
         libs.__ensureSyncPoller();
         libs.__scheduleSyncFlush();
@@ -1042,8 +1070,9 @@ libs.parse_size = function (file, provider, host, type, callback, rank, tracks) 
 libs.__embedWebviewSlot = libs.__embedWebviewSlot || { busyUntil: 0, pumping: false, queue: [], multiSourceBatch: false };
 libs.__embedWebviewOrder = { 'QHexaWatch': 0, 'MVidlink': 0, 'IYesMovies': 1, 'MUniqueStream': 2, 'LRIDOMOVIE': 1 };
 libs.scheduleEmbedWebview = function (provider, task, slotMs) {
-    var slot = libs.__embedWebviewSlot;
-    libs.beginVodLinkSession();
+    var slot = libs.__embedWebviewSlot || (libs.__embedWebviewSlot = { busyUntil: 0, pumping: false, queue: [], multiSourceBatch: false });
+    // Do NOT beginVodLinkSession here — after flush it used to open a new round mid-I-WV
+    // and wipe deferred / scramble A/X reopen.
     var order = libs.__embedWebviewOrder[provider];
     if (typeof order !== 'number') {
         order = 99;

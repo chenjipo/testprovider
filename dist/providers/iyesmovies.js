@@ -314,9 +314,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var nowMs = Date.now();
         var lockMs = 90000;
         var key = String(lockKey || '');
-        // Only skip duplicate opens for the SAME mid+eid. Title/episode changes always replace the lock.
-        if (key && libs.__iyesWvLockKey === key && (libs.__iyesWvActive || (libs.__iyesWvBusyUntil && nowMs < libs.__iyesWvBusyUntil))) {
-            var remain = libs.__iyesWvBusyUntil ? Math.max(0, libs.__iyesWvBusyUntil - nowMs) : 0;
+        // Same mid/eid: allow re-open if prior attempt already unlocked or slot was reset.
+        if (key && libs.__iyesWvLockKey === key && libs.__iyesWvBusyUntil && nowMs < libs.__iyesWvBusyUntil && libs.__iyesWvActive) {
+            var remain = Math.max(0, libs.__iyesWvBusyUntil - nowMs);
             console.log('[RN-Fetch][YESMOVIES-EMBED] skip-busy key=' + key + ' remain=' + remain + 'ms');
             return;
         }
@@ -1288,13 +1288,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_b.label) {
             case 0:
                 PROVIDER = 'IYesMovies';
-                // forceNew: after previous flush, reopen must start a new sync round (A/X/L/B
-                // __ensureVodSyncSession alone no longer resets — that wiped deferred I WV).
+                console.log('[RN-Fetch][PLOYAN-VERSION] v69-defer-fallback');
+                // forceNew: after previous flush, reopen must start a new sync round and
+                // reset a stuck embed slot so A/X/I are not blocked by the prior WV.
                 if (typeof libs.beginVodLinkSession === 'function') {
                     libs.beginVodLinkSession(true);
                 }
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v68-defer-run-fix');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
