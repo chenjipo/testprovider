@@ -381,7 +381,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v26-session-reset-on-flush';
+libs.__embedSyncVersion = 'v27-force-session-iyes';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -784,25 +784,41 @@ libs.__ensureSyncPoller = function () {
         }
     }, 2000);
 };
-libs.beginVodLinkSession = function () {
+libs.beginVodLinkSession = function (forceNew) {
     var bag = libs.__getVodSyncBag();
     var now = Date.now();
     var elapsed = 0;
     var needNew = false;
+    forceNew = !!forceNew;
     if (!libs.__embedWebviewSlot) {
         libs.__embedWebviewSlot = { busyUntil: 0, pumping: false, queue: [], multiSourceBatch: false };
     }
-    // Keep coalescing while the current sync round is still open.
-    if (bag.startMs && !bag.flushed) {
-        elapsed = now - bag.startMs;
-        if (elapsed < 90000) {
-            return;
-        }
-    }
     elapsed = bag.startMs ? now - bag.startMs : 999999;
-    // After flush (user left / reopened), always start a fresh round — do NOT wait 30s.
-    // Waiting caused A/Y/X/L/B late-path races and blocked IYesMovies re-entry.
-    needNew = !bag.startMs || bag.flushed || elapsed > 90000;
+    // In-progress sync round: never wipe A/X/L/B items. IYesMovies forceNew only
+    // resets its own WV locks so it can re-queue into the same round.
+    if (bag.startMs && !bag.flushed && elapsed < 90000) {
+        if (forceNew) {
+            libs.__vodDeferredWebviews = libs.__vodDeferredWebviews || {};
+            try {
+                libs.__iyesWvActive = false;
+                libs.__iyesWvBusyUntil = 0;
+                libs.__iyesWvLockKey = '';
+                if (libs.__iyesWvUnlockTimer) {
+                    clearTimeout(libs.__iyesWvUnlockTimer);
+                    libs.__iyesWvUnlockTimer = null;
+                }
+            }
+            catch (eJoin) { }
+            console.log('[RN-Fetch][SYNC-SESSION] join-iyes version=' + libs.__embedSyncVersion);
+        }
+        return;
+    }
+    // After flush, late A/X/L/B must NOT open a new session (that wiped deferred I WV
+    // → skip-reopen inactive). Only forceNew (IYesMovies getResource) starts next round.
+    if (bag.flushed && !forceNew) {
+        return;
+    }
+    needNew = !bag.startMs || forceNew || elapsed > 90000;
     if (needNew) {
         bag.startMs = now;
         bag.items = [];
@@ -811,9 +827,9 @@ libs.beginVodLinkSession = function () {
         libs.__vodSyncItems = bag.items;
         libs.__vodSyncFlushed = false;
         libs.__vodSyncDeliveredProviders = {};
-        libs.__vodDeferredWebviews = {};
         libs.__vidlinkDelivered = {};
         libs.__vidlinkPlayLock = {};
+        libs.__vodDeferredWebviews = {};
         try {
             libs.__iyesWvActive = false;
             libs.__iyesWvBusyUntil = 0;
@@ -824,7 +840,7 @@ libs.beginVodLinkSession = function () {
             }
         }
         catch (eUnlock) { }
-        console.log('[RN-Fetch][SYNC-SESSION] start version=' + libs.__embedSyncVersion);
+        console.log('[RN-Fetch][SYNC-SESSION] start version=' + libs.__embedSyncVersion + ' force=' + (forceNew ? 1 : 0));
         libs.__ensureSyncPoller();
         libs.__scheduleSyncFlush();
     }

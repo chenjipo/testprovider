@@ -337,11 +337,16 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         }
         catch (eTimer) { }
         var wrapped = function () {
-            if (!libs.__iyesWvActive || (key && libs.__iyesWvLockKey && libs.__iyesWvLockKey !== key)) {
-                console.log('[RN-Fetch][YESMOVIES-EMBED] skip-reopen inactive key=' + key);
+            // Only skip if another mid/eid superseded this lock. Do NOT require __iyesWvActive:
+            // flush-time beginVodLinkSession from other providers used to clear active and cause
+            // skip-reopen inactive right at SYNC-DEFER-RUN.
+            if (key && libs.__iyesWvLockKey && libs.__iyesWvLockKey !== key) {
+                console.log('[RN-Fetch][YESMOVIES-EMBED] skip-reopen superseded key=' + key + ' cur=' + libs.__iyesWvLockKey);
                 return;
             }
-            console.log('[RN-Fetch][YESMOVIES-EMBED] wv-run');
+            libs.__iyesWvActive = true;
+            libs.__iyesWvLockKey = key || libs.__iyesWvLockKey;
+            console.log('[RN-Fetch][YESMOVIES-EMBED] wv-run key=' + (libs.__iyesWvLockKey || ''));
             task();
         };
         if (shouldDefer) {
@@ -1283,9 +1288,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_b.label) {
             case 0:
                 PROVIDER = 'IYesMovies';
-                libs.beginVodLinkSession();
+                // forceNew: after previous flush, reopen must start a new sync round (A/X/L/B
+                // __ensureVodSyncSession alone no longer resets — that wiped deferred I WV).
+                if (typeof libs.beginVodLinkSession === 'function') {
+                    libs.beginVodLinkSession(true);
+                }
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v67-session-reset');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v68-defer-run-fix');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
