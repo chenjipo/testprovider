@@ -690,6 +690,43 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         }
         return episodePattern;
     }
+    // yesmovies search: d=m movie, d=s series. Do NOT treat field n as season for movies (movies often have n=1).
+    function resolveYesSearchType(searchItem) {
+        var d = String(searchItem && searchItem.d || '').toLowerCase();
+        if (d === 's' || d === 'tv') {
+            return 'tv';
+        }
+        if (d === 'm' || d === 'movie' || d === 'mv') {
+            return 'movie';
+        }
+        if (/\-\s*season\s*[0-9]+/i.test(String(searchItem && searchItem.t || ''))) {
+            return 'tv';
+        }
+        return 'movie';
+    }
+    function resolveYesSearchSeason(searchItem, itemType) {
+        var fromTitle = void 0;
+        if (itemType !== 'tv') {
+            return 0;
+        }
+        fromTitle = String(searchItem && searchItem.t || '').match(/\-\s*season\s*([0-9]+)/i);
+        if (fromTitle) {
+            return Number(fromTitle[1]);
+        }
+        if (searchItem && searchItem.n != null && searchItem.n !== '' && Number(searchItem.n) > 0) {
+            return Number(searchItem.n);
+        }
+        return 0;
+    }
+    function resolveYesSearchYear(searchItem) {
+        if (!searchItem || searchItem.y == null || searchItem.y === '') {
+            return 0;
+        }
+        return Number(searchItem.y) || 0;
+    }
+    function titlesMatchYes(movieInfo, title) {
+        return libs.string_matching_title(movieInfo, String(title || '').replace(/&/g, 'and'), false);
+    }
     function getEcbMode() {
         if (cryptoS.mode && cryptoS.mode.ECB) {
             return cryptoS.mode.ECB;
@@ -1234,7 +1271,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
         });
     }
-    var PROVIDER, DOMAIN, headers, ployanHeaders, streamHeaders, warmHeaders, getHeaders, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, id, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, hashTs, datasResp, datasToken, yesTraceData, yesLoc, watchEmbedUrl, watchUrix, embedPack, deHash, hashURL, hashID, directURL, e_1;
+    var PROVIDER, DOMAIN, headers, ployanHeaders, streamHeaders, warmHeaders, getHeaders, urlDoc_1, getIP_1, getEmbed, urlSearch, LINK_DETAIL, resSearch, _i, _a, searchItem, title, href, season, type, year, yearWant, movieCandidates, pickedMovie, id, textHtml, playURL, parseURL, ipData, loc, sv, eid, mid, hashTs, datasResp, datasToken, yesTraceData, yesLoc, watchEmbedUrl, watchUrix, embedPack, deHash, hashURL, hashID, directURL, e_1;
     var _this = this;
     return __generator(this, function (_b) {
         switch (_b.label) {
@@ -1242,7 +1279,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v65-double-urix');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v66-search-dtype');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
@@ -1339,63 +1376,52 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({
                     length: _a.length,
                 }, PROVIDER, 'SEARCH LENGTH');
-                console.log('[RN-Fetch][YESMOVIES-SEARCH] hits=' + _a.length);
+                yearWant = movieInfo.year ? Number(movieInfo.year) : 0;
+                movieCandidates = [];
+                console.log('[RN-Fetch][YESMOVIES-SEARCH] hits=' + _a.length + ' want type=' + movieInfo.type + ' season=' + movieInfo.season + ' ep=' + movieInfo.episode + ' year=' + (movieInfo.year || ''));
                 for (_i = 0; _i < _a.length; _i++) {
                     searchItem = _a[_i];
-                    title = searchItem.t;
+                    type = resolveYesSearchType(searchItem);
+                    season = resolveYesSearchSeason(searchItem, type);
+                    year = resolveYesSearchYear(searchItem);
                     href = searchItem.s;
-                    season = searchItem.n ? Number(searchItem.n) : 0;
-                    if (!season) {
-                        season = title.match(/\- *season *([0-9]+)/i);
-                        season = season ? Number(season[1]) : 0;
-                    }
-                    title = String(title || '').replace(/\- *season *[0-9]+/i, '').trim();
-                    type = (searchItem.d === 's' || searchItem.d === 'tv' || season) ? 'tv' : 'movie';
+                    title = String(searchItem.t || '').replace(/\- *season *[0-9]+/i, '').trim();
                     libs.log({
                         title: title,
                         href: href,
                         season: season,
-                        type: type
+                        type: type,
+                        d: searchItem.d,
+                        year: year
                     }, PROVIDER, 'SEARCH INFO');
-                    if (!LINK_DETAIL && libs.string_matching_title(movieInfo, title)) {
-                        if (movieInfo.type == 'movie' && type == 'movie') {
-                            LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(href, ".html");
-                        }
-                        else if (movieInfo.type == 'tv' && type == 'tv' && Number(season) === Number(movieInfo.season)) {
-                            LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(href, ".html");
-                        }
+                    if (!titlesMatchYes(movieInfo, title)) {
+                        continue;
+                    }
+                    if (movieInfo.type == 'movie' && type == 'movie') {
+                        movieCandidates.push({ href: href, year: year, title: title });
+                        continue;
+                    }
+                    if (movieInfo.type == 'tv' && type == 'tv' && Number(movieInfo.season) > 0 && Number(season) === Number(movieInfo.season)) {
+                        LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(href, ".html");
+                        console.log('[RN-Fetch][YESMOVIES-SEARCH] match tv season=' + season + ' year=' + year + ' href=' + href + ' d=' + searchItem.d);
+                        break;
                     }
                 }
-                if (!LINK_DETAIL && movieInfo.type == 'tv') {
-                    for (_i = 0; _i < _a.length; _i++) {
-                        searchItem = _a[_i];
-                        title = String(searchItem.t || '').replace(/\- *season *[0-9]+/i, '').trim();
-                        href = searchItem.s;
-                        season = searchItem.n ? Number(searchItem.n) : 0;
-                        if (!season) {
-                            var sm = String(searchItem.t || '').match(/\- *season *([0-9]+)/i);
-                            season = sm ? Number(sm[1]) : 0;
-                        }
-                        type = (searchItem.d === 's' || searchItem.d === 'tv' || season) ? 'tv' : 'movie';
-                        if (type == 'tv' && Number(season) === Number(movieInfo.season) && libs.string_matching_title(movieInfo, title)) {
-                            LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(href, ".html");
-                            console.log('[RN-Fetch][YESMOVIES-SEARCH] season-retry href=' + href + ' season=' + season);
-                            break;
+                if (!LINK_DETAIL && movieInfo.type == 'movie' && movieCandidates.length) {
+                    pickedMovie = null;
+                    if (yearWant) {
+                        for (_i = 0; _i < movieCandidates.length; _i++) {
+                            if (Number(movieCandidates[_i].year) === yearWant) {
+                                pickedMovie = movieCandidates[_i];
+                                break;
+                            }
                         }
                     }
-                }
-                if (!LINK_DETAIL && movieInfo.type == 'movie') {
-                    for (_i = 0; _i < _a.length; _i++) {
-                        searchItem = _a[_i];
-                        title = String(searchItem.t || '').replace(/\- *season *[0-9]+/i, '').trim();
-                        href = searchItem.s;
-                        type = (searchItem.d === 's' || searchItem.d === 'tv') ? 'tv' : 'movie';
-                        if (type == 'movie' && libs.string_matching_title(movieInfo, title.replace(/&/g, 'and'))) {
-                            LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(href, ".html");
-                            console.log('[RN-Fetch][YESMOVIES-SEARCH] movie-fallback href=' + href);
-                            break;
-                        }
+                    if (!pickedMovie) {
+                        pickedMovie = movieCandidates[0];
                     }
+                    LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(pickedMovie.href, ".html");
+                    console.log('[RN-Fetch][YESMOVIES-SEARCH] match movie year=' + pickedMovie.year + ' wantYear=' + yearWant + ' href=' + pickedMovie.href + ' candidates=' + movieCandidates.length);
                 }
                 libs.log({
                     LINK_DETAIL: LINK_DETAIL
