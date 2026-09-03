@@ -265,23 +265,33 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function scheduleYesmoviesWebview(task) {
         var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
         var shouldDefer = !!(libs.__deferProviderWebview && libs.__shouldSyncVodLinks && libs.__shouldSyncVodLinks() && bag && bag.startMs && !bag.flushed);
+        var nowMs = Date.now();
+        if (libs.__iyesWvBusyUntil && nowMs < libs.__iyesWvBusyUntil) {
+            console.log('[RN-Fetch][YESMOVIES-EMBED] skip-busy keep wv remain=' + (libs.__iyesWvBusyUntil - nowMs) + 'ms (do not switch title)');
+            return;
+        }
+        var wrapped = function () {
+            libs.__iyesWvBusyUntil = Date.now() + 25000;
+            console.log('[RN-Fetch][YESMOVIES-EMBED] wv-lock 25s — stay on this title');
+            task();
+        };
         if (shouldDefer) {
             console.log('[RN-Fetch][YESMOVIES-EMBED] defer webview after sync');
             libs.__deferProviderWebview(PROVIDER, function () {
                 if (libs.scheduleEmbedWebview) {
-                    libs.scheduleEmbedWebview(PROVIDER, task, 50000);
+                    libs.scheduleEmbedWebview(PROVIDER, wrapped, 50000);
                 }
                 else {
-                    task();
+                    wrapped();
                 }
             });
             return;
         }
         if (libs.scheduleEmbedWebview) {
-            libs.scheduleEmbedWebview(PROVIDER, task, 50000);
+            libs.scheduleEmbedWebview(PROVIDER, wrapped, 50000);
         }
         else {
-            task();
+            wrapped();
         }
     }
     function openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL) {
@@ -1153,7 +1163,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v61-referrer-hop');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v62-direct-kick');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
