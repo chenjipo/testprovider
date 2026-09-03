@@ -337,7 +337,9 @@ libs.__isVodBatchProvider = function (provider) {
     if (libs.__vodSyncYaxEnabled && libs.__isVodYaxBatchProvider(provider)) {
         return true;
     }
-    return provider === 'MUniqueStream' || provider === 'MVidlink' || provider === 'IYesMovies';
+    // IYesMovies is deferred WebView AFTER A/Y/X/L/B sync — must direct-deliver as Server I,
+    // otherwise a lone IYesMovies item never passes yax-ready and stays stuck in SYNC-QUEUE.
+    return provider === 'MUniqueStream' || provider === 'MVidlink';
 };
 libs.__isVodBatchStream = function (urlDirect, provider) {
     if (!urlDirect) {
@@ -379,7 +381,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v24-defer-wv-after-sync';
+libs.__embedSyncVersion = 'v25-iyes-direct-after-sync';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -488,6 +490,7 @@ libs.__vodSyncIsYaxReady = function (items, elapsed) {
     var minCore = (libs.__vodSyncYaxCoreProviders || []).length;
     var minElapsed = libs.__vodSyncYaxMinElapsedMs || 2000;
     var hardMax = libs.__vodSyncHardMaxMs || 26000;
+    var familyCount = libs.__vodSyncFamilyCount(items);
     if (coreFamilies >= minCore && elapsed >= minElapsed) {
         return true;
     }
@@ -495,6 +498,10 @@ libs.__vodSyncIsYaxReady = function (items, elapsed) {
         return true;
     }
     if (elapsed >= (hardMax + 4000) && coreFamilies >= 1 && items.length >= 1) {
+        return true;
+    }
+    // Deferred non-YAX sources (historically IYesMovies) alone in bag.
+    if (items.length >= 1 && familyCount === 0 && coreFamilies === 0 && elapsed >= (libs.__vodSyncCoalesceMs || 4500)) {
         return true;
     }
     return false;

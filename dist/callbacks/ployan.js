@@ -86,6 +86,7 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                         is_end_webview: true,
                         url_webview: metadata && metadata.url_webview ? metadata.url_webview : ''
                     });
+                    console.log('[RN-Fetch][PLOYAN-DELIVER] Server I file=' + directUrl.substring(0, 100));
                 }
             }
         }
