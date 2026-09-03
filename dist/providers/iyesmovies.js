@@ -1153,7 +1153,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v60-prefetch-urix');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v61-referrer-hop');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
