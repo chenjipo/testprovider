@@ -381,7 +381,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v25-iyes-direct-after-sync';
+libs.__embedSyncVersion = 'v26-session-reset-on-flush';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -787,17 +787,22 @@ libs.__ensureSyncPoller = function () {
 libs.beginVodLinkSession = function () {
     var bag = libs.__getVodSyncBag();
     var now = Date.now();
+    var elapsed = 0;
+    var needNew = false;
     if (!libs.__embedWebviewSlot) {
         libs.__embedWebviewSlot = { busyUntil: 0, pumping: false, queue: [], multiSourceBatch: false };
     }
+    // Keep coalescing while the current sync round is still open.
     if (bag.startMs && !bag.flushed) {
-        var activeElapsed = now - bag.startMs;
-        if (activeElapsed < 90000) {
+        elapsed = now - bag.startMs;
+        if (elapsed < 90000) {
             return;
         }
     }
-    var elapsed = bag.startMs ? now - bag.startMs : 999999;
-    var needNew = !bag.startMs || (bag.flushed && elapsed > 30000) || elapsed > 90000;
+    elapsed = bag.startMs ? now - bag.startMs : 999999;
+    // After flush (user left / reopened), always start a fresh round — do NOT wait 30s.
+    // Waiting caused A/Y/X/L/B late-path races and blocked IYesMovies re-entry.
+    needNew = !bag.startMs || bag.flushed || elapsed > 90000;
     if (needNew) {
         bag.startMs = now;
         bag.items = [];
@@ -805,8 +810,20 @@ libs.beginVodLinkSession = function () {
         libs.__vodSyncStartMs = bag.startMs;
         libs.__vodSyncItems = bag.items;
         libs.__vodSyncFlushed = false;
+        libs.__vodSyncDeliveredProviders = {};
+        libs.__vodDeferredWebviews = {};
         libs.__vidlinkDelivered = {};
         libs.__vidlinkPlayLock = {};
+        try {
+            libs.__iyesWvActive = false;
+            libs.__iyesWvBusyUntil = 0;
+            libs.__iyesWvLockKey = '';
+            if (libs.__iyesWvUnlockTimer) {
+                clearTimeout(libs.__iyesWvUnlockTimer);
+                libs.__iyesWvUnlockTimer = null;
+            }
+        }
+        catch (eUnlock) { }
         console.log('[RN-Fetch][SYNC-SESSION] start version=' + libs.__embedSyncVersion);
         libs.__ensureSyncPoller();
         libs.__scheduleSyncFlush();

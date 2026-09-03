@@ -308,19 +308,22 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             throw err;
         });
     }
-    function scheduleYesmoviesWebview(task) {
+    function scheduleYesmoviesWebview(task, lockKey) {
         var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
         var shouldDefer = !!(libs.__deferProviderWebview && libs.__shouldSyncVodLinks && libs.__shouldSyncVodLinks() && bag && bag.startMs && !bag.flushed);
         var nowMs = Date.now();
-        var lockMs = 180000;
-        if (libs.__iyesWvActive || (libs.__iyesWvBusyUntil && nowMs < libs.__iyesWvBusyUntil)) {
+        var lockMs = 90000;
+        var key = String(lockKey || '');
+        // Only skip duplicate opens for the SAME mid+eid. Title/episode changes always replace the lock.
+        if (key && libs.__iyesWvLockKey === key && (libs.__iyesWvActive || (libs.__iyesWvBusyUntil && nowMs < libs.__iyesWvBusyUntil))) {
             var remain = libs.__iyesWvBusyUntil ? Math.max(0, libs.__iyesWvBusyUntil - nowMs) : 0;
-            console.log('[RN-Fetch][YESMOVIES-EMBED] skip-busy active=' + !!libs.__iyesWvActive + ' remain=' + remain + 'ms (do not switch title)');
+            console.log('[RN-Fetch][YESMOVIES-EMBED] skip-busy key=' + key + ' remain=' + remain + 'ms');
             return;
         }
         libs.__iyesWvActive = true;
         libs.__iyesWvBusyUntil = nowMs + lockMs;
-        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-lock ' + (lockMs / 1000) + 's — stay on this title until get-ok');
+        libs.__iyesWvLockKey = key;
+        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-lock ' + (lockMs / 1000) + 's key=' + key);
         try {
             if (libs.__iyesWvUnlockTimer) {
                 clearTimeout(libs.__iyesWvUnlockTimer);
@@ -328,13 +331,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             libs.__iyesWvUnlockTimer = setTimeout(function () {
                 libs.__iyesWvActive = false;
                 libs.__iyesWvBusyUntil = 0;
+                libs.__iyesWvLockKey = '';
                 console.log('[RN-Fetch][YESMOVIES-EMBED] wv-unlock timeout');
             }, lockMs);
         }
         catch (eTimer) { }
         var wrapped = function () {
-            if (!libs.__iyesWvActive) {
-                console.log('[RN-Fetch][YESMOVIES-EMBED] skip-reopen inactive');
+            if (!libs.__iyesWvActive || (key && libs.__iyesWvLockKey && libs.__iyesWvLockKey !== key)) {
+                console.log('[RN-Fetch][YESMOVIES-EMBED] skip-reopen inactive key=' + key);
                 return;
             }
             console.log('[RN-Fetch][YESMOVIES-EMBED] wv-run');
@@ -364,6 +368,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var useParse = '';
         var domainLocal = '';
         var urixPackPromise = null;
+        var lockKey = String(mid || '') + ':' + String(eid || '') + ':' + String(sv || '1');
         try {
             useParse = (typeof parseURL === 'string' && parseURL) ? parseURL : 'https://ployan.me';
         }
@@ -394,7 +399,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     yesLoc: 'US',
                     watchUrl: watchBase
                 }, callback);
-            });
+            }, lockKey);
             return Promise.resolve(true);
         }
         console.log('[RN-Fetch][YESMOVIES-EMBED] prefetch urix mid=' + mid + ' eid=' + eid);
@@ -443,7 +448,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     watchUrl: watchBase
                 }, callback);
             });
-        });
+        }, lockKey);
         return Promise.resolve(true);
     }
     function openYesmoviesEmbedAndWait(mid, eid, sv, movieInfo, callback, LINK_DETAIL) {
@@ -452,6 +457,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function openPloyanWebView(watchEmbedUrl, urix, mid, eid, sv, movieInfo, callback, streamHeaders, yesDetailUrl, yesLoc) {
         var watchBase = String(watchEmbedUrl || '').split('#')[0];
         var yesReferer = yesDetailUrl || 'https://ww2.yesmovies.ag/';
+        var lockKey = String(mid || '') + ':' + String(eid || '') + ':' + String(sv || '1');
         console.log('[RN-Fetch][PLOYAN-WEBVIEW] watch=' + watchBase + ' ref=' + yesReferer.substring(0, 80) + ' loc=' + (yesLoc || 'US'));
         if (yesDetailUrl && mid && hosts && hosts['yesmovies-embed']) {
             console.log('[RN-Fetch][YESMOVIES-EMBED] fallback detail page iframe flow');
@@ -465,7 +471,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     yesLoc: yesLoc || 'US',
                     watchUrl: watchEmbedUrl
                 }, callback);
-            });
+            }, lockKey);
             return;
         }
         if (hosts && hosts['ployan']) {
@@ -479,7 +485,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     yesLoc: yesLoc || 'US',
                     watchUrl: watchBase
                 }, callback);
-            });
+            }, lockKey);
             return;
         }
         libs.embed_redirect(watchBase, '', movieInfo, PROVIDER, callback, PROVIDER, [], streamHeaders, { urix: urix, mid: mid, eid: eid, sv: sv });
@@ -1279,7 +1285,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v66-search-dtype');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v67-session-reset');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,

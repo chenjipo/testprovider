@@ -71,6 +71,7 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                     try {
                         libs.__iyesWvActive = false;
                         libs.__iyesWvBusyUntil = 0;
+                        libs.__iyesWvLockKey = '';
                         if (libs.__iyesWvUnlockTimer) {
                             clearTimeout(libs.__iyesWvUnlockTimer);
                             libs.__iyesWvUnlockTimer = null;
