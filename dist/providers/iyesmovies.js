@@ -204,6 +204,52 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function base64EncodeUri(b64) {
         return String(b64 || '').replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
     }
+    // Official yesmovies: urix = Base64.encodeURI(await encox(...))
+    // js-base64 encodeURI re-encodes the already-base64 string (→ ~102 chars), not just url-safe.
+    function encodeUrix(encB64) {
+        var raw = String(encB64 || '');
+        var second = '';
+        try {
+            if (typeof btoa === 'function') {
+                second = btoa(raw);
+            }
+            else if (libs && libs.string_btoa) {
+                second = libs.string_btoa(raw);
+            }
+        }
+        catch (eBtoa) {
+            second = libs && libs.string_btoa ? libs.string_btoa(raw) : '';
+        }
+        return String(second || '').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/g, '');
+    }
+    function encoxSubtle(plaintext, pwd) {
+        return __awaiter(this, void 0, void 0, function () {
+            var subtle, pwHash, iv, key, ctBuf, ivStr, ctArr, ctStr, i;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        subtle = getSubtleCrypto();
+                        if (!subtle) {
+                            return [2, ''];
+                        }
+                        return [4, subtle.digest('SHA-256', utf8Encode(pwd))];
+                    case 1:
+                        pwHash = _a.sent();
+                        iv = getRandomBytes(12);
+                        return [4, subtle.importKey('raw', pwHash, { name: 'AES-GCM' }, false, ['encrypt'])];
+                    case 2:
+                        key = _a.sent();
+                        return [4, subtle.encrypt({ name: 'AES-GCM', iv: iv }, key, utf8Encode(plaintext))];
+                    case 3:
+                        ctBuf = _a.sent();
+                        ivStr = Array.from(iv).map(function (b) { return String.fromCharCode(b); }).join('');
+                        ctArr = Array.from(new Uint8Array(ctBuf));
+                        ctStr = ctArr.map(function (byte) { return String.fromCharCode(byte); }).join('');
+                        return [2, libs.string_btoa(ivStr + ctStr)];
+                }
+            });
+        });
+    }
     function fetchDatasToken(mid, eid, sv, reqHeaders, detailUrl) {
         var datasUrl = "".concat(DOMAIN, "/datas");
         var body = JSON.stringify({ m: mid, e: String(eid), s: String(sv) });
@@ -250,7 +296,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         var encPlain = mid + "+" + eid + "+" + sv + "+" + yesLoc + "+" + tsx;
         debugLog('URIX_PLAIN', encPlain);
         return encox(encPlain, yesLoc).then(function (enc) {
-            var urix = base64EncodeUri(enc);
+            var urix = encodeUrix(enc);
             var watchUrl = "".concat(parseURL, "/watch/?v").concat(sv).concat(eid, "#").concat(urix);
             debugLog('ENCOX_OK', urix.substring(0, 32));
             debugLog('WATCH_URL', watchUrl.substring(0, 120));
@@ -363,7 +409,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             console.log('[RN-Fetch][YESMOVIES-EMBED] yesLoc=' + yesLocLocal + ' plain=' + plain);
             return encox(plain, yesLocLocal).then(function (enc) {
                 return {
-                    urix: base64EncodeUri(enc),
+                    urix: encodeUrix(enc),
                     yesLoc: yesLocLocal
                 };
             });
@@ -372,7 +418,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             var tsx = Math.floor((new Date()).getTime() / 1000);
             var plain = String(mid) + '+' + String(eid) + '+' + String(sv || '1') + '+US+' + tsx;
             return encox(plain, 'US').then(function (enc) {
-                return { urix: base64EncodeUri(enc), yesLoc: 'US' };
+                return { urix: encodeUrix(enc), yesLoc: 'US' };
             }).catch(function () {
                 return { urix: '', yesLoc: 'US' };
             });
@@ -384,6 +430,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 var urix = pack && pack.urix ? pack.urix : '';
                 var yesLocLocal = pack && pack.yesLoc ? pack.yesLoc : 'US';
                 console.log('[RN-Fetch][YESMOVIES-EMBED] open host urixLen=' + (urix ? urix.length : 0) + ' loc=' + yesLocLocal + ' url=' + watchBase.substring(0, 100));
+                if (urix && urix.length < 90) {
+                    console.log('[RN-Fetch][YESMOVIES-EMBED] warn urix too short (expect ~102 double-encode)');
+                }
                 hosts['ployan'](watchBase, movieInfo || {}, PROVIDER, {
                     urix: urix || '',
                     mid: mid,
@@ -958,6 +1007,17 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         return libs.string_btoa(ivStr + ctStr);
     }
     function encox(plaintext, pwd) {
+        var subtle = getSubtleCrypto();
+        if (subtle) {
+            return encoxSubtle(plaintext, pwd).then(function (enc) {
+                if (enc) {
+                    return enc;
+                }
+                return encoxPure(plaintext, pwd);
+            }).catch(function () {
+                return encoxPure(plaintext, pwd);
+            });
+        }
         return Promise.resolve().then(function () {
             return encoxPure(plaintext, pwd);
         });
@@ -1182,7 +1242,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v64-bridge-true');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v65-double-urix');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
@@ -1224,7 +1284,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                                 return [4, encox(mi + "+" + ei + "+" + sv + "+" + pwd + "+" + tsx, pwd)];
                             case 1:
                                 enc = _c.sent();
-                                urixLocal = base64EncodeUri(enc);
+                                urixLocal = encodeUrix(enc);
+                                console.log('[RN-Fetch][PLOYAN-URIX] len=' + urixLocal.length);
                                 return [2, "".concat(parseUrl, "/watch/?v").concat(sv).concat(ei, "#").concat(urixLocal)];
                         }
                     });
