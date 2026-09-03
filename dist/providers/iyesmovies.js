@@ -317,34 +317,58 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             });
             return Promise.resolve(true);
         }
-        tsx = Math.floor((new Date()).getTime() / 1000);
-        plain = String(mid) + '+' + String(eid) + '+' + String(sv || '1') + '+' + yesLocLocal + '+' + tsx;
-        console.log('[RN-Fetch][YESMOVIES-EMBED] build urix plain=' + plain);
+        console.log('[RN-Fetch][YESMOVIES-EMBED] queue ployan webview mid=' + mid + ' eid=' + eid);
         scheduleYesmoviesWebview(function () {
-            console.log('[RN-Fetch][YESMOVIES-EMBED] start ployan webview (encox)');
-            encox(plain, yesLocLocal).then(function (enc) {
-                var urix = base64EncodeUri(enc);
-                console.log('[RN-Fetch][YESMOVIES-EMBED] urixLen=' + (urix ? urix.length : 0) + ' url=' + watchBase.substring(0, 100));
-                hosts['ployan'](watchBase, movieInfo || {}, PROVIDER, {
-                    urix: urix || '',
-                    mid: mid,
-                    eid: eid,
-                    sv: sv,
-                    yesReferer: LINK_DETAIL || (DOMAIN + '/'),
-                    yesLoc: yesLocLocal,
-                    watchUrl: watchBase
-                }, callback);
-            }).catch(function (encErr) {
-                console.log('[RN-Fetch][YESMOVIES-EMBED] urix-fail ' + String(encErr && encErr.message ? encErr.message : encErr));
-                hosts['ployan'](watchBase, movieInfo || {}, PROVIDER, {
-                    urix: '',
-                    mid: mid,
-                    eid: eid,
-                    sv: sv,
-                    yesReferer: LINK_DETAIL || (DOMAIN + '/'),
-                    yesLoc: yesLocLocal,
-                    watchUrl: watchBase
-                }, callback);
+            console.log('[RN-Fetch][YESMOVIES-EMBED] start ployan webview (resolve loc+encox)');
+            fetchTraceText(DOMAIN + '/cdn-cgi/trace', {
+                'referer': DOMAIN,
+                'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
+            }).then(function (traceText) {
+                var td = parseTrace(traceText);
+                yesLocLocal = (td && td.loc) ? td.loc : 'US';
+                console.log('[RN-Fetch][YESMOVIES-EMBED] yesLoc=' + yesLocLocal);
+                tsx = Math.floor((new Date()).getTime() / 1000);
+                plain = String(mid) + '+' + String(eid) + '+' + String(sv || '1') + '+' + yesLocLocal + '+' + tsx;
+                console.log('[RN-Fetch][YESMOVIES-EMBED] build urix plain=' + plain);
+                return encox(plain, yesLocLocal).then(function (enc) {
+                    var urix = base64EncodeUri(enc);
+                    console.log('[RN-Fetch][YESMOVIES-EMBED] urixLen=' + (urix ? urix.length : 0) + ' url=' + watchBase.substring(0, 100));
+                    hosts['ployan'](watchBase, movieInfo || {}, PROVIDER, {
+                        urix: urix || '',
+                        mid: mid,
+                        eid: eid,
+                        sv: sv,
+                        yesReferer: LINK_DETAIL || (DOMAIN + '/'),
+                        yesLoc: yesLocLocal,
+                        watchUrl: watchBase
+                    }, callback);
+                });
+            }).catch(function (err) {
+                console.log('[RN-Fetch][YESMOVIES-EMBED] urix-fail ' + String(err && err.message ? err.message : err));
+                tsx = Math.floor((new Date()).getTime() / 1000);
+                plain = String(mid) + '+' + String(eid) + '+' + String(sv || '1') + '+US+' + tsx;
+                encox(plain, 'US').then(function (enc) {
+                    var urix = base64EncodeUri(enc);
+                    hosts['ployan'](watchBase, movieInfo || {}, PROVIDER, {
+                        urix: urix || '',
+                        mid: mid,
+                        eid: eid,
+                        sv: sv,
+                        yesReferer: LINK_DETAIL || (DOMAIN + '/'),
+                        yesLoc: 'US',
+                        watchUrl: watchBase
+                    }, callback);
+                }).catch(function () {
+                    hosts['ployan'](watchBase, movieInfo || {}, PROVIDER, {
+                        urix: '',
+                        mid: mid,
+                        eid: eid,
+                        sv: sv,
+                        yesReferer: LINK_DETAIL || (DOMAIN + '/'),
+                        yesLoc: 'US',
+                        watchUrl: watchBase
+                    }, callback);
+                });
             });
         });
         return Promise.resolve(true);
@@ -1134,7 +1158,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'IYesMovies';
                 libs.beginVodLinkSession();
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
-                console.log('[RN-Fetch][PLOYAN-VERSION] v58-urix-webview');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v59-passive-native');
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
                     "referer": DOMAIN,
@@ -1238,10 +1262,14 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         title = String(searchItem.t || '').replace(/\- *season *[0-9]+/i, '').trim();
                         href = searchItem.s;
                         season = searchItem.n ? Number(searchItem.n) : 0;
+                        if (!season) {
+                            var sm = String(searchItem.t || '').match(/\- *season *([0-9]+)/i);
+                            season = sm ? Number(sm[1]) : 0;
+                        }
                         type = (searchItem.d === 's' || searchItem.d === 'tv' || season) ? 'tv' : 'movie';
-                        if (type == 'tv' && libs.string_matching_title(movieInfo, title)) {
+                        if (type == 'tv' && Number(season) === Number(movieInfo.season) && libs.string_matching_title(movieInfo, title)) {
                             LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(href, ".html");
-                            console.log('[RN-Fetch][YESMOVIES-SEARCH] season-fallback href=' + href + ' season=' + season);
+                            console.log('[RN-Fetch][YESMOVIES-SEARCH] season-retry href=' + href + ' season=' + season);
                             break;
                         }
                     }
@@ -1306,8 +1334,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 debugLog('GET_HDR', 'referer=' + LINK_DETAIL.substring(0, 80));
                 debugLog('EP_PARAMS', 'mid=' + mid + ' eid=' + eid + ' sv=' + sv);
                 console.log('[RN-Fetch][PLOYAN-READY] parseURL=' + parseURL + ' mid=' + mid + ' eid=' + eid + ' sv=' + sv);
-                console.log('[RN-Fetch][PLOYAN-DIRECT] prefer RN /get/ before webview');
-                return [3, 7];
+                console.log('[RN-Fetch][PLOYAN-DIRECT] skip RN /get/ (hash key != loc) → native webview');
+                openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
+                return [2, true];
             case 4:
                 return [3, 7];
             case 5:

@@ -54,7 +54,7 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
                 return [2];
             }
             if (data.step) {
-                console.log('[RN-Fetch][PLOYAN-STEP] ' + data.step + (data.mode ? ' mode=' + data.mode : '') + (data.loc ? ' loc=' + data.loc : '') + (data.plain ? ' plain=' + data.plain : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.urixLen !== undefined ? ' urixLen=' + data.urixLen : '') + (data.hasUrix !== undefined ? ' hasUrix=' + data.hasUrix : '') + (data.body ? ' body=' + data.body : '') + (data.error ? ' err=' + data.error : '') + (data.source ? ' src=' + data.source : ''));
+                console.log('[RN-Fetch][PLOYAN-STEP] ' + data.step + (data.mode ? ' mode=' + data.mode : '') + (data.loc ? ' loc=' + data.loc : '') + (data.plain ? ' plain=' + data.plain : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.urixLen !== undefined ? ' urixLen=' + data.urixLen : '') + (data.hashLen !== undefined ? ' hashLen=' + data.hashLen : '') + (data.ms !== undefined ? ' ms=' + data.ms : '') + (data.src ? ' src=' + data.src : '') + (data.body ? ' body=' + data.body : '') + (data.error ? ' err=' + data.error : '') + (data.source ? ' source=' + data.source : ''));
                 return [2];
             }
             if (data.error) {
