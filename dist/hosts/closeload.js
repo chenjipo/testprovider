@@ -176,7 +176,7 @@ function isCloseloadCloudflareBlock(response, htmlText) {
     return false;
 }
 function isCloseloadHtmlUsable(response, htmlText) {
-    if (!htmlText || htmlText.length < 200) {
+    if (!response || !htmlText || htmlText.length < 200) {
         return false;
     }
     if (isCloseloadCloudflareBlock(response, htmlText)) {
@@ -197,10 +197,40 @@ function isCloseloadHtmlUsable(response, htmlText) {
     if (htmlText.match(/https?:[^"'\\s]+\.m3u8/i)) {
         return true;
     }
-    if (htmlText.indexOf('master.txt') >= 0) {
+    if (htmlText.indexOf('master.txt') >= 0 || htmlText.indexOf('contentUrl') >= 0) {
         return true;
     }
     return false;
+}
+function extractCloseloadPlainStream(htmlText) {
+    if (!htmlText) {
+        return '';
+    }
+    var text = String(htmlText);
+    var match = text.match(/"contentUrl"\s*:\s*"(https?:\\\/\\\/[^"]+)"/i);
+    if (!match) {
+        match = text.match(/"contentUrl"\s*:\s*"(https?:\/\/[^"]+)"/i);
+    }
+    if (match && match[1]) {
+        return match[1].replace(/\\\//g, '/');
+    }
+    match = text.match(/https?:\/\/[^"'\\\s<>]*playmix[^"'\\\s<>]*\/master\.txt[^"'\\\s<>]*/i);
+    if (match) {
+        return match[0].replace(/\\/g, '');
+    }
+    match = text.match(/https?:\/\/[^"'\\\s<>]+\/master\.txt[^"'\\\s<>]*/i);
+    if (match) {
+        return match[0].replace(/\\/g, '');
+    }
+    match = text.match(/https?:\/\/[^"'\\\s<>]+\.m3u8[^"'\\\s<>]*/i);
+    if (match) {
+        return match[0].replace(/\\/g, '');
+    }
+    match = text.match(/let\s+url\s*=\s*['"](https?:[^'"]+)/i);
+    if (match && match[1]) {
+        return match[1];
+    }
+    return '';
 }
 function fetchCloseloadWithRetry(activeUrl, embedHeaders, maxAttempts) {
     maxAttempts = maxAttempts || 2;
@@ -239,7 +269,7 @@ function fetchCloseloadWithRetry(activeUrl, embedHeaders, maxAttempts) {
     return attempt(0);
 }
 function buildCloseloadWebviewScript() {
-    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function postUrl(u){if(done||!u||String(u).indexOf('http')!==0)return;done=1;pm({step:'cl-url',url:u});}function scan(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m&&m[1])postUrl(m[1]);var m2=h.match(/https?:[^'\"\\s<>]+\\.(?:m3u8|txt)[^'\"\\s<>]*/i);if(m2)postUrl(m2[0]);var m3=h.match(/https?:[^'\"\\s<>]+master\\.txt[^'\"\\s<>]*/i);if(m3)postUrl(m3[0]);}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(!done&&(s.indexOf('.m3u8')>=0||s.indexOf('master.txt')>=0))postUrl(s);return r;});};}hook();pm({step:'cl-boot',href:location.href});scan();var n=0;var iv=setInterval(function(){scan();n++;if(done||n>80)clearInterval(iv);},400);})();true;";
+    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function postUrl(u){if(done||!u||String(u).indexOf('http')!==0)return;done=1;pm({step:'cl-url',url:u});}function scan(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m=h.match(/\"contentUrl\"\\s*:\\s*\"(https?:\\\\\/\\\\\/[^\"]+)\"/i);if(m&&m[1]){postUrl(m[1].replace(/\\\\\\//g,'/'));return;}var m0=h.match(/\"contentUrl\"\\s*:\\s*\"(https?:\\/\\/[^\"]+)\"/i);if(m0&&m0[1]){postUrl(m0[1]);return;}var m1=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m1&&m1[1])postUrl(m1[1]);var m2=h.match(/https?:[^'\"\\s<>]+playmix[^'\"\\s<>]*master\\.txt[^'\"\\s<>]*/i);if(m2)postUrl(m2[0]);var m3=h.match(/https?:[^'\"\\s<>]+master\\.txt[^'\"\\s<>]*/i);if(m3)postUrl(m3[0]);var m4=h.match(/https?:[^'\"\\s<>]+\\.(?:m3u8|txt)[^'\"\\s<>]*/i);if(m4)postUrl(m4[0]);}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(!done&&(s.indexOf('.m3u8')>=0||s.indexOf('master.txt')>=0))postUrl(s);return r;});};}hook();pm({step:'cl-boot',href:location.href});scan();var n=0;var iv=setInterval(function(){scan();n++;if(done||n>80)clearInterval(iv);},400);})();true;";
 }
 function buildCloseloadWebviewScripts() {
     return {
@@ -417,8 +447,12 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
         return '';
     }
     function decodeDynamicSource(html, unpacked) {
-        var fileMatch = html.match(/sources:\s*\[\{file:\s*(s_[A-Za-z0-9]+)/i);
+        var fileMatch = html.match(/sources:\s*\[\{\s*file:\s*([A-Za-z0-9_]+)/i);
         var keyName = fileMatch ? fileMatch[1] : '';
+        if (!keyName && unpacked) {
+            fileMatch = unpacked.match(/sources:\s*\[\{\s*file:\s*([A-Za-z0-9_]+)/i);
+            keyName = fileMatch ? fileMatch[1] : '';
+        }
         if (!keyName) {
             return '';
         }
@@ -457,6 +491,22 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
         var dc = eval('(' + fnSrc + ')');
         return dc(parts);
     }
+    function resolveCloseloadSrcKey(htmlText, unpacker) {
+        var match = null;
+        if (unpacker) {
+            match = unpacker.match(/src\s*:\s*([^,]+)\s*,\s*type\s*:/i);
+            if (!match) {
+                match = unpacker.match(/file\s*:\s*([A-Za-z0-9_]+)\s*,\s*type\s*:/i);
+            }
+        }
+        if (!match && htmlText) {
+            match = htmlText.match(/sources:\s*\[\{\s*file:\s*([A-Za-z0-9_]+)/i);
+        }
+        if (!match) {
+            return '';
+        }
+        return String(match[1] || '').replace(/[\s'"]/g, '');
+    }
     var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1, urlCandidates, candidateIdx, activeUrl, fetchResult;
     return __generator(this, function (_a) {
         switch (_a.label) {
@@ -471,7 +521,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v6.1-cf-retry-fix candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v7-contenturl-filekey candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
@@ -495,14 +545,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                     candidateIdx++;
                     return [3, 1];
                 }
-                directUrl = htmlText.match(/https?:\/\/[^"'\s\\]+\.m3u8[^"'\s\\]*/i);
-                directUrl = directUrl ? directUrl[0].replace(/\\/g, '') : '';
-                if (!directUrl) {
-                    directUrl = (htmlText.match(/let\s+url\s*=\s*['"]([^'"]+)/i) || [])[1] || '';
-                }
-                if (!directUrl) {
-                    directUrl = (htmlText.match(/file\s*:\s*['"](https?:[^'"]+)/i) || [])[1] || '';
-                }
+                directUrl = extractCloseloadPlainStream(htmlText);
                 if (directUrl && directUrl.indexOf('http') === 0) {
                     console.log('[RN-Fetch][CLOSELOAD-DIRECT] ' + directUrl.substring(0, 120));
                     libs.embed_callback(directUrl, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: directUrl, quality: 1080 }], {
@@ -526,9 +569,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                     return [3, 1];
                 }
                 else {
-                    getKey = unpacker.match(/src\:([^\,]+)\,type\:/i);
-                    getKey = getKey ? getKey[1] : '';
-                    keyName = getKey.replace(/[\s'"]/g, '');
+                    keyName = resolveCloseloadSrcKey(htmlText, unpacker);
                     console.log('[RN-Fetch][CLOSELOAD-KEY] ' + keyName);
                     if (!keyName) {
                         console.log('[RN-Fetch][CLOSELOAD-SKIP] no-src-key idx=' + candidateIdx);
@@ -536,6 +577,9 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                         return [3, 1];
                     }
                     varName = unpacker.match(new RegExp(keyName + '\\=[A-z0-9]+\\(([^\\)]*)\\)', 'i'));
+                    if (!varName) {
+                        varName = htmlText.match(new RegExp(keyName + '\\s*=\\s*[A-z0-9_]+\\(([^\\)]*)\\)', 'i'));
+                    }
                     varName = varName ? varName[1] : '';
                     try {
                         varName = JSON.parse(varName);
@@ -570,13 +614,13 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 }, {
                     type: 'm3u8',
                 });
-                return [3, 6];
-            case 5:
+                return [2];
+            case 4:
                 e_1 = _a.sent();
                 console.log('[RN-Fetch][CLOSELOAD-ERROR] idx=' + candidateIdx + ' ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 candidateIdx++;
                 return [3, 1];
-            case 6: return [2];
+            case 5: return [2];
         }
     });
 }); };

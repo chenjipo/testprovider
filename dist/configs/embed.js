@@ -381,7 +381,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v29-iyes-after-yax';
+libs.__embedSyncVersion = 'v30-l-only-flush';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -500,8 +500,12 @@ libs.__vodSyncIsYaxReady = function (items, elapsed) {
     if (elapsed >= (hardMax + 4000) && coreFamilies >= 1 && items.length >= 1) {
         return true;
     }
-    // Deferred non-YAX sources (historically IYesMovies) alone in bag.
+    // Deferred non-YAX sources alone in bag.
     if (items.length >= 1 && familyCount === 0 && coreFamilies === 0 && elapsed >= (libs.__vodSyncCoalesceMs || 4500)) {
+        return true;
+    }
+    // L/B-only (YAX family but no Y/A/X core) — do not wait forever for core providers.
+    if (items.length >= 1 && coreFamilies === 0 && familyCount >= 1 && elapsed >= Math.max(libs.__vodSyncCoalesceMs || 4500, 8000)) {
         return true;
     }
     return false;
