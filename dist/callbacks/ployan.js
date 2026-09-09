@@ -54,7 +54,25 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                 return [2];
             }
             if (data.step) {
-                console.log('[RN-Fetch][PLOYAN-STEP] ' + data.step + (data.mode ? ' mode=' + data.mode : '') + (data.host ? ' host=' + data.host : '') + (data.loc ? ' loc=' + data.loc : '') + (data.plain ? ' plain=' + data.plain : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.urixLen !== undefined ? ' urixLen=' + data.urixLen : '') + (data.hashLen !== undefined ? ' hashLen=' + data.hashLen : '') + (data.ms !== undefined ? ' ms=' + data.ms : '') + (data.title ? ' title=' + data.title : '') + (data.body ? ' body=' + data.body : '') + (data.pwd ? ' pwd=' + data.pwd : '') + (data.referrer ? ' ref=' + data.referrer : '') + (data.clicked !== undefined ? ' clicked=' + data.clicked : '') + (data.to ? ' to=' + data.to : '') + (data.src ? ' src=' + data.src : '') + (data.error ? ' err=' + data.error : '') + (data.source ? ' source=' + data.source : ''));
+                console.log('[RN-Fetch][PLOYAN-STEP] ' + data.step + (data.mode ? ' mode=' + data.mode : '') + (data.host ? ' host=' + data.host : '') + (data.loc ? ' loc=' + data.loc : '') + (data.plain ? ' plain=' + data.plain : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.urixLen !== undefined ? ' urixLen=' + data.urixLen : '') + (data.hashLen !== undefined ? ' hashLen=' + data.hashLen : '') + (data.ms !== undefined ? ' ms=' + data.ms : '') + (data.title ? ' title=' + data.title : '') + (data.body ? ' body=' + data.body : '') + (data.pwd ? ' pwd=' + data.pwd : '') + (data.referrer ? ' ref=' + data.referrer : '') + (data.clicked !== undefined ? ' clicked=' + data.clicked : '') + (data.to ? ' to=' + data.to : '') + (data.src ? ' src=' + data.src : '') + (data.error ? ' err=' + data.error : '') + (data.source ? ' source=' + data.source : '') + (data.dead !== undefined ? ' dead=' + data.dead : ''));
+                if (data.step === 'page-404') {
+                    try {
+                        libs.__iyesWvActive = false;
+                        libs.__iyesWvBusyUntil = 0;
+                        libs.__iyesWvLockKey = '';
+                        if (libs.__iyesWvUnlockTimer) {
+                            clearTimeout(libs.__iyesWvUnlockTimer);
+                            libs.__iyesWvUnlockTimer = null;
+                        }
+                        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-unlock after page-404');
+                    }
+                    catch (e404) { }
+                    setTimeout(function () {
+                        if (typeof libs.__closeEmbedWebview === 'function') {
+                            libs.__closeEmbedWebview(callback, metadata);
+                        }
+                    }, 200);
+                }
                 return [2];
             }
             if (data.error) {
