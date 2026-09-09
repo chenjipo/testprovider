@@ -308,6 +308,45 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             throw err;
         });
     }
+    function scoreYesMovieCandidate(item) {
+        var q = String((item && item.quality) || '').toUpperCase();
+        if (q.indexOf('CAM') >= 0 || q.indexOf('TS') >= 0 || q.indexOf('SCR') >= 0 || q.indexOf('HDCAM') >= 0) {
+            return 10;
+        }
+        if (q.indexOf('BLURAY') >= 0 || q.indexOf('REMUX') >= 0 || q.indexOf('2160') >= 0 || q.indexOf('4K') >= 0) {
+            return 120;
+        }
+        if (q.indexOf('1080') >= 0 || q.indexOf('WEB') >= 0 || q.indexOf('HD') >= 0 || q.indexOf('720') >= 0 || q.indexOf('BD') >= 0) {
+            return 100;
+        }
+        if (q.indexOf('SD') >= 0) {
+            return 40;
+        }
+        return 50;
+    }
+    function pickYesMovieCandidate(candidates, yearWant) {
+        var list = (candidates || []).slice();
+        var filtered = [];
+        var i = 0;
+        if (yearWant) {
+            for (i = 0; i < list.length; i++) {
+                if (Number(list[i].year) === Number(yearWant)) {
+                    filtered.push(list[i]);
+                }
+            }
+        }
+        if (!filtered.length) {
+            filtered = list;
+        }
+        filtered.sort(function (a, b) {
+            var scoreDiff = scoreYesMovieCandidate(b) - scoreYesMovieCandidate(a);
+            if (scoreDiff !== 0) {
+                return scoreDiff;
+            }
+            return Number(b.year || 0) - Number(a.year || 0);
+        });
+        return filtered[0] || null;
+    }
     function scheduleYesmoviesWebview(task, lockKey) {
         var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
         var shouldDefer = !!(libs.__deferProviderWebview && libs.__shouldSyncVodLinks && libs.__shouldSyncVodLinks() && bag && bag.startMs && !bag.flushed);
@@ -1288,7 +1327,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_b.label) {
             case 0:
                 PROVIDER = 'IYesMovies';
-                console.log('[RN-Fetch][PLOYAN-VERSION] v70-iyes-after-yax');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v71-hd-prefer-script');
                 // forceNew: after previous flush, reopen must start a new sync round and
                 // reset a stuck embed slot so A/X/I are not blocked by the prior WV.
                 if (typeof libs.beginVodLinkSession === 'function') {
@@ -1413,7 +1452,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         continue;
                     }
                     if (movieInfo.type == 'movie' && type == 'movie') {
-                        movieCandidates.push({ href: href, year: year, title: title });
+                        movieCandidates.push({ href: href, year: year, title: title, quality: String(searchItem.q || '') });
                         continue;
                     }
                     if (movieInfo.type == 'tv' && type == 'tv' && Number(movieInfo.season) > 0 && Number(season) === Number(movieInfo.season)) {
@@ -1423,20 +1462,12 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     }
                 }
                 if (!LINK_DETAIL && movieInfo.type == 'movie' && movieCandidates.length) {
-                    pickedMovie = null;
-                    if (yearWant) {
-                        for (_i = 0; _i < movieCandidates.length; _i++) {
-                            if (Number(movieCandidates[_i].year) === yearWant) {
-                                pickedMovie = movieCandidates[_i];
-                                break;
-                            }
-                        }
-                    }
+                    pickedMovie = pickYesMovieCandidate(movieCandidates, yearWant);
                     if (!pickedMovie) {
                         pickedMovie = movieCandidates[0];
                     }
                     LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(pickedMovie.href, ".html");
-                    console.log('[RN-Fetch][YESMOVIES-SEARCH] match movie year=' + pickedMovie.year + ' wantYear=' + yearWant + ' href=' + pickedMovie.href + ' candidates=' + movieCandidates.length);
+                    console.log('[RN-Fetch][YESMOVIES-SEARCH] match movie year=' + pickedMovie.year + ' wantYear=' + yearWant + ' href=' + pickedMovie.href + ' q=' + (pickedMovie.quality || '') + ' score=' + scoreYesMovieCandidate(pickedMovie) + ' candidates=' + movieCandidates.length);
                 }
                 libs.log({
                     LINK_DETAIL: LINK_DETAIL
