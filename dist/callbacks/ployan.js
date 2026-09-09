@@ -73,6 +73,29 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                         }
                     }, 200);
                 }
+                if (data.step === 'shell-stuck') {
+                    try {
+                        if (!libs.__iyesShellFallback && metadata && metadata.yesReferer && typeof hosts !== 'undefined' && hosts['yesmovies-embed']) {
+                            libs.__iyesShellFallback = true;
+                            console.log('[RN-Fetch][YESMOVIES-EMBED] shell-stuck → detail fallback ' + String(metadata.yesReferer).substring(0, 100));
+                            hosts['yesmovies-embed'](metadata.yesReferer, (metadata && metadata.movieInfo) || {}, VOD_PROVIDER, {
+                                detailUrl: metadata.yesReferer,
+                                mid: metadata.mid || '',
+                                eid: metadata.eid || '1',
+                                sv: metadata.sv || '1',
+                                epNum: metadata.eid || '1',
+                                yesLoc: metadata.yesLoc || 'US',
+                                watchUrl: metadata.url_webview || ''
+                            }, callback);
+                        }
+                        else {
+                            console.log('[RN-Fetch][YESMOVIES-EMBED] shell-stuck no-fallback used=' + (libs.__iyesShellFallback ? 1 : 0));
+                        }
+                    }
+                    catch (eShell) {
+                        console.log('[RN-Fetch][YESMOVIES-EMBED] shell-stuck-err ' + String(eShell && eShell.message ? eShell.message : eShell));
+                    }
+                }
                 return [2];
             }
             if (data.error) {

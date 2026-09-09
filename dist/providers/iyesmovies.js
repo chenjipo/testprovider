@@ -794,6 +794,153 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     function titlesMatchYes(movieInfo, title) {
         return libs.string_matching_title(movieInfo, String(title || '').replace(/&/g, 'and'), false);
     }
+    function parseYesSearchHits(resSearch) {
+        if (typeof resSearch === 'string') {
+            try {
+                resSearch = JSON.parse(resSearch);
+            }
+            catch (eParse) {
+                return [];
+            }
+        }
+        if (Array.isArray(resSearch)) {
+            return resSearch;
+        }
+        if (resSearch && Array.isArray(resSearch.data)) {
+            return resSearch.data;
+        }
+        return [];
+    }
+    function matchYesSearchHits(hits, movieInfo) {
+        var yearWant = movieInfo.year ? Number(movieInfo.year) : 0;
+        var wantSeason = movieInfo.season ? Number(movieInfo.season) : 0;
+        var movieCandidates = [];
+        var tvCandidates = [];
+        var LINK_DETAIL = '';
+        var i = 0;
+        var searchItem = void 0;
+        var type = void 0;
+        var season = void 0;
+        var year = void 0;
+        var href = void 0;
+        var title = void 0;
+        var picked = void 0;
+        var exact = [];
+        for (i = 0; i < (hits || []).length; i++) {
+            searchItem = hits[i];
+            type = resolveYesSearchType(searchItem);
+            season = resolveYesSearchSeason(searchItem, type);
+            year = resolveYesSearchYear(searchItem);
+            href = searchItem.s;
+            title = String(searchItem.t || '').replace(/\- *season *[0-9]+/i, '').trim();
+            libs.log({
+                title: title,
+                href: href,
+                season: season,
+                type: type,
+                d: searchItem.d,
+                year: year
+            }, 'IYesMovies', 'SEARCH INFO');
+            if (!titlesMatchYes(movieInfo, title)) {
+                continue;
+            }
+            if (movieInfo.type == 'movie' && type == 'movie') {
+                movieCandidates.push({ href: href, year: year, title: title, quality: String(searchItem.q || '') });
+                continue;
+            }
+            if (movieInfo.type == 'tv' && type == 'tv') {
+                tvCandidates.push({ href: href, year: year, title: title, season: season, quality: String(searchItem.q || '') });
+            }
+        }
+        if (movieInfo.type == 'movie' && movieCandidates.length) {
+            picked = pickYesMovieCandidate(movieCandidates, yearWant);
+            if (!picked) {
+                picked = movieCandidates[0];
+            }
+            LINK_DETAIL = "https://ww2.yesmovies.ag/movie/" + picked.href + ".html";
+            console.log('[RN-Fetch][YESMOVIES-SEARCH] match movie year=' + picked.year + ' wantYear=' + yearWant + ' href=' + picked.href + ' q=' + (picked.quality || '') + ' score=' + scoreYesMovieCandidate(picked) + ' candidates=' + movieCandidates.length);
+        }
+        if (movieInfo.type == 'tv' && tvCandidates.length && wantSeason > 0) {
+            for (i = 0; i < tvCandidates.length; i++) {
+                if (Number(tvCandidates[i].season) === wantSeason) {
+                    exact.push(tvCandidates[i]);
+                }
+            }
+            if (exact.length) {
+                picked = exact[0];
+                if (yearWant) {
+                    for (i = 0; i < exact.length; i++) {
+                        if (Number(exact[i].year) === yearWant) {
+                            picked = exact[i];
+                            break;
+                        }
+                    }
+                }
+                LINK_DETAIL = "https://ww2.yesmovies.ag/movie/" + picked.href + ".html";
+                console.log('[RN-Fetch][YESMOVIES-SEARCH] match tv season=' + picked.season + ' year=' + picked.year + ' href=' + picked.href);
+            }
+        }
+        return {
+            LINK_DETAIL: LINK_DETAIL,
+            movieCandidates: movieCandidates,
+            tvCandidates: tvCandidates
+        };
+    }
+    function findYesmoviesLinkDetail(movieInfo, reqHeaders) {
+        return __awaiter(this, void 0, void 0, function () {
+            var DOMAIN_LOCAL, queries, qi, q, urlSearch, resSearch, hits, matched, seasons;
+            return __generator(this, function (_a) {
+                switch (_a.label) {
+                    case 0:
+                        DOMAIN_LOCAL = 'https://ww2.yesmovies.ag';
+                        queries = [String(movieInfo.title || '')];
+                        if (movieInfo.type == 'tv' && Number(movieInfo.season) > 0) {
+                            queries.push(String(movieInfo.title || '') + ' Season ' + movieInfo.season);
+                            queries.push(String(movieInfo.title || '') + ' - Season ' + movieInfo.season);
+                        }
+                        qi = 0;
+                        matched = { LINK_DETAIL: '', movieCandidates: [], tvCandidates: [] };
+                        _a.label = 1;
+                    case 1:
+                        if (!(qi < queries.length)) {
+                            return [3, 4];
+                        }
+                        q = queries[qi];
+                        urlSearch = DOMAIN_LOCAL + '/searching?q=' + String(q).replace(/&/g, 'and').replace(/\s+/ig, '+') + '&limit=40&offset=0';
+                        libs.log({ urlSearch: urlSearch }, 'IYesMovies', 'URL SEARCH');
+                        console.log('[RN-Fetch][YESMOVIES-SEARCH] try q=' + q);
+                        return [4, libs.request_get(urlSearch, {
+                                'user-agent': reqHeaders['user-agent'],
+                                referer: DOMAIN_LOCAL + '/',
+                                Referer: DOMAIN_LOCAL + '/',
+                                Accept: 'application/json, text/plain, */*',
+                                'X-Requested-With': 'XMLHttpRequest',
+                            })];
+                    case 2:
+                        resSearch = _a.sent();
+                        hits = parseYesSearchHits(resSearch);
+                        libs.log({ length: hits.length }, 'IYesMovies', 'SEARCH LENGTH');
+                        console.log('[RN-Fetch][YESMOVIES-SEARCH] hits=' + hits.length + ' want type=' + movieInfo.type + ' season=' + movieInfo.season + ' ep=' + movieInfo.episode + ' year=' + (movieInfo.year || ''));
+                        matched = matchYesSearchHits(hits, movieInfo);
+                        if (matched.LINK_DETAIL) {
+                            return [2, matched];
+                        }
+                        seasons = (matched.tvCandidates || []).map(function (c) { return c.season; }).join(',');
+                        console.log('[RN-Fetch][YESMOVIES-SEARCH] miss q=' + q + ' tvSeasons=[' + seasons + ']');
+                        _a.label = 3;
+                    case 3:
+                        qi++;
+                        return [3, 1];
+                    case 4:
+                        if (movieInfo.type == 'tv') {
+                            seasons = (matched.tvCandidates || []).map(function (c) { return String(c.season) + '@' + c.year; }).join(',');
+                            console.log('[RN-Fetch][YESMOVIES-SEARCH] ABORT tv wantSeason=' + movieInfo.season + ' available=[' + seasons + '] (site may lack this season)');
+                        }
+                        return [2, matched];
+                }
+            });
+        });
+    }
     function getEcbMode() {
         if (cryptoS.mode && cryptoS.mode.ECB) {
             return cryptoS.mode.ECB;
@@ -1344,12 +1491,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_b.label) {
             case 0:
                 PROVIDER = 'IYesMovies';
-                console.log('[RN-Fetch][PLOYAN-VERSION] v75-lock-on-run');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v76-tv-search-shellfb');
                 // forceNew: after previous flush, reopen must start a new sync round and
                 // reset a stuck embed slot so A/X/I are not blocked by the prior WV.
                 if (typeof libs.beginVodLinkSession === 'function') {
                     libs.beginVodLinkSession(true);
                 }
+                libs.__iyesShellFallback = false;
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
                 DOMAIN = "https://ww2.yesmovies.ag";
                 headers = {
@@ -1359,7 +1507,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 ployanHeaders = buildPloyanHeaders(headers['user-agent']);
                 _b.label = 1;
             case 1:
-                _b.trys.push([1, 11, , 12]);
+                _b.trys.push([1, 4, , 5]);
                 urlDoc_1 = "https://doc.vidcloud9.org";
                 getIP_1 = function (urlDoc) { return __awaiter(_this, void 0, void 0, function () {
                     var urlDocTrace, traceData, arr;
@@ -1399,94 +1547,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         }
                     });
                 }); };
-                urlSearch = "".concat(DOMAIN, "/searching?q=").concat(String(movieInfo.title || '').replace(/&/g, 'and').replace(/\s+/ig, '+'), "&limit=40&offset=0");
-                LINK_DETAIL = '';
-                libs.log({ urlSearch: urlSearch }, PROVIDER, 'URL SEARCH');
-                return [4, libs.request_get(urlSearch, {
-                        'user-agent': headers['user-agent'],
-                        referer: DOMAIN + '/',
-                        Referer: DOMAIN + '/',
-                        Accept: 'application/json, text/plain, */*',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    })];
+                return [4, findYesmoviesLinkDetail(movieInfo, headers)];
             case 2:
-                resSearch = _b.sent();
-                if (typeof resSearch === 'string') {
-                    try {
-                        resSearch = JSON.parse(resSearch);
-                    }
-                    catch (parseErr) {
-                        resSearch = null;
-                    }
-                }
-                _a = Array.isArray(resSearch) ? resSearch : (resSearch && Array.isArray(resSearch.data) ? resSearch.data : []);
-                if (_a.length || movieInfo.type != 'movie') {
-                    return [3, 4];
-                }
-                urlSearch = "".concat(DOMAIN, "/searching?q=").concat(String(movieInfo.title || '').replace(/&/g, ' ').replace(/\s+/ig, '+').replace(/\+\+/g, '+'), "&limit=40&offset=0");
-                console.log('[RN-Fetch][YESMOVIES-SEARCH] movie-retry ' + urlSearch);
-                return [4, libs.request_get(urlSearch, {
-                        'user-agent': headers['user-agent'],
-                        referer: DOMAIN + '/',
-                        Referer: DOMAIN + '/',
-                        Accept: 'application/json, text/plain, */*',
-                        'X-Requested-With': 'XMLHttpRequest',
-                    })];
-            case 3:
-                resSearch = _b.sent();
-                if (typeof resSearch === 'string') {
-                    try {
-                        resSearch = JSON.parse(resSearch);
-                    }
-                    catch (parseErr2) {
-                        resSearch = null;
-                    }
-                }
-                _a = Array.isArray(resSearch) ? resSearch : (resSearch && Array.isArray(resSearch.data) ? resSearch.data : []);
-                _b.label = 4;
-            case 4:
-                libs.log({
-                    length: _a.length,
-                }, PROVIDER, 'SEARCH LENGTH');
-                yearWant = movieInfo.year ? Number(movieInfo.year) : 0;
-                movieCandidates = [];
-                console.log('[RN-Fetch][YESMOVIES-SEARCH] hits=' + _a.length + ' want type=' + movieInfo.type + ' season=' + movieInfo.season + ' ep=' + movieInfo.episode + ' year=' + (movieInfo.year || ''));
-                for (_i = 0; _i < _a.length; _i++) {
-                    searchItem = _a[_i];
-                    type = resolveYesSearchType(searchItem);
-                    season = resolveYesSearchSeason(searchItem, type);
-                    year = resolveYesSearchYear(searchItem);
-                    href = searchItem.s;
-                    title = String(searchItem.t || '').replace(/\- *season *[0-9]+/i, '').trim();
-                    libs.log({
-                        title: title,
-                        href: href,
-                        season: season,
-                        type: type,
-                        d: searchItem.d,
-                        year: year
-                    }, PROVIDER, 'SEARCH INFO');
-                    if (!titlesMatchYes(movieInfo, title)) {
-                        continue;
-                    }
-                    if (movieInfo.type == 'movie' && type == 'movie') {
-                        movieCandidates.push({ href: href, year: year, title: title, quality: String(searchItem.q || '') });
-                        continue;
-                    }
-                    if (movieInfo.type == 'tv' && type == 'tv' && Number(movieInfo.season) > 0 && Number(season) === Number(movieInfo.season)) {
-                        LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(href, ".html");
-                        console.log('[RN-Fetch][YESMOVIES-SEARCH] match tv season=' + season + ' year=' + year + ' href=' + href + ' d=' + searchItem.d);
-                        break;
-                    }
-                }
-                if (!LINK_DETAIL && movieInfo.type == 'movie' && movieCandidates.length) {
-                    pickedMovie = pickYesMovieCandidate(movieCandidates, yearWant);
-                    if (!pickedMovie) {
-                        pickedMovie = movieCandidates[0];
-                    }
-                    LINK_DETAIL = "".concat(DOMAIN, "/movie/").concat(pickedMovie.href, ".html");
-                    console.log('[RN-Fetch][YESMOVIES-SEARCH] match movie year=' + pickedMovie.year + ' wantYear=' + yearWant + ' href=' + pickedMovie.href + ' q=' + (pickedMovie.quality || '') + ' score=' + scoreYesMovieCandidate(pickedMovie) + ' candidates=' + movieCandidates.length);
-                }
+                embedPack = _b.sent();
+                LINK_DETAIL = embedPack && embedPack.LINK_DETAIL ? embedPack.LINK_DETAIL : '';
                 libs.log({
                     LINK_DETAIL: LINK_DETAIL
                 }, PROVIDER, 'LINK DETAIL');
@@ -1502,7 +1566,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return [2];
                 }
                 return [4, fetchDetailHtml(LINK_DETAIL, headers)];
-            case 5:
+            case 3:
                 textHtml = _b.sent();
                 playURL = textHtml.match(/plyURL *\= *\"([^\"]+)/i);
                 playURL = playURL ? playURL[1] : "";
@@ -1537,7 +1601,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 console.log('[RN-Fetch][PLOYAN-DIRECT] skip RN /get/ (hash key != loc) → native webview');
                 openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
                 return [2, true];
-            case 11:
+            case 4:
                 e_1 = _b.sent();
                 debugLog('ERROR', String(e_1 && e_1.message ? e_1.message : e_1));
                 console.log('[RN-Fetch][PLOYAN-ERR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
@@ -1547,7 +1611,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     openYesmoviesWebview(mid, eid, sv, movieInfo, callback, LINK_DETAIL);
                 }
                 return [2];
-            case 12:
+            case 5:
                 return [2];
         }
     });
