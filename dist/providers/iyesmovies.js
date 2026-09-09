@@ -455,8 +455,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             var yesLocLocal = (td && td.loc) ? td.loc : 'US';
             var tsx = Math.floor((new Date()).getTime() / 1000);
             var plain = String(mid) + '+' + String(eid) + '+' + String(sv || '1') + '+' + yesLocLocal + '+' + tsx;
-            console.log('[RN-Fetch][YESMOVIES-EMBED] yesLoc=' + yesLocLocal + ' plain=' + plain);
-            return encox(plain, yesLocLocal).then(function (enc) {
+            console.log('[RN-Fetch][YESMOVIES-EMBED] yesLoc=' + yesLocLocal + ' plain=' + plain + ' encPwd=player');
+            // Page PBKDF2 uses fixed password "player"; loc stays inside plaintext only.
+            return encox(plain, 'player').then(function (enc) {
                 return {
                     urix: encodeUrix(enc),
                     yesLoc: yesLocLocal
@@ -466,7 +467,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             console.log('[RN-Fetch][YESMOVIES-EMBED] prefetch-fail ' + String(err && err.message ? err.message : err));
             var tsx = Math.floor((new Date()).getTime() / 1000);
             var plain = String(mid) + '+' + String(eid) + '+' + String(sv || '1') + '+US+' + tsx;
-            return encox(plain, 'US').then(function (enc) {
+            return encox(plain, 'player').then(function (enc) {
                 return { urix: encodeUrix(enc), yesLoc: 'US' };
             }).catch(function () {
                 return { urix: '', yesLoc: 'US' };
@@ -1327,7 +1328,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_b.label) {
             case 0:
                 PROVIDER = 'IYesMovies';
-                console.log('[RN-Fetch][PLOYAN-VERSION] v71-hd-prefer-script');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v72-enc-player');
                 // forceNew: after previous flush, reopen must start a new sync round and
                 // reset a stuck embed slot so A/X/I are not blocked by the prior WV.
                 if (typeof libs.beginVodLinkSession === 'function') {
@@ -1370,9 +1371,10 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     return __generator(this, function (_c) {
                         switch (_c.label) {
                             case 0:
-                                pwd = yesLoc || 'US';
+                                // Must match page PBKDF2 password ("player"), not CF loc.
+                                pwd = 'player';
                                 tsx = Math.floor((new Date()).getTime() / 1000);
-                                return [4, encox(mi + "+" + ei + "+" + sv + "+" + pwd + "+" + tsx, pwd)];
+                                return [4, encox(mi + "+" + ei + "+" + sv + "+" + (yesLoc || 'US') + "+" + tsx, pwd)];
                             case 1:
                                 enc = _c.sent();
                                 urixLocal = encodeUrix(enc);

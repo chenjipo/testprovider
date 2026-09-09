@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var VOD_PROVIDER = 'IYesMovies';
-callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
+function ployanCallbackHandler(dataCallback, provider, host, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
     var data, json, info, directUrl, streamHeaders;
     return __generator(this, function (_a) {
         try {
@@ -100,4 +100,6 @@ callbacksEmbed["ployan"] = function (dataCallback, provider, host, callback, met
         }
         return [2];
     });
-}); };
+}); }
+callbacksEmbed["ployan"] = ployanCallbackHandler;
+callbacksEmbed["ployan-embed"] = ployanCallbackHandler;

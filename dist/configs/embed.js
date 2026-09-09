@@ -261,7 +261,7 @@ libs.__resolveVodBatchProvider = function (urlDirect, provider, host) {
     if (url.indexOf('valking.store') >= 0) {
         return 'BlookMovie';
     }
-    if (p === 'yesmovies-embed' || h === 'yesmovies-embed' || p === 'ployan' || h === 'ployan') {
+    if (p === 'yesmovies-embed' || h === 'yesmovies-embed' || p === 'ployan' || h === 'ployan' || p === 'ployan-embed' || h === 'ployan-embed') {
         return 'IYesMovies';
     }
     return p;

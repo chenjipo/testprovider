@@ -58,6 +58,7 @@ libs.string_provider = function (provider, rank) {
         'MVidlink': 'Vidlink',
         'IYesMovies': 'I',
         'ployan': 'I',
+        'ployan-embed': 'I',
         'yesmovies-embed': 'I',
         'JustHD': 'JustHD',
         'DUniqueStream': 'DUniqueStream',
@@ -76,7 +77,7 @@ libs.string_provider = function (provider, rank) {
         return 'Server ' + labels[provider] + rank;
     }
     var normalized = String(provider || '').trim();
-    if (normalized.toLowerCase() === 'iyesmovies' || normalized === 'ployan' || normalized === 'yesmovies-embed') {
+    if (normalized.toLowerCase() === 'iyesmovies' || normalized === 'ployan' || normalized === 'ployan-embed' || normalized === 'yesmovies-embed') {
         return 'Server I';
     }
     if (!rank) {
@@ -84,7 +85,7 @@ libs.string_provider = function (provider, rank) {
     }
     return "Server ".concat(provider[0].toUpperCase()).concat(rank);
 };
-console.log('[RN-Fetch][STRING-CFG] v11-server-i-iyesmovies');
+console.log('[RN-Fetch][STRING-CFG] v12-ployan-embed');
 libs.string_encrypt_fmovies = function (input) {
     var keytwo = "51wJ0FDq/UVCefLopEcmK3ni4WIQztMjZdSYOsbHr9R2h7PvxBGAuglaN8+kXT6y";
     var output = '';
