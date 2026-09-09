@@ -347,22 +347,12 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         });
         return filtered[0] || null;
     }
-    function scheduleYesmoviesWebview(task, lockKey) {
-        var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
-        var shouldDefer = !!(libs.__deferProviderWebview && libs.__shouldSyncVodLinks && libs.__shouldSyncVodLinks() && bag && bag.startMs && !bag.flushed);
+    function armIyesWvLock(key, lockMs, via) {
         var nowMs = Date.now();
-        var lockMs = 90000;
-        var key = String(lockKey || '');
-        // Same mid/eid: allow re-open if prior attempt already unlocked or slot was reset.
-        if (key && libs.__iyesWvLockKey === key && libs.__iyesWvBusyUntil && nowMs < libs.__iyesWvBusyUntil && libs.__iyesWvActive) {
-            var remain = Math.max(0, libs.__iyesWvBusyUntil - nowMs);
-            console.log('[RN-Fetch][YESMOVIES-EMBED] skip-busy key=' + key + ' remain=' + remain + 'ms');
-            return;
-        }
+        lockMs = lockMs || 90000;
         libs.__iyesWvActive = true;
         libs.__iyesWvBusyUntil = nowMs + lockMs;
-        libs.__iyesWvLockKey = key;
-        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-lock ' + (lockMs / 1000) + 's key=' + key);
+        libs.__iyesWvLockKey = String(key || libs.__iyesWvLockKey || '');
         try {
             if (libs.__iyesWvUnlockTimer) {
                 clearTimeout(libs.__iyesWvUnlockTimer);
@@ -375,6 +365,33 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             }, lockMs);
         }
         catch (eTimer) { }
+        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-lock ' + (lockMs / 1000) + 's key=' + libs.__iyesWvLockKey + ' via=' + (via || 'arm'));
+    }
+    function scheduleYesmoviesWebview(task, lockKey) {
+        var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
+        var shouldDefer = !!(libs.__deferProviderWebview && libs.__shouldSyncVodLinks && libs.__shouldSyncVodLinks() && bag && bag.startMs && !bag.flushed);
+        var nowMs = Date.now();
+        var lockMs = 90000;
+        var key = String(lockKey || '');
+        // Same mid/eid: allow re-open if prior attempt already unlocked or slot was reset.
+        if (key && libs.__iyesWvLockKey === key && libs.__iyesWvBusyUntil && nowMs < libs.__iyesWvBusyUntil && libs.__iyesWvActive) {
+            var remain = Math.max(0, libs.__iyesWvBusyUntil - nowMs);
+            console.log('[RN-Fetch][YESMOVIES-EMBED] skip-busy key=' + key + ' remain=' + remain + 'ms');
+            return;
+        }
+        // Claim key while deferred, but do NOT start unlock countdown yet —
+        // sync wait used to burn the whole 90s so WV died right after open.
+        libs.__iyesWvActive = true;
+        libs.__iyesWvLockKey = key;
+        libs.__iyesWvBusyUntil = nowMs + 300000;
+        try {
+            if (libs.__iyesWvUnlockTimer) {
+                clearTimeout(libs.__iyesWvUnlockTimer);
+                libs.__iyesWvUnlockTimer = null;
+            }
+        }
+        catch (eClear) { }
+        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-claim key=' + key + ' (timer on run)');
         var wrapped = function () {
             // Only skip if another mid/eid superseded this lock. Do NOT require __iyesWvActive:
             // flush-time beginVodLinkSession from other providers used to clear active and cause
@@ -383,8 +400,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 console.log('[RN-Fetch][YESMOVIES-EMBED] skip-reopen superseded key=' + key + ' cur=' + libs.__iyesWvLockKey);
                 return;
             }
-            libs.__iyesWvActive = true;
-            libs.__iyesWvLockKey = key || libs.__iyesWvLockKey;
+            armIyesWvLock(key, lockMs, 'run');
             console.log('[RN-Fetch][YESMOVIES-EMBED] wv-run key=' + (libs.__iyesWvLockKey || ''));
             task();
         };
@@ -392,7 +408,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             console.log('[RN-Fetch][YESMOVIES-EMBED] defer webview after sync');
             libs.__deferProviderWebview(PROVIDER, function () {
                 if (libs.scheduleEmbedWebview) {
-                    libs.scheduleEmbedWebview(PROVIDER, wrapped, 55000);
+                    // Hold embed slot long enough for title-ok + /get/ after sync defer.
+                    libs.scheduleEmbedWebview(PROVIDER, wrapped, 75000);
                 }
                 else {
                     wrapped();
@@ -401,7 +418,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             return;
         }
         if (libs.scheduleEmbedWebview) {
-            libs.scheduleEmbedWebview(PROVIDER, wrapped, 55000);
+            libs.scheduleEmbedWebview(PROVIDER, wrapped, 75000);
         }
         else {
             wrapped();
@@ -1327,7 +1344,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_b.label) {
             case 0:
                 PROVIDER = 'IYesMovies';
-                console.log('[RN-Fetch][PLOYAN-VERSION] v74-force-get');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v75-lock-on-run');
                 // forceNew: after previous flush, reopen must start a new sync round and
                 // reset a stuck embed slot so A/X/I are not blocked by the prior WV.
                 if (typeof libs.beginVodLinkSession === 'function') {
