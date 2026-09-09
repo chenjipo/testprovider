@@ -80,7 +80,7 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                 return [2];
             }
             libs.log({ data: data }, provider, 'PLOYAN WEBVIEW');
-            if (data.responseText && data.responseText.charAt(0) === '{' && (data.source === 'inject' || data.source === 'hook' || data.source === 'xhr' || (data.responseURL && data.responseURL.indexOf('/get/') != -1))) {
+            if (data.responseText && data.responseText.charAt(0) === '{' && (data.source === 'inject' || data.source === 'hook' || data.source === 'xhr' || data.source === 'force' || (data.responseURL && data.responseURL.indexOf('/get/') != -1))) {
                 json = JSON.parse(data.responseText);
                 if (json && json.code === 200 && json.info) {
                     info = json.info;
