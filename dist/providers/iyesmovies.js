@@ -367,6 +367,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     console.log('[RN-Fetch][YESMOVIES-EMBED] wv-unlock ignore-stale gen=' + gen + ' cur=' + libs.__iyesWvLockGen);
                     return;
                 }
+                libs.__iyesWvLockGen = (libs.__iyesWvLockGen || 0) + 1;
                 libs.__iyesWvActive = false;
                 libs.__iyesWvBusyUntil = 0;
                 libs.__iyesWvLockKey = '';
@@ -393,6 +394,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         libs.__iyesWvActive = true;
         libs.__iyesWvLockKey = key;
         libs.__iyesWvBusyUntil = nowMs + 300000;
+        libs.__iyesLastDeliverKey = '';
+        libs.__iyesDelivering = false;
         try {
             if (libs.__iyesWvUnlockTimer) {
                 clearTimeout(libs.__iyesWvUnlockTimer);
@@ -414,7 +417,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             console.log('[RN-Fetch][YESMOVIES-EMBED] defer webview after sync');
             libs.__deferProviderWebview(PROVIDER, function () {
                 if (libs.scheduleEmbedWebview) {
-                    libs.scheduleEmbedWebview(PROVIDER, wrapped, 90000);
+                    libs.scheduleEmbedWebview(PROVIDER, wrapped, 120000);
                 }
                 else {
                     wrapped();
@@ -423,7 +426,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             return;
         }
         if (libs.scheduleEmbedWebview) {
-            libs.scheduleEmbedWebview(PROVIDER, wrapped, 90000);
+            libs.scheduleEmbedWebview(PROVIDER, wrapped, 120000);
         }
         else {
             wrapped();
@@ -1501,7 +1504,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_b.label) {
             case 0:
                 PROVIDER = 'IYesMovies';
-                console.log('[RN-Fetch][PLOYAN-VERSION] v78-force-wait-native');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v79-stable-i');
                 // forceNew: after previous flush, reopen must start a new sync round and
                 // reset a stuck embed slot so A/X/I are not blocked by the prior WV.
                 if (typeof libs.beginVodLinkSession === 'function') {

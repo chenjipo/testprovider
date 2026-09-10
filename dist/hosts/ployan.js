@@ -53,14 +53,15 @@ function buildPloyanInjectScript(urix, mid, eid, sv, yesLoc, yesReferer) {
     return [
         "(function(){",
         "var u='" + sUrix + "',yl='" + sYesLoc + "',mid='" + sMid + "',eid='" + sEid + "',sv='" + sSv + "',yref='" + sRef + "',",
-        "done=0,pwdCap='',dead=0,titleOk=0,forcing=0,nativeGetAt=0,forceTried=0;",
+        "done=0,pwdCap='',dead=0,titleOk=0,forcing=0,nativeGetAt=0,forceTried=0,shellNudge=0;",
         "function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}",
         "try{pm({step:'inject-boot',host:location.hostname,path:location.pathname,urixLen:(u||'').length});}catch(e0){}",
         "try{Object.defineProperty(document,'referrer',{configurable:true,get:function(){return yref;}});}catch(eRef){}",
         "try{Object.defineProperty(navigator,'webdriver',{configurable:true,get:function(){return false;}});}catch(eWd){}",
         "function markDone(m){if(m&&m.status===200&&m.responseText&&m.responseText.charAt(0)==='{'){try{var j=JSON.parse(m.responseText);if(j&&j.code===200&&j.info){done=1;}}catch(eJ){}}}",
         "function checkDead(){try{var t=(document.title||'')+' '+(document.body&&document.body.innerText||'');if(/404|unavailable|not found|oops/i.test(t)&&!/^\\d+-\\d+/.test(document.title||'')){if(!dead){dead=1;pm({step:'page-404',title:(document.title||'').substring(0,80),body:t.replace(/\\s+/g,' ').substring(0,140)});}}}catch(eZ){}}",
-        "function checkTitle(){try{var t=String(document.title||'');if(/^\\d+-\\d+/.test(t)){if(!titleOk){titleOk=1;pm({step:'title-ok',title:t.substring(0,40)});setTimeout(function(){maybeForce('title');},2500);}return true;}}catch(eT){}return false;}",
+        "function checkTitle(){try{var t=String(document.title||'');if(/^\\d+-\\d+/.test(t)){if(!titleOk){titleOk=1;pm({step:'title-ok',title:t.substring(0,40)});setTimeout(function(){maybeForce('title');},2800);}return true;}}catch(eT){}return false;}",
+        "function nudgeShell(){try{if(done||dead||titleOk||shellNudge)return;if(/^\\d+-\\d+/.test(String(document.title||'')))return;shellNudge=1;if(u){history.replaceState(null,'',location.pathname+location.search+'#'+u);}pm({step:'shell-nudge',title:(document.title||'').substring(0,60)});try{window.dispatchEvent(new HashChangeEvent('hashchange'));}catch(eH){try{window.dispatchEvent(new Event('hashchange'));}catch(eH2){}}}catch(eN){}}",
         "function toHex(buf){return Array.from(new Uint8Array(buf)).map(function(b){return('0'+b.toString(16)).slice(-2);}).join('');}",
         "function makeGetHash(pwd){return crypto.subtle.importKey('raw',new TextEncoder().encode(String(pwd||'player')),'PBKDF2',false,['deriveKey']).then(function(base){var salt=crypto.getRandomValues(new Uint8Array(8));var iv=crypto.getRandomValues(new Uint8Array(12));var ts=Math.floor(Date.now()/1000);var plain=String(mid)+'+'+String(eid)+'+'+String(sv)+'+'+ts;return crypto.subtle.deriveKey({name:'PBKDF2',salt:salt,iterations:1000,hash:'SHA-256'},base,{name:'AES-GCM',length:256},false,['encrypt']).then(function(key){return crypto.subtle.encrypt({name:'AES-GCM',iv:iv},key,new TextEncoder().encode(plain)).then(function(ct){return toHex(salt)+'-'+toHex(iv)+'-'+toHex(ct);});});});}",
         "function fetchGet(hash){",
@@ -76,7 +77,7 @@ function buildPloyanInjectScript(urix, mid, eid, sv, yesLoc, yesReferer) {
         "function maybeForce(tag){",
         "  if(done||dead)return;",
         "  var age=nativeGetAt?(Date.now()-nativeGetAt):99999;",
-        "  if(nativeGetAt&&age<2200){pm({step:'force-wait-native',src:tag||'',age:age});setTimeout(function(){maybeForce(tag||'retry');},2300-age);return;}",
+        "  if(nativeGetAt&&age<3500){pm({step:'force-wait-native',src:tag||'',age:age});setTimeout(function(){maybeForce(tag||'retry');},3600-age);return;}",
         "  forceGet(tag);",
         "}",
         "function forceGet(tag){",
@@ -84,7 +85,7 @@ function buildPloyanInjectScript(urix, mid, eid, sv, yesLoc, yesReferer) {
         "  if(!crypto||!crypto.subtle){pm({step:'force-get-skip',reason:'no-subtle'});return;}",
         "  forcing=1;forceTried=1;",
         "  var pwds=[];function addPwd(p){p=String(p||'');if(p&&pwds.indexOf(p)<0)pwds.push(p);}",
-        "  addPwd('player');addPwd(pwdCap);addPwd(yl||'US');",
+        "  addPwd('player');addPwd(pwdCap);",
         "  pm({step:'force-get-start',src:tag||'',pwds:pwds.join(',')});",
         "  var i=0;",
         "  function next(){",
@@ -172,7 +173,8 @@ function buildPloyanInjectScript(urix, mid, eid, sv, yesLoc, yesReferer) {
         "try{hookNet();}catch(e4){pm({step:'hook-err',error:String(e4)});}",
         "pm({step:'native-wait'});",
         "try{new MutationObserver(function(){checkTitle();}).observe(document.documentElement,{childList:true,subtree:true,characterData:true});}catch(eMo){}",
-        "setTimeout(function(){if(!done&&!dead&&!titleOk){pm({step:'shell-stuck',title:(document.title||'').substring(0,60)});}},5000);",
+        "setTimeout(function(){if(!done&&!dead&&!titleOk){nudgeShell();}},2500);",
+        "setTimeout(function(){if(!done&&!dead&&!titleOk){pm({step:'shell-stuck',title:(document.title||'').substring(0,60)});}},4500);",
         "[800,1200,3000,7000,12000].forEach(function(ms){setTimeout(function(){if(!done)kickPlay('t'+ms);},ms);});",
         "[1500,2000,5000,10000,18000].forEach(function(ms){setTimeout(function(){if(!done){pm({step:'native-pending',ms:ms});diag(ms);}},ms);});",
         "setTimeout(function(){if(!done){pm({step:'native-timeout'});diag(25000);}},25000);",
@@ -200,7 +202,7 @@ hosts["ployan"] = function (url, movieInfo, provider, config, callback) { return
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
         };
         beforeLoadScript = buildPloyanInjectScript(urix, mid, eid, sv, yesLoc, yesReferer);
-        console.log('[RN-Fetch][PLOYAN-HOST] v15-force-wait-native url=' + loadUrl.substring(0, 120) + ' urixLen=' + String(urix || '').length);
+        console.log('[RN-Fetch][PLOYAN-HOST] v16-stable-i url=' + loadUrl.substring(0, 120) + ' urixLen=' + String(urix || '').length);
         try {
             callback({
                 callback: {
