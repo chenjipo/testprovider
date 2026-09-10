@@ -349,29 +349,38 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     }
     function armIyesWvLock(key, lockMs, via) {
         var nowMs = Date.now();
+        var gen = 0;
         lockMs = lockMs || 90000;
+        libs.__iyesWvLockGen = (libs.__iyesWvLockGen || 0) + 1;
+        gen = libs.__iyesWvLockGen;
         libs.__iyesWvActive = true;
         libs.__iyesWvBusyUntil = nowMs + lockMs;
         libs.__iyesWvLockKey = String(key || libs.__iyesWvLockKey || '');
         try {
             if (libs.__iyesWvUnlockTimer) {
                 clearTimeout(libs.__iyesWvUnlockTimer);
+                libs.__iyesWvUnlockTimer = null;
             }
             libs.__iyesWvUnlockTimer = setTimeout(function () {
+                // Ignore stale timers from a previous movie / forceNew session.
+                if (libs.__iyesWvLockGen !== gen) {
+                    console.log('[RN-Fetch][YESMOVIES-EMBED] wv-unlock ignore-stale gen=' + gen + ' cur=' + libs.__iyesWvLockGen);
+                    return;
+                }
                 libs.__iyesWvActive = false;
                 libs.__iyesWvBusyUntil = 0;
                 libs.__iyesWvLockKey = '';
-                console.log('[RN-Fetch][YESMOVIES-EMBED] wv-unlock timeout');
+                console.log('[RN-Fetch][YESMOVIES-EMBED] wv-unlock timeout gen=' + gen);
             }, lockMs);
         }
         catch (eTimer) { }
-        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-lock ' + (lockMs / 1000) + 's key=' + libs.__iyesWvLockKey + ' via=' + (via || 'arm'));
+        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-lock ' + (lockMs / 1000) + 's key=' + libs.__iyesWvLockKey + ' via=' + (via || 'arm') + ' gen=' + gen);
     }
     function scheduleYesmoviesWebview(task, lockKey) {
         var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
         var shouldDefer = !!(libs.__deferProviderWebview && libs.__shouldSyncVodLinks && libs.__shouldSyncVodLinks() && bag && bag.startMs && !bag.flushed);
         var nowMs = Date.now();
-        var lockMs = 90000;
+        var lockMs = 120000;
         var key = String(lockKey || '');
         // Same mid/eid: allow re-open if prior attempt already unlocked or slot was reset.
         if (key && libs.__iyesWvLockKey === key && libs.__iyesWvBusyUntil && nowMs < libs.__iyesWvBusyUntil && libs.__iyesWvActive) {
@@ -379,8 +388,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             console.log('[RN-Fetch][YESMOVIES-EMBED] skip-busy key=' + key + ' remain=' + remain + 'ms');
             return;
         }
-        // Claim key while deferred, but do NOT start unlock countdown yet —
-        // sync wait used to burn the whole 90s so WV died right after open.
+        // Claim key while deferred; bump gen so any prior unlock timer becomes stale.
+        libs.__iyesWvLockGen = (libs.__iyesWvLockGen || 0) + 1;
         libs.__iyesWvActive = true;
         libs.__iyesWvLockKey = key;
         libs.__iyesWvBusyUntil = nowMs + 300000;
@@ -391,11 +400,8 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             }
         }
         catch (eClear) { }
-        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-claim key=' + key + ' (timer on run)');
+        console.log('[RN-Fetch][YESMOVIES-EMBED] wv-claim key=' + key + ' gen=' + libs.__iyesWvLockGen + ' (timer on run)');
         var wrapped = function () {
-            // Only skip if another mid/eid superseded this lock. Do NOT require __iyesWvActive:
-            // flush-time beginVodLinkSession from other providers used to clear active and cause
-            // skip-reopen inactive right at SYNC-DEFER-RUN.
             if (key && libs.__iyesWvLockKey && libs.__iyesWvLockKey !== key) {
                 console.log('[RN-Fetch][YESMOVIES-EMBED] skip-reopen superseded key=' + key + ' cur=' + libs.__iyesWvLockKey);
                 return;
@@ -408,8 +414,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             console.log('[RN-Fetch][YESMOVIES-EMBED] defer webview after sync');
             libs.__deferProviderWebview(PROVIDER, function () {
                 if (libs.scheduleEmbedWebview) {
-                    // Hold embed slot long enough for title-ok + /get/ after sync defer.
-                    libs.scheduleEmbedWebview(PROVIDER, wrapped, 75000);
+                    libs.scheduleEmbedWebview(PROVIDER, wrapped, 90000);
                 }
                 else {
                     wrapped();
@@ -418,7 +423,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
             return;
         }
         if (libs.scheduleEmbedWebview) {
-            libs.scheduleEmbedWebview(PROVIDER, wrapped, 75000);
+            libs.scheduleEmbedWebview(PROVIDER, wrapped, 90000);
         }
         else {
             wrapped();
@@ -888,7 +893,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     }
     function findYesmoviesLinkDetail(movieInfo, reqHeaders) {
         return __awaiter(this, void 0, void 0, function () {
-            var DOMAIN_LOCAL, queries, qi, q, urlSearch, resSearch, hits, matched, seasons;
+            var DOMAIN_LOCAL, queries, qi, q, urlSearch, resSearch, hits, matched, seasons, allTv;
             return __generator(this, function (_a) {
                 switch (_a.label) {
                     case 0:
@@ -900,6 +905,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         }
                         qi = 0;
                         matched = { LINK_DETAIL: '', movieCandidates: [], tvCandidates: [] };
+                        allTv = [];
                         _a.label = 1;
                     case 1:
                         if (!(qi < queries.length)) {
@@ -922,6 +928,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         libs.log({ length: hits.length }, 'IYesMovies', 'SEARCH LENGTH');
                         console.log('[RN-Fetch][YESMOVIES-SEARCH] hits=' + hits.length + ' want type=' + movieInfo.type + ' season=' + movieInfo.season + ' ep=' + movieInfo.episode + ' year=' + (movieInfo.year || ''));
                         matched = matchYesSearchHits(hits, movieInfo);
+                        if (matched.tvCandidates && matched.tvCandidates.length) {
+                            allTv = allTv.concat(matched.tvCandidates);
+                        }
                         if (matched.LINK_DETAIL) {
                             return [2, matched];
                         }
@@ -933,8 +942,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         return [3, 1];
                     case 4:
                         if (movieInfo.type == 'tv') {
-                            seasons = (matched.tvCandidates || []).map(function (c) { return String(c.season) + '@' + c.year; }).join(',');
+                            seasons = allTv.map(function (c) { return String(c.season) + '@' + c.year; }).filter(function (v, i, a) { return a.indexOf(v) === i; }).join(',');
                             console.log('[RN-Fetch][YESMOVIES-SEARCH] ABORT tv wantSeason=' + movieInfo.season + ' available=[' + seasons + '] (site may lack this season)');
+                            matched.tvCandidates = allTv;
                         }
                         return [2, matched];
                 }
@@ -1491,7 +1501,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_b.label) {
             case 0:
                 PROVIDER = 'IYesMovies';
-                console.log('[RN-Fetch][PLOYAN-VERSION] v76-tv-search-shellfb');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v77-lock-gen');
                 // forceNew: after previous flush, reopen must start a new sync round and
                 // reset a stuck embed slot so A/X/I are not blocked by the prior WV.
                 if (typeof libs.beginVodLinkSession === 'function') {
