@@ -54,7 +54,7 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                 return [2];
             }
             if (data.step) {
-                console.log('[RN-Fetch][PLOYAN-STEP] ' + data.step + (data.mode ? ' mode=' + data.mode : '') + (data.host ? ' host=' + data.host : '') + (data.loc ? ' loc=' + data.loc : '') + (data.plain ? ' plain=' + data.plain : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.urixLen !== undefined ? ' urixLen=' + data.urixLen : '') + (data.hashLen !== undefined ? ' hashLen=' + data.hashLen : '') + (data.ms !== undefined ? ' ms=' + data.ms : '') + (data.title ? ' title=' + data.title : '') + (data.body ? ' body=' + data.body : '') + (data.pwd ? ' pwd=' + data.pwd : '') + (data.referrer ? ' ref=' + data.referrer : '') + (data.clicked !== undefined ? ' clicked=' + data.clicked : '') + (data.to ? ' to=' + data.to : '') + (data.src ? ' src=' + data.src : '') + (data.error ? ' err=' + data.error : '') + (data.source ? ' source=' + data.source : '') + (data.dead !== undefined ? ' dead=' + data.dead : ''));
+                console.log('[RN-Fetch][PLOYAN-STEP] ' + data.step + (data.mode ? ' mode=' + data.mode : '') + (data.host ? ' host=' + data.host : '') + (data.loc ? ' loc=' + data.loc : '') + (data.plain ? ' plain=' + data.plain : '') + (data.status !== undefined ? ' status=' + data.status : '') + (data.urixLen !== undefined ? ' urixLen=' + data.urixLen : '') + (data.hashLen !== undefined ? ' hashLen=' + data.hashLen : '') + (data.ms !== undefined ? ' ms=' + data.ms : '') + (data.title ? ' title=' + data.title : '') + (data.body ? ' body=' + data.body : '') + (data.pwd ? ' pwd=' + data.pwd : '') + (data.pwds ? ' pwds=' + data.pwds : '') + (data.tried ? ' tried=' + data.tried : '') + (data.age !== undefined ? ' age=' + data.age : '') + (data.referrer ? ' ref=' + data.referrer : '') + (data.clicked !== undefined ? ' clicked=' + data.clicked : '') + (data.to ? ' to=' + data.to : '') + (data.src ? ' src=' + data.src : '') + (data.error ? ' err=' + data.error : '') + (data.source ? ' source=' + data.source : '') + (data.dead !== undefined ? ' dead=' + data.dead : ''));
                 if (data.step === 'page-404') {
                     try {
                         libs.__iyesWvActive = false;
@@ -103,7 +103,11 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                 return [2];
             }
             libs.log({ data: data }, provider, 'PLOYAN WEBVIEW');
-            if (data.responseText && data.responseText.charAt(0) === '{' && (data.source === 'inject' || data.source === 'hook' || data.source === 'xhr' || data.source === 'force' || (data.responseURL && data.responseURL.indexOf('/get/') != -1))) {
+            if (data.responseText && (data.source === 'inject' || data.source === 'hook' || data.source === 'xhr' || data.source === 'force' || (data.responseURL && data.responseURL.indexOf('/get/') != -1))) {
+                if (data.responseText.charAt(0) !== '{') {
+                    console.log('[RN-Fetch][PLOYAN-GET-FAIL] status=' + data.status + ' source=' + data.source + ' body=' + String(data.responseText).substring(0, 120));
+                    return [2];
+                }
                 json = JSON.parse(data.responseText);
                 if (json && json.code === 200 && json.info) {
                     info = json.info;
@@ -133,6 +137,9 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                             libs.__closeEmbedWebview(callback, metadata);
                         }
                     }, 300);
+                }
+                else {
+                    console.log('[RN-Fetch][PLOYAN-GET-FAIL] status=' + data.status + ' code=' + (json && json.code) + ' source=' + data.source + ' body=' + String(data.responseText).substring(0, 120));
                 }
             }
         }
