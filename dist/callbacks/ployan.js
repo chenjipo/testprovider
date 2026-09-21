@@ -165,12 +165,23 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                     // Bundling end+file made the App finalize the source list while A/X/L/B were still arriving.
                     libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {});
                     console.log('[RN-Fetch][PLOYAN-DELIVER] Server I file=' + directUrl.substring(0, 100));
-                    setTimeout(function () {
+                    var closeTries = 0;
+                    var closeWhenFlushed = function () {
+                        var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
+                        var flushed = !!(bag && bag.flushed);
+                        var elapsed = bag && bag.startMs ? (Date.now() - bag.startMs) : 999999;
+                        closeTries += 1;
+                        if (!flushed && elapsed < 45000 && closeTries < 40) {
+                            setTimeout(closeWhenFlushed, 1000);
+                            return;
+                        }
                         libs.__iyesDelivering = false;
+                        console.log('[RN-Fetch][PLOYAN-WV-CLOSE] flushed=' + (flushed ? 1 : 0) + ' elapsed=' + elapsed + 'ms');
                         if (typeof libs.__closeEmbedWebview === 'function') {
                             libs.__closeEmbedWebview(callback, metadata);
                         }
-                    }, 300);
+                    };
+                    setTimeout(closeWhenFlushed, 300);
                 }
                 else {
                     console.log('[RN-Fetch][PLOYAN-GET-FAIL] status=' + data.status + ' code=' + (json && json.code) + ' source=' + data.source + ' body=' + String(data.responseText).substring(0, 120));

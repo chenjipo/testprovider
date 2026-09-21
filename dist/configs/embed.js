@@ -381,7 +381,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v32-iyes-defer-8s';
+libs.__embedSyncVersion = 'v33-iyes-after-flush';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -616,8 +616,8 @@ libs.__deferProviderWebview = function (provider, task) {
     // Wait for YAX flush (A/X/L/B first). Only open I after flush or hard deadline.
     // v28's fixed 7s FALLBACK opened I before sync and is_end_webview could freeze the UI on Server I only.
     var startedAt = Date.now();
-    // I must not sit on the 28s YAX deadline when A never flushes (502). Open sooner.
-    var maxWaitMs = provider === 'IYesMovies' ? 8000 : ((libs.__vodSyncHardMaxMs || 26000) + 2000);
+    // Do not open I at 8s. Early WebView + is_end_webview freezes the list on Server I only.
+    var maxWaitMs = (libs.__vodSyncHardMaxMs || 26000) + 2000;
     var pollMs = 1000;
     var tryRun = function () {
         var map = libs.__vodDeferredWebviews || {};
