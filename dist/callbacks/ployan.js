@@ -139,13 +139,6 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                 if (json && json.code === 200 && json.info) {
                     info = json.info;
                     directUrl = 'https://ployan.me/hls/' + info + '/master.m3u8';
-                    var deliverKey = String((metadata && metadata.mid) || '') + ':' + String((metadata && metadata.eid) || '') + ':' + String(info);
-                    if (libs.__iyesLinkQueued) {
-                        console.log('[RN-Fetch][PLOYAN-DELIVER] skip-dup');
-                        return [2];
-                    }
-                    libs.__iyesLinkQueued = true;
-                    libs.__iyesLastDeliverKey = deliverKey;
                     console.log('[RN-Fetch][PLOYAN-GET-CB] ' + directUrl);
                     try {
                         libs.__iyesWvLockGen = (libs.__iyesWvLockGen || 0) + 1;
@@ -163,11 +156,20 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                         'Referer': 'https://ployan.me/',
                         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
                     };
-                    // Join the same sync flush as the other servers. No timer: playback
-                    // freezes setTimeout, so a delayed deliver never reaches the list.
-                    // No is_end_webview: that call finalized the list as Server I only.
-                    libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {});
-                    console.log('[RN-Fetch][PLOYAN-DELIVER] Server I queued file=' + directUrl.substring(0, 80));
+                    // Hand the file to the wrapped app callback. That wrapper lives in
+                    // embed.js and pushes into the real sync bag. Calling embed_callback
+                    // from here delivers straight to the UI and leaves only Server I.
+                    callback({
+                        file: directUrl,
+                        quality: 'Hls',
+                        host: 'IYesMovies',
+                        source: 'IYesMovies',
+                        provider: 'IYesMovies',
+                        headers: streamHeaders,
+                        direct_quality: [{ file: directUrl, quality: 1080 }],
+                        __iyesHoldForSync: true
+                    });
+                    console.log('[RN-Fetch][PLOYAN-DELIVER] handoff file=' + directUrl.substring(0, 80));
                 }
                 else {
                     console.log('[RN-Fetch][PLOYAN-GET-FAIL] status=' + data.status + ' code=' + (json && json.code) + ' source=' + data.source + ' body=' + String(data.responseText).substring(0, 120));
