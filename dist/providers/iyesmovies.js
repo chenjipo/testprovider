@@ -1504,12 +1504,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_b.label) {
             case 0:
                 PROVIDER = 'IYesMovies';
-                console.log('[RN-Fetch][PLOYAN-VERSION] v83-hold-deliver');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v84-hold-clock');
                 // forceNew: after previous flush, reopen must start a new sync round and
                 // reset a stuck embed slot so A/X/I are not blocked by the prior WV.
                 if (typeof libs.beginVodLinkSession === 'function') {
                     libs.beginVodLinkSession(true);
                 }
+                libs.__iyesHoldUntil = Date.now() + 32000;
                 libs.__iyesShellFallback = false;
                 callback = libs.__captureVodCallback ? libs.__captureVodCallback(callback) : callback;
                 DOMAIN = "https://ww2.yesmovies.ag";

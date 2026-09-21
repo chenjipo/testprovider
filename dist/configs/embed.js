@@ -381,7 +381,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v35-iyes-hold-deliver';
+libs.__embedSyncVersion = 'v36-iyes-hold-clock';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -582,6 +582,7 @@ libs.__flushVodSyncItems = function () {
     bag.items = [];
     libs.__vodSyncItems = bag.items;
     libs.__vodSyncFlushed = true;
+    libs.__iyesSyncFlushed = true;
     if (bag.coalesceTimer) {
         clearTimeout(bag.coalesceTimer);
         bag.coalesceTimer = null;
@@ -703,6 +704,7 @@ libs.__finishSyncSession = function (reason) {
     }
     bag.flushed = true;
     libs.__vodSyncFlushed = true;
+    libs.__iyesSyncFlushed = true;
     if (bag.timer) {
         clearTimeout(bag.timer);
         bag.timer = null;
@@ -879,6 +881,7 @@ libs.beginVodLinkSession = function (forceNew) {
         libs.__vodSyncStartMs = bag.startMs;
         libs.__vodSyncItems = bag.items;
         libs.__vodSyncFlushed = false;
+        libs.__iyesSyncFlushed = false;
         libs.__vodSyncDeliveredProviders = {};
         libs.__vidlinkDelivered = {};
         libs.__vidlinkPlayLock = {};

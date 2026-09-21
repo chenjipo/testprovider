@@ -172,27 +172,30 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                             console.log('[RN-Fetch][PLOYAN-DELIVER] hold-drop stale gen=' + holdGen);
                             return;
                         }
-                        var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
-                        var flushed = !!(bag && bag.flushed);
-                        var elapsed = bag && bag.startMs ? (Date.now() - bag.startMs) : 999999;
+                        var flushed = libs.__vodSyncFlushed === true || libs.__iyesSyncFlushed === true;
+                        var holdUntil = libs.__iyesHoldUntil || 0;
+                        var left = holdUntil ? (holdUntil - Date.now()) : 0;
                         holdTries += 1;
-                        if (!flushed && elapsed < 36000 && holdTries < 40) {
+                        if (!flushed && left > 0 && holdTries < 45) {
+                            if (holdTries === 1 || holdTries % 5 === 0) {
+                                console.log('[RN-Fetch][PLOYAN-DELIVER] hold-wait left=' + left + 'ms');
+                            }
                             setTimeout(deliverWhenFlushed, 1000);
                             return;
                         }
                         libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {});
-                        console.log('[RN-Fetch][PLOYAN-DELIVER] Server I flushed=' + (flushed ? 1 : 0) + ' elapsed=' + elapsed + 'ms file=' + directUrl.substring(0, 80));
+                        console.log('[RN-Fetch][PLOYAN-DELIVER] Server I flushed=' + (flushed ? 1 : 0) + ' left=' + left + 'ms file=' + directUrl.substring(0, 80));
                         setTimeout(function () {
                             if ((libs.__iyesWvLockGen || 0) !== holdGen) {
                                 libs.__iyesDelivering = false;
                                 return;
                             }
                             libs.__iyesDelivering = false;
-                            console.log('[RN-Fetch][PLOYAN-WV-CLOSE] flushed=' + (flushed ? 1 : 0) + ' elapsed=' + elapsed + 'ms');
+                            console.log('[RN-Fetch][PLOYAN-WV-CLOSE] flushed=' + (flushed ? 1 : 0));
                             if (typeof libs.__closeEmbedWebview === 'function') {
                                 libs.__closeEmbedWebview(callback, metadata);
                             }
-                        }, 1500);
+                        }, 2000);
                     };
                     setTimeout(deliverWhenFlushed, 300);
                 }
