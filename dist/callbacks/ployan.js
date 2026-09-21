@@ -161,27 +161,40 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                         'Referer': 'https://ployan.me/',
                         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
                     };
-                    // Deliver Server I WITHOUT is_end_webview on the same tick as the file.
-                    // Bundling end+file made the App finalize the source list while A/X/L/B were still arriving.
-                    libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {});
-                    console.log('[RN-Fetch][PLOYAN-DELIVER] Server I file=' + directUrl.substring(0, 100));
-                    var closeTries = 0;
-                    var closeWhenFlushed = function () {
+                    // Do not embed_callback yet. An early Server I file makes the App
+                    // finalize the list before A/X/L/B flush, so only I remains.
+                    var holdGen = libs.__iyesWvLockGen || 0;
+                    var holdTries = 0;
+                    console.log('[RN-Fetch][PLOYAN-DELIVER] hold-until-flush ' + directUrl.substring(0, 80));
+                    var deliverWhenFlushed = function () {
+                        if ((libs.__iyesWvLockGen || 0) !== holdGen) {
+                            libs.__iyesDelivering = false;
+                            console.log('[RN-Fetch][PLOYAN-DELIVER] hold-drop stale gen=' + holdGen);
+                            return;
+                        }
                         var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
                         var flushed = !!(bag && bag.flushed);
                         var elapsed = bag && bag.startMs ? (Date.now() - bag.startMs) : 999999;
-                        closeTries += 1;
-                        if (!flushed && elapsed < 45000 && closeTries < 40) {
-                            setTimeout(closeWhenFlushed, 1000);
+                        holdTries += 1;
+                        if (!flushed && elapsed < 36000 && holdTries < 40) {
+                            setTimeout(deliverWhenFlushed, 1000);
                             return;
                         }
-                        libs.__iyesDelivering = false;
-                        console.log('[RN-Fetch][PLOYAN-WV-CLOSE] flushed=' + (flushed ? 1 : 0) + ' elapsed=' + elapsed + 'ms');
-                        if (typeof libs.__closeEmbedWebview === 'function') {
-                            libs.__closeEmbedWebview(callback, metadata);
-                        }
+                        libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {});
+                        console.log('[RN-Fetch][PLOYAN-DELIVER] Server I flushed=' + (flushed ? 1 : 0) + ' elapsed=' + elapsed + 'ms file=' + directUrl.substring(0, 80));
+                        setTimeout(function () {
+                            if ((libs.__iyesWvLockGen || 0) !== holdGen) {
+                                libs.__iyesDelivering = false;
+                                return;
+                            }
+                            libs.__iyesDelivering = false;
+                            console.log('[RN-Fetch][PLOYAN-WV-CLOSE] flushed=' + (flushed ? 1 : 0) + ' elapsed=' + elapsed + 'ms');
+                            if (typeof libs.__closeEmbedWebview === 'function') {
+                                libs.__closeEmbedWebview(callback, metadata);
+                            }
+                        }, 1500);
                     };
-                    setTimeout(closeWhenFlushed, 300);
+                    setTimeout(deliverWhenFlushed, 300);
                 }
                 else {
                     console.log('[RN-Fetch][PLOYAN-GET-FAIL] status=' + data.status + ' code=' + (json && json.code) + ' source=' + data.source + ' body=' + String(data.responseText).substring(0, 120));
