@@ -140,20 +140,14 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                     info = json.info;
                     directUrl = 'https://ployan.me/hls/' + info + '/master.m3u8';
                     var deliverKey = String((metadata && metadata.mid) || '') + ':' + String((metadata && metadata.eid) || '') + ':' + String(info);
-                    var midNow = String((metadata && metadata.mid) || '');
-                    if (iyesHoldActive && iyesHoldMid === midNow) {
-                        console.log('[RN-Fetch][PLOYAN-DELIVER] skip-dup mid=' + midNow);
+                    if (libs.__iyesLinkQueued) {
+                        console.log('[RN-Fetch][PLOYAN-DELIVER] skip-dup');
                         return [2];
                     }
-                    iyesHoldSerial += 1;
-                    var mySerial = iyesHoldSerial;
-                    iyesHoldActive = true;
-                    iyesHoldMid = midNow;
-                    libs.__iyesDelivering = true;
+                    libs.__iyesLinkQueued = true;
                     libs.__iyesLastDeliverKey = deliverKey;
                     console.log('[RN-Fetch][PLOYAN-GET-CB] ' + directUrl);
                     try {
-                        // Bump gen so ANY prior unlock timers (not just the last id) go stale.
                         libs.__iyesWvLockGen = (libs.__iyesWvLockGen || 0) + 1;
                         libs.__iyesWvActive = false;
                         libs.__iyesWvBusyUntil = 0;
@@ -169,39 +163,11 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                         'Referer': 'https://ployan.me/',
                         'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
                     };
-                    // Do not embed_callback yet. An early Server I file makes the App
-                    // finalize the list before A/X/L/B flush, so only I remains.
-                    var holdTries = 0;
-                    console.log('[RN-Fetch][PLOYAN-DELIVER] hold-until-flush v85 ' + directUrl.substring(0, 80));
-                    var deliverWhenFlushed = function () {
-                        if (iyesHoldSerial !== mySerial) {
-                            console.log('[RN-Fetch][PLOYAN-DELIVER] hold-drop stale mid=' + midNow);
-                            return;
-                        }
-                        var flushed = libs.__vodSyncFlushed === true || libs.__iyesSyncFlushed === true;
-                        holdTries += 1;
-                        if (!flushed && holdTries < 24) {
-                            if (holdTries === 1 || holdTries % 5 === 0) {
-                                console.log('[RN-Fetch][PLOYAN-DELIVER] hold-wait try=' + holdTries);
-                            }
-                            setTimeout(deliverWhenFlushed, 1000);
-                            return;
-                        }
-                        libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {});
-                        console.log('[RN-Fetch][PLOYAN-DELIVER] Server I flushed=' + (flushed ? 1 : 0) + ' try=' + holdTries + ' file=' + directUrl.substring(0, 80));
-                        setTimeout(function () {
-                            if (iyesHoldSerial !== mySerial) {
-                                return;
-                            }
-                            iyesHoldActive = false;
-                            libs.__iyesDelivering = false;
-                            console.log('[RN-Fetch][PLOYAN-WV-CLOSE] flushed=' + (flushed ? 1 : 0));
-                            if (typeof libs.__closeEmbedWebview === 'function') {
-                                libs.__closeEmbedWebview(callback, metadata);
-                            }
-                        }, 2000);
-                    };
-                    setTimeout(deliverWhenFlushed, 1000);
+                    // Join the same sync flush as the other servers. No timer: playback
+                    // freezes setTimeout, so a delayed deliver never reaches the list.
+                    // No is_end_webview: that call finalized the list as Server I only.
+                    libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {});
+                    console.log('[RN-Fetch][PLOYAN-DELIVER] Server I queued file=' + directUrl.substring(0, 80));
                 }
                 else {
                     console.log('[RN-Fetch][PLOYAN-GET-FAIL] status=' + data.status + ' code=' + (json && json.code) + ' source=' + data.source + ' body=' + String(data.responseText).substring(0, 120));

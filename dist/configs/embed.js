@@ -337,8 +337,12 @@ libs.__isVodBatchProvider = function (provider) {
     if (libs.__vodSyncYaxEnabled && libs.__isVodYaxBatchProvider(provider)) {
         return true;
     }
-    // IYesMovies is deferred WebView AFTER A/Y/X/L/B sync — must direct-deliver as Server I,
-    // otherwise a lone IYesMovies item never passes yax-ready and stays stuck in SYNC-QUEUE.
+    // Queue Server I with A/X/L/B so one flush shows every server.
+    // Direct-deliver before that flush made the App keep only I.
+    if (provider === 'IYesMovies') {
+        var iyesBag = libs.__getVodSyncBag();
+        return !!(iyesBag && iyesBag.startMs && !iyesBag.flushed);
+    }
     return provider === 'MUniqueStream' || provider === 'MVidlink';
 };
 libs.__isVodBatchStream = function (urlDirect, provider) {
@@ -381,7 +385,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v36-iyes-hold-clock';
+libs.__embedSyncVersion = 'v37-iyes-sync-queue';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -511,7 +515,7 @@ libs.__vodSyncIsYaxReady = function (items, elapsed) {
     return false;
 };
 libs.__vodSyncSortItems = function (items) {
-    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300, 'LRIDOMOVIE': 400, 'BlookMovie': 500 };
+    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300, 'LRIDOMOVIE': 400, 'BlookMovie': 500, 'IYesMovies': 600 };
     return items.slice().sort(function (left, right) {
         var leftBase = order[left[1]] || 500;
         var rightBase = order[right[1]] || 500;
