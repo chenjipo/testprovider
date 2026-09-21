@@ -173,7 +173,8 @@ function buildPloyanInjectScript(urix, mid, eid, sv, yesLoc, yesReferer) {
         "try{hookNet();}catch(e4){pm({step:'hook-err',error:String(e4)});}",
         "pm({step:'native-wait'});",
         "try{new MutationObserver(function(){checkTitle();}).observe(document.documentElement,{childList:true,subtree:true,characterData:true});}catch(eMo){}",
-        "setTimeout(function(){if(!done&&!dead&&!titleOk){nudgeShell();}},2500);",
+        "setTimeout(function(){if(!done&&!dead&&!titleOk){nudgeShell();}},1500);",
+        "setTimeout(function(){if(!done&&!dead){maybeForce('shell');}},3200);",
         "setTimeout(function(){if(!done&&!dead&&!titleOk){pm({step:'shell-stuck',title:(document.title||'').substring(0,60)});}},4500);",
         "[800,1200,3000,7000,12000].forEach(function(ms){setTimeout(function(){if(!done)kickPlay('t'+ms);},ms);});",
         "[1500,2000,5000,10000,18000].forEach(function(ms){setTimeout(function(){if(!done){pm({step:'native-pending',ms:ms});diag(ms);}},ms);});",
@@ -202,7 +203,7 @@ hosts["ployan"] = function (url, movieInfo, provider, config, callback) { return
             'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36'
         };
         beforeLoadScript = buildPloyanInjectScript(urix, mid, eid, sv, yesLoc, yesReferer);
-        console.log('[RN-Fetch][PLOYAN-HOST] v16-stable-i url=' + loadUrl.substring(0, 120) + ' urixLen=' + String(urix || '').length);
+        console.log('[RN-Fetch][PLOYAN-HOST] v17-force-shell url=' + loadUrl.substring(0, 120) + ' urixLen=' + String(urix || '').length);
         try {
             callback({
                 callback: {

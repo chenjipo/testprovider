@@ -1504,7 +1504,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
         switch (_b.label) {
             case 0:
                 PROVIDER = 'IYesMovies';
-                console.log('[RN-Fetch][PLOYAN-VERSION] v79-stable-i');
+                console.log('[RN-Fetch][PLOYAN-VERSION] v80-force-shell');
                 // forceNew: after previous flush, reopen must start a new sync round and
                 // reset a stuck embed slot so A/X/I are not blocked by the prior WV.
                 if (typeof libs.beginVodLinkSession === 'function') {
