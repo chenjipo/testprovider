@@ -35,6 +35,9 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
+var iyesHoldActive = false;
+var iyesHoldMid = '';
+var iyesHoldSerial = 0;
 var VOD_PROVIDER = 'IYesMovies';
 function ployanCallbackHandler(dataCallback, provider, host, callback, metadata) { return __awaiter(_this, void 0, void 0, function () {
     var data, json, info, directUrl, streamHeaders;
@@ -137,10 +140,15 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                     info = json.info;
                     directUrl = 'https://ployan.me/hls/' + info + '/master.m3u8';
                     var deliverKey = String((metadata && metadata.mid) || '') + ':' + String((metadata && metadata.eid) || '') + ':' + String(info);
-                    if (libs.__iyesLastDeliverKey === deliverKey || libs.__iyesDelivering) {
-                        console.log('[RN-Fetch][PLOYAN-GET-CB] skip-dup ' + deliverKey.substring(0, 48));
+                    var midNow = String((metadata && metadata.mid) || '');
+                    if (iyesHoldActive && iyesHoldMid === midNow) {
+                        console.log('[RN-Fetch][PLOYAN-DELIVER] skip-dup mid=' + midNow);
                         return [2];
                     }
+                    iyesHoldSerial += 1;
+                    var mySerial = iyesHoldSerial;
+                    iyesHoldActive = true;
+                    iyesHoldMid = midNow;
                     libs.__iyesDelivering = true;
                     libs.__iyesLastDeliverKey = deliverKey;
                     console.log('[RN-Fetch][PLOYAN-GET-CB] ' + directUrl);
@@ -163,33 +171,29 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                     };
                     // Do not embed_callback yet. An early Server I file makes the App
                     // finalize the list before A/X/L/B flush, so only I remains.
-                    var holdGen = libs.__iyesWvLockGen || 0;
                     var holdTries = 0;
-                    console.log('[RN-Fetch][PLOYAN-DELIVER] hold-until-flush ' + directUrl.substring(0, 80));
+                    console.log('[RN-Fetch][PLOYAN-DELIVER] hold-until-flush v85 ' + directUrl.substring(0, 80));
                     var deliverWhenFlushed = function () {
-                        if ((libs.__iyesWvLockGen || 0) !== holdGen) {
-                            libs.__iyesDelivering = false;
-                            console.log('[RN-Fetch][PLOYAN-DELIVER] hold-drop stale gen=' + holdGen);
+                        if (iyesHoldSerial !== mySerial) {
+                            console.log('[RN-Fetch][PLOYAN-DELIVER] hold-drop stale mid=' + midNow);
                             return;
                         }
                         var flushed = libs.__vodSyncFlushed === true || libs.__iyesSyncFlushed === true;
-                        var holdUntil = libs.__iyesHoldUntil || 0;
-                        var left = holdUntil ? (holdUntil - Date.now()) : 0;
                         holdTries += 1;
-                        if (!flushed && left > 0 && holdTries < 45) {
+                        if (!flushed && holdTries < 24) {
                             if (holdTries === 1 || holdTries % 5 === 0) {
-                                console.log('[RN-Fetch][PLOYAN-DELIVER] hold-wait left=' + left + 'ms');
+                                console.log('[RN-Fetch][PLOYAN-DELIVER] hold-wait try=' + holdTries);
                             }
                             setTimeout(deliverWhenFlushed, 1000);
                             return;
                         }
                         libs.embed_callback(directUrl, VOD_PROVIDER, VOD_PROVIDER, 'Hls', callback, 0, [], [{ file: directUrl, quality: 1080 }], streamHeaders, {});
-                        console.log('[RN-Fetch][PLOYAN-DELIVER] Server I flushed=' + (flushed ? 1 : 0) + ' left=' + left + 'ms file=' + directUrl.substring(0, 80));
+                        console.log('[RN-Fetch][PLOYAN-DELIVER] Server I flushed=' + (flushed ? 1 : 0) + ' try=' + holdTries + ' file=' + directUrl.substring(0, 80));
                         setTimeout(function () {
-                            if ((libs.__iyesWvLockGen || 0) !== holdGen) {
-                                libs.__iyesDelivering = false;
+                            if (iyesHoldSerial !== mySerial) {
                                 return;
                             }
+                            iyesHoldActive = false;
                             libs.__iyesDelivering = false;
                             console.log('[RN-Fetch][PLOYAN-WV-CLOSE] flushed=' + (flushed ? 1 : 0));
                             if (typeof libs.__closeEmbedWebview === 'function') {
@@ -197,7 +201,7 @@ function ployanCallbackHandler(dataCallback, provider, host, callback, metadata)
                             }
                         }, 2000);
                     };
-                    setTimeout(deliverWhenFlushed, 300);
+                    setTimeout(deliverWhenFlushed, 1000);
                 }
                 else {
                     console.log('[RN-Fetch][PLOYAN-GET-FAIL] status=' + data.status + ' code=' + (json && json.code) + ' source=' + data.source + ' body=' + String(data.responseText).substring(0, 120));
