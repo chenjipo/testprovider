@@ -1119,7 +1119,7 @@ libs.parse_size = function (file, provider, host, type, callback, rank, tracks) 
     });
 }); };
 libs.__embedWebviewSlot = libs.__embedWebviewSlot || { busyUntil: 0, pumping: false, queue: [], multiSourceBatch: false };
-libs.__embedWebviewOrder = { 'QHexaWatch': 0, 'MVidlink': 0, 'IYesMovies': 1, 'MUniqueStream': 2, 'LRIDOMOVIE': 1 };
+libs.__embedWebviewOrder = { 'QHexaWatch': 0, 'MVidlink': 0, 'LRIDOMOVIE': 0, 'IYesMovies': 1, 'MUniqueStream': 2 };
 libs.scheduleEmbedWebview = function (provider, task, slotMs) {
     var slot = libs.__embedWebviewSlot || (libs.__embedWebviewSlot = { busyUntil: 0, pumping: false, queue: [], multiSourceBatch: false });
     // Do NOT beginVodLinkSession here — after flush it used to open a new round mid-I-WV
