@@ -411,69 +411,34 @@ function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, 
                     pageReferer: pageReferer,
                     movieInfo: movieInfo,
                     deadStreams: deadList,
+                    url_webview: wvUrl,
                 },
             },
         };
         console.log('[RN-Fetch][CLOSELOAD-WV] queue ' + String(wvUrl).substring(0, 120) + ' dead=' + deadList.length + ' provider=' + provider);
-        var opened = false;
-        var openNow = function (why) {
-            if (opened) {
-                console.log('[RN-Fetch][CLOSELOAD-WV-SKIP] already-opened why=' + why);
-                return;
-            }
-            opened = true;
-            console.log('[RN-Fetch][CLOSELOAD-WV] open why=' + why + ' url=' + String(wvUrl).substring(0, 80));
-            try {
-                if (typeof libs.__closeEmbedWebview === 'function') {
-                    try {
-                        libs.__closeEmbedWebview(callback, { url_webview: wvUrl });
-                        console.log('[RN-Fetch][CLOSELOAD-WV] close-prev');
-                    }
-                    catch (eClose) { }
-                }
-            }
-            catch (e0) { }
-            setTimeout(function () {
-                try {
-                    callback(payload);
-                    console.log('[RN-Fetch][CLOSELOAD-WV] payload-sent');
-                }
-                catch (eOpen) {
-                    console.log('[RN-Fetch][CLOSELOAD-WV-ERR] open ' + String(eOpen && eOpen.message ? eOpen.message : eOpen));
-                }
-            }, 350);
-        };
-        // Wait until sync flush fully finishes, then delay — never open mid-flush / mid-I-handoff.
-        var waitFlushThenOpen = function () {
-            console.log('[RN-Fetch][CLOSELOAD-WV] wait-flush');
-            var startedAt = Date.now();
-            var iv = setInterval(function () {
-                var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
-                var flushed = !!(bag && bag.flushed);
-                var releasing = !!libs.__vodSyncReleasing;
-                var elapsed = Date.now() - startedAt;
-                if (flushed && !releasing) {
-                    clearInterval(iv);
-                    console.log('[RN-Fetch][CLOSELOAD-WV] flush-seen elapsed=' + elapsed);
-                    setTimeout(function () { openNow('after-flush'); }, 2000);
-                    return;
-                }
-                if (elapsed > 32000) {
-                    clearInterval(iv);
-                    console.log('[RN-Fetch][CLOSELOAD-WV] wait-timeout');
-                    openNow('timeout');
-                }
-            }, 400);
-        };
-        var bag0 = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
-        if (bag0 && bag0.flushed && !libs.__vodSyncReleasing) {
-            console.log('[RN-Fetch][CLOSELOAD-WV] already-flushed');
-            setTimeout(function () { openNow('already-flushed'); }, 2000);
-            return;
+        // NEVER call is_end_webview here — it freezes later WebViews.
+        // Open L IMMEDIATELY (v12 proved cl-ping works early). Hold I via __lridomovieWvPending.
+        libs.__lridomovieWvPending = true;
+        libs.__lridomovieWvDone = false;
+        console.log('[RN-Fetch][CLOSELOAD-WV] early-open hold-I=1');
+        try {
+            callback(payload);
+            console.log('[RN-Fetch][CLOSELOAD-WV] payload-sent');
         }
-        waitFlushThenOpen();
+        catch (eOpen) {
+            libs.__lridomovieWvPending = false;
+            console.log('[RN-Fetch][CLOSELOAD-WV-ERR] open ' + String(eOpen && eOpen.message ? eOpen.message : eOpen));
+        }
+        // Release I hold even if L never gets a play URL.
+        setTimeout(function () {
+            if (libs.__lridomovieWvPending) {
+                libs.__lridomovieWvPending = false;
+                console.log('[RN-Fetch][CLOSELOAD-WV] release-I-hold timeout');
+            }
+        }, 14000);
     }
     catch (e) {
+        libs.__lridomovieWvPending = false;
         console.log('[RN-Fetch][CLOSELOAD-WV-ERR] ' + String(e && e.message ? e.message : e));
     }
 }
@@ -693,7 +658,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v15-after-flush candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v16-early-hold-i candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {

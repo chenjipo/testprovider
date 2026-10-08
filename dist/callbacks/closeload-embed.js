@@ -78,6 +78,9 @@ callbacksEmbed['closeload-embed'] = function (dataCallback, provider, host, call
                     return [2];
                 }
                 state.played[playKey] = true;
+                libs.__lridomovieWvPending = false;
+                libs.__lridomovieWvDone = true;
+                console.log('[RN-Fetch][CLOSELOAD-WV] release-I-hold play');
                 console.log('[RN-Fetch][CLOSELOAD-WV-PLAY] ' + playUrl.substring(0, 120));
                 libs.embed_callback(playUrl, provider, provider, 'Hls', callback, 0, [], [{ file: playUrl, quality: 1080 }], {
                     referer: referer,

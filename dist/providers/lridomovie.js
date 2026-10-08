@@ -324,7 +324,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                console.log('[RN-Fetch][RIDO-VERSION] v10-ridomovie-to');
+                console.log('[RN-Fetch][RIDO-VERSION] v11-hold-i-for-wv');
+                // Reserve the single App WebView before IYesMovies FALLBACK (~8s).
+                libs.__lridomovieWvPending = true;
+                libs.__lridomovieWvDone = false;
+                console.log('[RN-Fetch][RIDO-WV-HOLD] pending=1');
                 headers = buildSiteHeaders(DOMAIN + '/');
                 _b.label = 1;
             case 1:
@@ -339,6 +343,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ slugDetail: slugDetail }, PROVIDER, 'SLUG_DETAIL');
                 if (!slugDetail) {
                     console.log('[RN-Fetch][RIDO-SKIP] slug-not-found');
+                    libs.__lridomovieWvPending = false;
                     return [2];
                 }
                 detailUrl = DOMAIN + '/movie/' + slugDetail;
@@ -354,6 +359,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 pageHtml = _b.sent();
                 if (!pageHtml || !pageHtml.ok) {
                     console.log('[RN-Fetch][RIDO-PAGE-BLOCK] status=' + (pageHtml ? pageHtml.status : 0));
+                    libs.__lridomovieWvPending = false;
                     return [2];
                 }
                 return [4, pageHtml.text()];
@@ -361,11 +367,13 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 pageHtml = _b.sent();
                 if (lridomovieIsCfChallenge(pageHtml)) {
                     console.log('[RN-Fetch][RIDO-PAGE-BLOCK] cf-challenge');
+                    libs.__lridomovieWvPending = false;
                     return [2];
                 }
                 pageStream = extractStreamFromText(pageHtml);
                 if (pageStream) {
                     console.log('[RN-Fetch][RIDO-DIRECT] page m3u8');
+                    libs.__lridomovieWvPending = false;
                     streamHeaders = buildSiteHeaders(detailUrl + '/');
                     libs.embed_callback(pageStream, PROVIDER, PROVIDER, 'Hls', callback, 0, [], [{ file: pageStream, quality: 1080 }], streamHeaders, { type: 'm3u8' });
                     return [2, true];
@@ -374,6 +382,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ iframe: iframe }, PROVIDER, 'IFRAME HTML');
                 if (!iframe) {
                     console.log('[RN-Fetch][RIDO-SKIP] embed-empty');
+                    libs.__lridomovieWvPending = false;
                     return [2];
                 }
                 iframeUrl = extractIframeUrl(iframe);
@@ -385,9 +394,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ embedUrlRaw: embedUrlRaw, iframeUrl: iframeUrlNormalized }, PROVIDER, 'IFRAME URL');
                 if (!embedUrlRaw) {
                     console.log('[RN-Fetch][RIDO-SKIP] iframe-parse-failed');
+                    libs.__lridomovieWvPending = false;
                     return [2];
                 }
                 if (embedUrlRaw.indexOf('.m3u8') != -1) {
+                    libs.__lridomovieWvPending = false;
                     streamHeaders = buildSiteHeaders(detailUrl + '/');
                     libs.embed_callback(embedUrlRaw, PROVIDER, PROVIDER, 'Hls', callback, 0, [], [{ file: embedUrlRaw, quality: 1080 }], streamHeaders, { type: 'm3u8' });
                     return [2, true];
@@ -409,6 +420,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 return [3, 7];
             case 6:
                 e_1 = _b.sent();
+                libs.__lridomovieWvPending = false;
                 libs.log({ e: e_1 }, PROVIDER, 'ERROR');
                 console.log('[RN-Fetch][RIDO-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 return [3, 7];

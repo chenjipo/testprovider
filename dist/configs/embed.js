@@ -400,7 +400,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v39-flush-done';
+libs.__embedSyncVersion = 'v40-l-hold-i';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -659,6 +659,11 @@ libs.__deferProviderWebview = function (provider, task) {
         var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
         var elapsed = bag && bag.startMs ? (Date.now() - bag.startMs) : (Date.now() - startedAt);
         var flushed = !!(bag && bag.flushed);
+        // Hold I while LRIDOMOVIE early WebView is extracting (single App WebView).
+        if (provider === 'IYesMovies' && libs.__lridomovieWvPending && elapsed < 20000) {
+            setTimeout(tryRun, pollMs);
+            return;
+        }
         if (!flushed && elapsed < maxWaitMs) {
             setTimeout(tryRun, pollMs);
             return;
