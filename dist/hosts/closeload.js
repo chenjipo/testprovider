@@ -351,18 +351,24 @@ function buildCloseloadWebviewScripts(deadUrls) {
     };
 }
 function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, candidates, deadUrls) {
-    var pageReferer = config && config.pageReferer ? config.pageReferer : 'https://closeload.top/';
-    var wvUrl = pickCloseloadWebviewUrl(embedUrl, config, candidates || [embedUrl]);
-    var headers = buildCloseloadFetchHeaders(wvUrl, pageReferer);
-    var deadList = deadUrls || (config && config.deadStreams) || [];
-    var wvScripts = buildCloseloadWebviewScripts(deadList);
-    if (!libs.scheduleEmbedWebview) {
-        console.log('[RN-Fetch][CLOSELOAD-SKIP] webview-unavailable');
-        return;
-    }
-    console.log('[RN-Fetch][CLOSELOAD-WV] void ' + String(wvUrl).substring(0, 120) + ' dead=' + deadList.length);
-    libs.scheduleEmbedWebview(provider === 'LRIDOMOVIE' ? provider : 'closeload', function () {
-        callback({
+    try {
+        var pageReferer = config && config.pageReferer ? config.pageReferer : 'https://closeload.top/';
+        var wvUrl = pickCloseloadWebviewUrl(embedUrl, config, candidates || [embedUrl]);
+        if (!wvUrl) {
+            console.log('[RN-Fetch][CLOSELOAD-WV-ERR] empty-embed-url');
+            return;
+        }
+        var headers = buildCloseloadFetchHeaders(wvUrl, pageReferer);
+        var deadList = [];
+        var rawDead = deadUrls || (config && config.deadStreams) || [];
+        for (var di = 0; di < rawDead.length; di++) {
+            var du = normalizeCloseloadPlayUrl(rawDead[di]);
+            if (du) {
+                deadList.push(du);
+            }
+        }
+        var wvScripts = buildCloseloadWebviewScripts(deadList);
+        var payload = {
             callback: {
                 provider: provider,
                 host: 'closeload-embed',
@@ -380,9 +386,23 @@ function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, 
                     deadStreams: deadList,
                 },
             },
-        });
-    }, 10000);
+        };
+        console.log('[RN-Fetch][CLOSELOAD-WV] void ' + String(wvUrl).substring(0, 120) + ' dead=' + deadList.length + ' provider=' + provider);
+        if (provider === 'LRIDOMOVIE' || !libs.scheduleEmbedWebview) {
+            console.log('[RN-Fetch][CLOSELOAD-WV] direct-open');
+            callback(payload);
+            return;
+        }
+        libs.scheduleEmbedWebview('closeload', function () {
+            console.log('[RN-Fetch][CLOSELOAD-WV] slot-open');
+            callback(payload);
+        }, 10000);
+    }
+    catch (e) {
+        console.log('[RN-Fetch][CLOSELOAD-WV-ERR] ' + String(e && e.message ? e.message : e));
+    }
 }
+
 hosts["closeload"] = function (url, movieInfo, provider, config, callback) { return __awaiter(_this, void 0, void 0, function () {
     function dc_o55npDX9dLL(value_parts) {
         var value = value_parts.join('');
@@ -582,7 +602,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
         }
         return String(match[1] || '').replace(/[\s'"]/g, '');
     }
-    var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1, urlCandidates, candidateIdx, activeUrl, fetchResult, playUrlCandidate, playHeaders, probeStatus, contentUrlRaw, deadStreams;
+    var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1, urlCandidates, candidateIdx, activeUrl, fetchResult, playUrlCandidate, playHeaders, probeStatus, contentUrlRaw, deadStreams, wvOpened;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -593,15 +613,16 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 urlCandidates = buildCloseloadUrlCandidates(url, config);
                 candidateIdx = 0;
                 deadStreams = [];
+                wvOpened = false;
                 console.log('[RN-Fetch][CLOSELOAD-URL] ' + String(url).substring(0, 140));
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v11-wv-on-dead candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v12-wv-direct candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
-                    voidCloseloadWebview(url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
+                    queueCloseloadWebview(url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
                     return [2];
                 }
                 activeUrl = urlCandidates[candidateIdx];
@@ -676,7 +697,12 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                         deadStreams.push(normalizeCloseloadPlayUrl(directUrl));
                     }
                     console.log('[RN-Fetch][CLOSELOAD-WV-EARLY] no-decode idx=' + candidateIdx);
-                    voidCloseloadWebview(activeUrl || url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
+                    if (!wvOpened) {
+                        wvOpened = true;
+                        queueCloseloadWebview(activeUrl || url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
+                    } else {
+                        console.log('[RN-Fetch][CLOSELOAD-WV-SKIP] already-opened');
+                    }
                     return [2];
                 }
                 playHeaders = buildCloseloadPlayHeaders(activeUrl);
@@ -690,7 +716,10 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                         deadStreams.push(playUrlCandidate);
                     }
                     console.log('[RN-Fetch][CLOSELOAD-WV-EARLY] probe-dead');
-                    voidCloseloadWebview(activeUrl || url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
+                    if (!wvOpened) {
+                        wvOpened = true;
+                        queueCloseloadWebview(activeUrl || url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
+                    }
                     return [2];
                 }
                 libs.embed_callback(playUrlCandidate, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: playUrlCandidate, quality: 1080 }], playHeaders, {
