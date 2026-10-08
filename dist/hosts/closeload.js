@@ -415,16 +415,51 @@ function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, 
             },
         };
         console.log('[RN-Fetch][CLOSELOAD-WV] queue ' + String(wvUrl).substring(0, 120) + ' dead=' + deadList.length + ' provider=' + provider);
-        // Never direct-open: it steals the single App WebView from IYesMovies.
-        if (!libs.scheduleEmbedWebview) {
-            console.log('[RN-Fetch][CLOSELOAD-WV] fallback-open');
-            callback(payload);
+        var opened = false;
+        var openNow = function (why) {
+            if (opened) {
+                console.log('[RN-Fetch][CLOSELOAD-WV-SKIP] already-opened why=' + why);
+                return;
+            }
+            opened = true;
+            console.log('[RN-Fetch][CLOSELOAD-WV] open why=' + why);
+            try {
+                callback(payload);
+            }
+            catch (eOpen) {
+                console.log('[RN-Fetch][CLOSELOAD-WV-ERR] open ' + String(eOpen && eOpen.message ? eOpen.message : eOpen));
+            }
+        };
+        // IYesMovies holds scheduleEmbedWebview for 120s — never queue behind it.
+        // Open L after YAX sync flush (I already has its m3u8), or immediately if flush done.
+        var bag = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
+        if (bag && bag.flushed) {
+            console.log('[RN-Fetch][CLOSELOAD-WV] post-flush');
+            setTimeout(function () { openNow('post-flush'); }, 400);
             return;
         }
-        libs.scheduleEmbedWebview(provider === 'LRIDOMOVIE' ? 'LRIDOMOVIE' : 'closeload', function () {
-            console.log('[RN-Fetch][CLOSELOAD-WV] slot-open provider=' + provider);
-            callback(payload);
-        }, 12000);
+        if (provider === 'LRIDOMOVIE' && typeof libs.__deferProviderWebview === 'function') {
+            console.log('[RN-Fetch][CLOSELOAD-WV] defer-until-flush');
+            libs.__deferProviderWebview('LRIDOMOVIE', function () {
+                openNow('defer-flush');
+            });
+            // Safety: if I FALLBACK opened early and flush is slow, still open L after I delivers / 16s.
+            setTimeout(function () {
+                var b2 = typeof libs.__getVodSyncBag === 'function' ? libs.__getVodSyncBag() : null;
+                var delivered = libs.__vodSyncDeliveredProviders || {};
+                if ((b2 && b2.flushed) || delivered.IYesMovies) {
+                    openNow('safety-timer');
+                }
+            }, 16000);
+            return;
+        }
+        if (libs.scheduleEmbedWebview) {
+            libs.scheduleEmbedWebview(provider === 'LRIDOMOVIE' ? 'LRIDOMOVIE' : 'closeload', function () {
+                openNow('slot');
+            }, 12000);
+            return;
+        }
+        openNow('fallback');
     }
     catch (e) {
         console.log('[RN-Fetch][CLOSELOAD-WV-ERR] ' + String(e && e.message ? e.message : e));
@@ -646,7 +681,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v13-wv-slot-boot candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v14-defer-after-i candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
