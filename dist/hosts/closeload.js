@@ -143,16 +143,47 @@ function buildCloseloadFetchHeaders(activeUrl, pageReferer) {
         referer = activeUrl;
         origin = 'https://ridorapid.closeload.top';
     } else if (activeUrl && activeUrl.indexOf('closeload.top') >= 0) {
-        referer = pageReferer || activeUrl;
+        // Prefer closeload embed itself as referer; parent ridomovie alone often 403s the CDN.
+        referer = activeUrl || pageReferer || 'https://closeload.top/';
         origin = 'https://closeload.top';
     }
     return {
         'user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
         referer: referer,
+        Referer: referer,
         origin: origin,
+        Origin: origin,
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
     };
+}
+function buildCloseloadPlayHeaders(activeUrl) {
+    // CDN (/hls/*, playmix master.txt) checks closeload.top referrer stealth — use origin root, not ridomovie parent.
+    var isRapid = !!(activeUrl && String(activeUrl).indexOf('ridorapid') >= 0);
+    var origin = isRapid ? 'https://ridorapid.closeload.top' : 'https://closeload.top';
+    var referer = origin + '/';
+    return {
+        'user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
+        referer: referer,
+        Referer: referer,
+        origin: origin,
+        Origin: origin,
+        Accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,application/octet-stream,*/*',
+    };
+}
+function normalizeCloseloadPlayUrl(file) {
+    var url = String(file || '').replace(/&amp;/g, '&').replace(/\\\//g, '/').trim();
+    if (!url || url.indexOf('http') !== 0) {
+        return '';
+    }
+    // ExoPlayer often sniffs by extension; master.txt alone may not open as HLS.
+    if (url.indexOf('master.txt') >= 0 && url.indexOf('.m3u8') < 0 && url.indexOf('#') < 0) {
+        url = url + '#.m3u8';
+    }
+    return url;
+}
+function closeloadPlayType(file) {
+    return 'm3u8';
 }
 function isCloseloadCloudflareBlock(response, htmlText) {
     if (!htmlText) {
@@ -521,7 +552,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v7-contenturl-filekey candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v9-play-headers-m3u8tag candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
@@ -547,12 +578,10 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 }
                 directUrl = extractCloseloadPlainStream(htmlText);
                 if (directUrl && directUrl.indexOf('http') === 0) {
+                    directUrl = normalizeCloseloadPlayUrl(directUrl);
                     console.log('[RN-Fetch][CLOSELOAD-DIRECT] ' + directUrl.substring(0, 120));
-                    libs.embed_callback(directUrl, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: directUrl, quality: 1080 }], {
-                        referer: activeUrl,
-                        'user-agent': embedHeaders['user-agent'],
-                    }, {
-                        type: 'm3u8',
+                    libs.embed_callback(directUrl, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: directUrl, quality: 1080 }], buildCloseloadPlayHeaders(activeUrl), {
+                        type: closeloadPlayType(directUrl),
                     });
                     return [2];
                 }
@@ -607,12 +636,10 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                     candidateIdx++;
                     return [3, 1];
                 }
+                parseDirect = normalizeCloseloadPlayUrl(parseDirect);
                 console.log('[RN-Fetch][CLOSELOAD-PLAY] ' + parseDirect.substring(0, 120));
-                libs.embed_callback(parseDirect, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: parseDirect, quality: 1080 }], {
-                    referer: activeUrl,
-                    'user-agent': embedHeaders['user-agent'],
-                }, {
-                    type: 'm3u8',
+                libs.embed_callback(parseDirect, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: parseDirect, quality: 1080 }], buildCloseloadPlayHeaders(activeUrl), {
+                    type: closeloadPlayType(parseDirect),
                 });
                 return [2];
             case 4:

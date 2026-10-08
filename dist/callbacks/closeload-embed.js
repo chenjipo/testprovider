@@ -61,8 +61,11 @@ callbacksEmbed['closeload-embed'] = function (dataCallback, provider, host, call
                 if (!(data.step === 'cl-url' && data.url)) {
                     return [2];
                 }
-                playUrl = String(data.url);
-                referer = metadata && metadata.embedUrl ? metadata.embedUrl : (metadata && metadata.pageReferer ? metadata.pageReferer : 'https://closeload.top/');
+                playUrl = String(data.url).replace(/&amp;/g, '&').replace(/\\\//g, '/').trim();
+                if (playUrl.indexOf('master.txt') >= 0 && playUrl.indexOf('.m3u8') < 0 && playUrl.indexOf('#') < 0) {
+                    playUrl = playUrl + '#.m3u8';
+                }
+                referer = 'https://closeload.top/';
                 state = getCloseloadState();
                 playKey = playUrl.substring(0, 180);
                 if (state.played[playKey]) {
@@ -72,6 +75,10 @@ callbacksEmbed['closeload-embed'] = function (dataCallback, provider, host, call
                 console.log('[RN-Fetch][CLOSELOAD-WV-PLAY] ' + playUrl.substring(0, 120));
                 libs.embed_callback(playUrl, provider, provider, 'Hls', callback, 0, [], [{ file: playUrl, quality: 1080 }], {
                     referer: referer,
+                    Referer: referer,
+                    origin: 'https://closeload.top',
+                    Origin: 'https://closeload.top',
+                    Accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,application/octet-stream,*/*',
                     'user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
                 }, {
                     type: 'm3u8',
