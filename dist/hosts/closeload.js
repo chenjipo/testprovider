@@ -110,47 +110,6 @@ function buildCloseloadWebviewPageUrl(embedUrl) {
     var sep = base.indexOf('?') >= 0 ? '&' : '?';
     return base + sep + '_wv=' + Date.now() + '_' + Math.floor(Math.random() * 1000000);
 }
-function getLridomovieHoldGlobal() {
-    if (typeof globalThis !== 'undefined') {
-        return globalThis;
-    }
-    if (typeof global !== 'undefined') {
-        return global;
-    }
-    return {};
-}
-function setLridomovieWvHold(pending, done) {
-    var g = getLridomovieHoldGlobal();
-    g.__lridomovieWvPending = !!pending;
-    if (done !== undefined) {
-        g.__lridomovieWvDone = !!done;
-    }
-    try {
-        libs.__lridomovieWvPending = !!pending;
-        if (done !== undefined) {
-            libs.__lridomovieWvDone = !!done;
-        }
-    }
-    catch (eHold) { }
-}
-function isLridomovieWvHolding() {
-    var g = getLridomovieHoldGlobal();
-    if (g.__lridomovieWvDone || (libs && libs.__lridomovieWvDone)) {
-        return false;
-    }
-    return !!(g.__lridomovieWvPending || (libs && libs.__lridomovieWvPending));
-}
-function kickEmbedSlotAfterL() {
-    try {
-        if (typeof libs.__kickEmbedWebviewSlot === 'function') {
-            libs.__kickEmbedWebviewSlot('l-play');
-        }
-        else if (libs.__embedWebviewSlot) {
-            libs.__embedWebviewSlot.busyUntil = 0;
-        }
-    }
-    catch (eKick) { }
-}
 function pickCloseloadWebviewUrl(rawUrl, config, candidates) {
     var pick = '';
     var idx = 0;
@@ -184,84 +143,16 @@ function buildCloseloadFetchHeaders(activeUrl, pageReferer) {
         referer = activeUrl;
         origin = 'https://ridorapid.closeload.top';
     } else if (activeUrl && activeUrl.indexOf('closeload.top') >= 0) {
-        // Prefer closeload embed itself as referer; parent ridomovie alone often 403s the CDN.
-        referer = activeUrl || pageReferer || 'https://closeload.top/';
+        referer = pageReferer || activeUrl;
         origin = 'https://closeload.top';
     }
     return {
         'user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
         referer: referer,
-        Referer: referer,
         origin: origin,
-        Origin: origin,
         Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
         'Accept-Language': 'en-US,en;q=0.9',
     };
-}
-function buildCloseloadPlayHeaders(activeUrl) {
-    // CDN (/hls/*, playmix master.txt) checks closeload.top referrer stealth — use origin root, not ridomovie parent.
-    var isRapid = !!(activeUrl && String(activeUrl).indexOf('ridorapid') >= 0);
-    var origin = isRapid ? 'https://ridorapid.closeload.top' : 'https://closeload.top';
-    var referer = origin + '/';
-    return {
-        'user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
-        referer: referer,
-        Referer: referer,
-        origin: origin,
-        Origin: origin,
-        Accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,application/octet-stream,*/*',
-    };
-}
-function normalizeCloseloadPlayUrl(file) {
-    var url = String(file || '').replace(/&amp;/g, '&').replace(/\\\//g, '/').trim();
-    if (!url || url.indexOf('http') !== 0) {
-        return '';
-    }
-    // Do not append #.m3u8 — some Exo builds send the fragment in the request path → 404.
-    return url;
-}
-function closeloadPlayType(file) {
-    return 'm3u8';
-}
-function probeCloseloadStream(playUrl, headers) {
-    return fetch(playUrl, {
-        method: 'GET',
-        headers: headers || {},
-    }).then(function (response) {
-        var status = response && response.status ? response.status : 0;
-        try {
-            if (response && typeof response.text === 'function') {
-                response.text();
-            }
-        }
-        catch (_e) { }
-        return status;
-    }).catch(function () {
-        return 0;
-    });
-}
-function extractCloseloadPlainStreamSkipContentUrl(htmlText) {
-    if (!htmlText) {
-        return '';
-    }
-    var text = String(htmlText);
-    var match = text.match(/let\s+url\s*=\s*['"](https?:[^'"]+)/i);
-    if (match && match[1]) {
-        return match[1];
-    }
-    match = text.match(/https?:\/\/[^"'\\\s<>]*playmix[^"'\\\s<>]*\/master\.txt[^"'\\\s<>]*/i);
-    if (match) {
-        return match[0].replace(/\\/g, '');
-    }
-    match = text.match(/https?:\/\/[^"'\\\s<>]+\/master\.txt[^"'\\\s<>]*/i);
-    if (match) {
-        return match[0].replace(/\\/g, '');
-    }
-    match = text.match(/https?:\/\/[^"'\\\s<>]+\.m3u8[^"'\\\s<>]*/i);
-    if (match) {
-        return match[0].replace(/\\/g, '');
-    }
-    return '';
 }
 function isCloseloadCloudflareBlock(response, htmlText) {
     if (!htmlText) {
@@ -377,74 +268,27 @@ function fetchCloseloadWithRetry(activeUrl, embedHeaders, maxAttempts) {
     }
     return attempt(0);
 }
-function buildCloseloadWebviewScript(deadUrls) {
-    var dead = Array.isArray(deadUrls) ? deadUrls : [];
-    var deadJson = JSON.stringify(dead.map(function (u) {
-        return String(u || '').split('#')[0].split('?')[0];
-    }).filter(Boolean));
-    return (
-        "(function(){" +
-        "if(window.__clBooted){return true;}" +
-        "window.__clBooted=1;" +
-        "var done=0,ticks=0,dead=" + deadJson + ";" +
-        "function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}" +
-        "function isDead(u){u=String(u||'').split('#')[0].split('?')[0];if(!u)return 1;for(var i=0;i<dead.length;i++){if(dead[i]&&(u===dead[i]||u.indexOf(dead[i])>=0||dead[i].indexOf(u)>=0))return 1;}return 0;}" +
-        "function postUrl(u,src){if(done||!u||String(u).indexOf('http')!==0)return;u=String(u).replace(/&amp;/g,'&');" +
-        "var fromNet=(src==='fetch'||src==='xhr'||src==='video');" +
-        "if(!fromNet&&isDead(u)){pm({step:'cl-skip-dead',url:String(u).substring(0,120),source:src||''});return;}" +
-        "done=1;pm({step:'cl-url',url:u,source:src||'net'});}" +
-        "function hook(){if(window.__clHooked)return;window.__clHooked=1;" +
-        "try{var fo=window.fetch;if(fo){window.fetch=function(a,b){var s=typeof a==='string'?a:(a&&a.url?a.url:'');return fo.apply(this,arguments).then(function(r){try{if(!done&&s&&(String(s).indexOf('m3u8')>=0||String(s).indexOf('master.txt')>=0||String(s).indexOf('playmix')>=0||String(s).indexOf('/hls/')>=0))postUrl(String(s),'fetch');}catch(e){}return r;});};}}" +
-        "catch(e1){}" +
-        "try{var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{if(!done&&u&&(String(u).indexOf('m3u8')>=0||String(u).indexOf('master.txt')>=0||String(u).indexOf('playmix')>=0||String(u).indexOf('/hls/')>=0))postUrl(String(u),'xhr');}catch(e){}return XO.apply(this,arguments);};}" +
-        "catch(e2){}" +
-        "try{var vs=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'src');if(vs&&vs.set){Object.defineProperty(HTMLMediaElement.prototype,'src',{set:function(v){try{if(!done&&v&&(String(v).indexOf('m3u8')>=0||String(v).indexOf('master.txt')>=0||String(v).indexOf('playmix')>=0))postUrl(String(v),'video');}catch(e){}return vs.set.call(this,v);},get:function(){return vs.get.call(this);}});}}" +
-        "catch(e3){}" +
-        "}" +
-        "function clickPlay(){try{var sels=['button','.play','.vjs-big-play-button','.jw-icon-display','[aria-label*=Play i]','video'];for(var i=0;i<sels.length;i++){var els=document.querySelectorAll(sels[i]);for(var j=0;j<els.length;j++){try{els[j].click();}catch(e){}}}}catch(e){}}" +
-        "function scan(){if(done)return;try{clickPlay();var h=(document.documentElement&&document.documentElement.innerHTML)||'';" +
-        "var m1=h.match(/let\\s+url\\s*=\\s*['\"](https?:[^'\"]+)/i);if(m1&&m1[1]){postUrl(m1[1],'let-url');return;}" +
-        "var m4=h.match(/https?:\\/\\/[^\\s'\"<>]+\\.m3u8[^\\s'\"<>]*/i);if(m4){postUrl(m4[0],'m3u8');return;}" +
-        "if(ticks<20)return;" +
-        "var m2=h.match(/https?:\\/\\/[^\\s'\"<>]*playmix[^\\s'\"<>]*master\\.txt[^\\s'\"<>]*/i);if(m2){postUrl(m2[0],'playmix-late');return;}" +
-        "var m3=h.match(/\"contentUrl\"\\s*:\\s*\"(https?:[^\\\"]+)\"/i);if(m3&&m3[1]){postUrl(m3[1].replace(/\\\\\\//g,'/'),'contentUrl');return;}" +
-        "}catch(e4){pm({step:'cl-scan-err',msg:String(e4&&e4.message?e4.message:e4)});}}" +
-        "hook();" +
-        "pm({step:'cl-boot',href:String(location.href||'')});" +
-        "setTimeout(clickPlay,800);" +
-        "setTimeout(clickPlay,2000);" +
-        "var iv=setInterval(function(){ticks++;scan();if(done||ticks>120)clearInterval(iv);},400);" +
-        "})();true;"
-    );
+function buildCloseloadWebviewScript() {
+    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function postUrl(u){if(done||!u||String(u).indexOf('http')!==0)return;done=1;pm({step:'cl-url',url:u});}function scan(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m=h.match(/\"contentUrl\"\\s*:\\s*\"(https?:\\\\\/\\\\\/[^\"]+)\"/i);if(m&&m[1]){postUrl(m[1].replace(/\\\\\\//g,'/'));return;}var m0=h.match(/\"contentUrl\"\\s*:\\s*\"(https?:\\/\\/[^\"]+)\"/i);if(m0&&m0[1]){postUrl(m0[1]);return;}var m1=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m1&&m1[1])postUrl(m1[1]);var m2=h.match(/https?:[^'\"\\s<>]+playmix[^'\"\\s<>]*master\\.txt[^'\"\\s<>]*/i);if(m2)postUrl(m2[0]);var m3=h.match(/https?:[^'\"\\s<>]+master\\.txt[^'\"\\s<>]*/i);if(m3)postUrl(m3[0]);var m4=h.match(/https?:[^'\"\\s<>]+\\.(?:m3u8|txt)[^'\"\\s<>]*/i);if(m4)postUrl(m4[0]);}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(!done&&(s.indexOf('.m3u8')>=0||s.indexOf('master.txt')>=0))postUrl(s);return r;});};}hook();pm({step:'cl-boot',href:location.href});scan();var n=0;var iv=setInterval(function(){scan();n++;if(done||n>80)clearInterval(iv);},400);})();true;";
 }
-function buildCloseloadWebviewScripts(deadUrls) {
-    var main = buildCloseloadWebviewScript(deadUrls || []);
-    var before = "(function(){try{window.ReactNativeWebView.postMessage(JSON.stringify({step:'cl-ping',href:String(location.href||'')}));}catch(e){}})();" + main;
+function buildCloseloadWebviewScripts() {
     return {
-        beforeLoadScript: before,
-        script: main,
+        beforeLoadScript: "(function(){try{window.ReactNativeWebView.postMessage(JSON.stringify({step:'cl-ping',href:location.href}));}catch(e){}})();true;",
+        script: buildCloseloadWebviewScript(),
     };
 }
-
-function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, candidates, deadUrls) {
-    try {
-        var pageReferer = config && config.pageReferer ? config.pageReferer : 'https://closeload.top/';
-        var wvUrl = pickCloseloadWebviewUrl(embedUrl, config, candidates || [embedUrl]);
-        if (!wvUrl) {
-            console.log('[RN-Fetch][CLOSELOAD-WV-ERR] empty-embed-url');
-            return;
-        }
-        var headers = buildCloseloadFetchHeaders(wvUrl, pageReferer);
-        var deadList = [];
-        var rawDead = deadUrls || (config && config.deadStreams) || [];
-        for (var di = 0; di < rawDead.length; di++) {
-            var du = normalizeCloseloadPlayUrl(rawDead[di]);
-            if (du) {
-                deadList.push(du);
-            }
-        }
-        var wvScripts = buildCloseloadWebviewScripts(deadList);
-        var payload = {
+function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, candidates) {
+    var pageReferer = config && config.pageReferer ? config.pageReferer : 'https://closeload.top/';
+    var wvUrl = pickCloseloadWebviewUrl(embedUrl, config, candidates || [embedUrl]);
+    var headers = buildCloseloadFetchHeaders(wvUrl, pageReferer);
+    var wvScripts = buildCloseloadWebviewScripts();
+    if (!libs.scheduleEmbedWebview) {
+        console.log('[RN-Fetch][CLOSELOAD-SKIP] webview-unavailable');
+        return;
+    }
+    console.log('[RN-Fetch][CLOSELOAD-WV] queue ' + String(wvUrl).substring(0, 120));
+    libs.scheduleEmbedWebview(provider === 'LRIDOMOVIE' ? provider : 'closeload', function () {
+        callback({
             callback: {
                 provider: provider,
                 host: 'closeload-embed',
@@ -459,39 +303,11 @@ function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, 
                     embedUrlRaw: config && config.embedUrlRaw ? config.embedUrlRaw : wvUrl,
                     pageReferer: pageReferer,
                     movieInfo: movieInfo,
-                    deadStreams: deadList,
-                    url_webview: wvUrl,
                 },
             },
-        };
-        console.log('[RN-Fetch][CLOSELOAD-WV] queue ' + String(wvUrl).substring(0, 120) + ' dead=' + deadList.length + ' provider=' + provider);
-        // NEVER call is_end_webview here — it freezes later WebViews.
-        // Open L IMMEDIATELY. Hold I via shared globalThis flag (WV callback libs may differ).
-        setLridomovieWvHold(true, false);
-        console.log('[RN-Fetch][CLOSELOAD-WV] early-open hold-I=1');
-        try {
-            callback(payload);
-            console.log('[RN-Fetch][CLOSELOAD-WV] payload-sent');
-        }
-        catch (eOpen) {
-            setLridomovieWvHold(false, true);
-            console.log('[RN-Fetch][CLOSELOAD-WV-ERR] open ' + String(eOpen && eOpen.message ? eOpen.message : eOpen));
-        }
-        // Release I hold even if L never gets a play URL.
-        setTimeout(function () {
-            if (isLridomovieWvHolding()) {
-                setLridomovieWvHold(false, true);
-                kickEmbedSlotAfterL();
-                console.log('[RN-Fetch][CLOSELOAD-WV] release-I-hold timeout');
-            }
-        }, 16000);
-    }
-    catch (e) {
-        setLridomovieWvHold(false, true);
-        console.log('[RN-Fetch][CLOSELOAD-WV-ERR] ' + String(e && e.message ? e.message : e));
-    }
+        });
+    }, 8000);
 }
-
 hosts["closeload"] = function (url, movieInfo, provider, config, callback) { return __awaiter(_this, void 0, void 0, function () {
     function dc_o55npDX9dLL(value_parts) {
         var value = value_parts.join('');
@@ -691,7 +507,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
         }
         return String(match[1] || '').replace(/[\s'"]/g, '');
     }
-    var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1, urlCandidates, candidateIdx, activeUrl, fetchResult, playUrlCandidate, playHeaders, probeStatus, contentUrlRaw, deadStreams, wvOpened;
+    var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1, urlCandidates, candidateIdx, activeUrl, fetchResult;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -701,17 +517,15 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 callbackHost = provider === 'LRIDOMOVIE' ? provider : HOST;
                 urlCandidates = buildCloseloadUrlCandidates(url, config);
                 candidateIdx = 0;
-                deadStreams = [];
-                wvOpened = false;
                 console.log('[RN-Fetch][CLOSELOAD-URL] ' + String(url).substring(0, 140));
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v18-global-hold candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v7-contenturl-filekey candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
-                    queueCloseloadWebview(url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
+                    queueCloseloadWebview(url, movieInfo, provider, config, callback, urlCandidates);
                     return [2];
                 }
                 activeUrl = urlCandidates[candidateIdx];
@@ -719,7 +533,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 console.log('[RN-Fetch][CLOSELOAD-TRY] idx=' + candidateIdx + ' ' + activeUrl.substring(0, 120));
                 _a.label = 2;
             case 2:
-                _a.trys.push([2, 5, , 6]);
+                _a.trys.push([2, 4, , 5]);
                 return [4, fetchCloseloadWithRetry(activeUrl, embedHeaders, 3)];
             case 3:
                 fetchResult = _a.sent();
@@ -731,98 +545,85 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                     candidateIdx++;
                     return [3, 1];
                 }
-                // Prefer packer decode over schema.org contentUrl (often a dead playmix path).
-                directUrl = extractCloseloadPlainStreamSkipContentUrl(htmlText);
-                contentUrlRaw = extractCloseloadPlainStream(htmlText);
+                directUrl = extractCloseloadPlainStream(htmlText);
+                if (directUrl && directUrl.indexOf('http') === 0) {
+                    console.log('[RN-Fetch][CLOSELOAD-DIRECT] ' + directUrl.substring(0, 120));
+                    libs.embed_callback(directUrl, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: directUrl, quality: 1080 }], {
+                        referer: activeUrl,
+                        'user-agent': embedHeaders['user-agent'],
+                    }, {
+                        type: 'm3u8',
+                    });
+                    return [2];
+                }
                 packerScript = extractPacker(htmlText);
                 unpacker = packerScript ? libs.string_unpacker_v2(packerScript) : '';
-                console.log('[RN-Fetch][CLOSELOAD-SCRIPT] len=' + (packerScript ? packerScript.length : 0) + ' plain=' + (directUrl ? 1 : 0) + ' contentUrl=' + (contentUrlRaw ? 1 : 0));
+                console.log('[RN-Fetch][CLOSELOAD-SCRIPT] len=' + (packerScript ? packerScript.length : 0));
                 parseDirect = decodeDynamicSource(htmlText, unpacker);
                 if (parseDirect && parseDirect.indexOf('https') != -1) {
                     console.log('[RN-Fetch][CLOSELOAD-DECODE] ok dynamic');
                 }
-                else if (packerScript) {
+                else if (!packerScript) {
+                    console.log('[RN-Fetch][CLOSELOAD-SKIP] no-packer-script idx=' + candidateIdx);
+                    candidateIdx++;
+                    return [3, 1];
+                }
+                else {
                     keyName = resolveCloseloadSrcKey(htmlText, unpacker);
                     console.log('[RN-Fetch][CLOSELOAD-KEY] ' + keyName);
-                    if (keyName) {
-                        varName = unpacker.match(new RegExp(keyName + '\\=[A-z0-9]+\\(([^\\)]*)\\)', 'i'));
-                        if (!varName) {
-                            varName = htmlText.match(new RegExp(keyName + '\\s*=\\s*[A-z0-9_]+\\(([^\\)]*)\\)', 'i'));
-                        }
-                        varName = varName ? varName[1] : '';
-                        try {
-                            varName = JSON.parse(varName);
-                            libs.log({ varName: varName }, provider, 'VarName_1');
-                            decoders = [dc_08bClqn1Nt2, dc_o55npDX9dLL, dc_hDbCyi9R5V2, dc_o55npDX9dLL2, dc_o55npDX9dLL3, dc_AEtIE9ASRaK];
-                            parseDirect = '';
-                            for (_i = 0; _i < decoders.length; _i++) {
-                                decoder = decoders[_i];
-                                parseDirect = decoder(varName);
-                                if (parseDirect && parseDirect.indexOf('https') != -1) {
-                                    console.log('[RN-Fetch][CLOSELOAD-DECODE] ok decoder=' + _i);
-                                    break;
-                                }
-                            }
-                        }
-                        catch (parseErr) {
-                            console.log('[RN-Fetch][CLOSELOAD-SKIP] json-parse-failed idx=' + candidateIdx);
-                            parseDirect = '';
+                    if (!keyName) {
+                        console.log('[RN-Fetch][CLOSELOAD-SKIP] no-src-key idx=' + candidateIdx);
+                        candidateIdx++;
+                        return [3, 1];
+                    }
+                    varName = unpacker.match(new RegExp(keyName + '\\=[A-z0-9]+\\(([^\\)]*)\\)', 'i'));
+                    if (!varName) {
+                        varName = htmlText.match(new RegExp(keyName + '\\s*=\\s*[A-z0-9_]+\\(([^\\)]*)\\)', 'i'));
+                    }
+                    varName = varName ? varName[1] : '';
+                    try {
+                        varName = JSON.parse(varName);
+                    }
+                    catch (parseErr) {
+                        console.log('[RN-Fetch][CLOSELOAD-SKIP] json-parse-failed idx=' + candidateIdx);
+                        candidateIdx++;
+                        return [3, 1];
+                    }
+                    libs.log({ varName: varName }, provider, 'VarName_1');
+                    decoders = [dc_08bClqn1Nt2, dc_o55npDX9dLL, dc_hDbCyi9R5V2, dc_o55npDX9dLL2, dc_o55npDX9dLL3, dc_AEtIE9ASRaK];
+                    parseDirect = '';
+                    for (_i = 0; _i < decoders.length; _i++) {
+                        decoder = decoders[_i];
+                        parseDirect = decoder(varName);
+                        if (parseDirect && parseDirect.indexOf('https') != -1) {
+                            console.log('[RN-Fetch][CLOSELOAD-DECODE] ok decoder=' + _i);
+                            break;
                         }
                     }
                 }
                 libs.log({ parseDirect: parseDirect }, provider, 'ParseDirect');
-                playUrlCandidate = '';
-                if (parseDirect && parseDirect.indexOf('https') != -1) {
-                    playUrlCandidate = normalizeCloseloadPlayUrl(parseDirect);
-                    console.log('[RN-Fetch][CLOSELOAD-PLAY] ' + playUrlCandidate.substring(0, 120));
+                if (!parseDirect || parseDirect.indexOf('https') == -1) {
+                    console.log('[RN-Fetch][CLOSELOAD-SKIP] decode-failed idx=' + candidateIdx);
+                    candidateIdx++;
+                    return [3, 1];
                 }
-                else {
-                    if (contentUrlRaw) {
-                        console.log('[RN-Fetch][CLOSELOAD-CONTENTURL-SKIP] ' + String(contentUrlRaw).substring(0, 120));
-                    }
-                    if (directUrl) {
-                        console.log('[RN-Fetch][CLOSELOAD-DIRECT-SKIP] ' + String(directUrl).substring(0, 120));
-                    }
-                    console.log('[RN-Fetch][CLOSELOAD-WV-EARLY] no-decode idx=' + candidateIdx);
-                    if (!wvOpened) {
-                        wvOpened = true;
-                        queueCloseloadWebview(activeUrl || url, movieInfo, provider, config, callback, urlCandidates, []);
-                    } else {
-                        console.log('[RN-Fetch][CLOSELOAD-WV-SKIP] already-opened');
-                    }
-                    return [2];
-                }
-                playHeaders = buildCloseloadPlayHeaders(activeUrl);
-                return [4, probeCloseloadStream(playUrlCandidate, playHeaders)];
-            case 4:
-                probeStatus = _a.sent();
-                console.log('[RN-Fetch][CLOSELOAD-PROBE] status=' + probeStatus + ' url=' + String(playUrlCandidate).substring(0, 100));
-                if (!(probeStatus >= 200 && probeStatus < 400)) {
-                    console.log('[RN-Fetch][CLOSELOAD-PROBE-DEAD] idx=' + candidateIdx);
-                    if (playUrlCandidate) {
-                        deadStreams.push(playUrlCandidate);
-                    }
-                    console.log('[RN-Fetch][CLOSELOAD-WV-EARLY] probe-dead');
-                    if (!wvOpened) {
-                        wvOpened = true;
-                        queueCloseloadWebview(activeUrl || url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
-                    }
-                    return [2];
-                }
-                libs.embed_callback(playUrlCandidate, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: playUrlCandidate, quality: 1080 }], playHeaders, {
-                    type: closeloadPlayType(playUrlCandidate),
+                console.log('[RN-Fetch][CLOSELOAD-PLAY] ' + parseDirect.substring(0, 120));
+                libs.embed_callback(parseDirect, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: parseDirect, quality: 1080 }], {
+                    referer: activeUrl,
+                    'user-agent': embedHeaders['user-agent'],
+                }, {
+                    type: 'm3u8',
                 });
                 return [2];
-            case 5:
+            case 4:
                 e_1 = _a.sent();
                 console.log('[RN-Fetch][CLOSELOAD-ERROR] idx=' + candidateIdx + ' ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 candidateIdx++;
                 return [3, 1];
-            case 6: return [2];
+            case 5: return [2];
         }
     });
 }); };
-
 hosts['closeload-embed'] = function (url, movieInfo, provider, config, callback) { return __awaiter(_this, void 0, void 0, function () {
     var embedUrl, pageReferer, headers, wvScripts;
     return __generator(this, function (_a) {

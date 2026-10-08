@@ -36,8 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var PROVIDER = 'LRIDOMOVIE';
-// Site moved: ridomovies.su → ridomovie.to (singular + .to)
-var DOMAIN = 'https://ridomovie.to';
+var DOMAIN = 'https://ridomovies.su';
 var USER_AGENT = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 function buildSiteHeaders(referer) {
     return {
@@ -223,12 +222,7 @@ function lridomovieSleep(ms) {
     });
 }
 function lridomovieBuildSlugFallback(movieInfo) {
-    // Detail URLs look like /movie/jamie-foxx-take-care-of-yourself-2026
-    var base = libs.url_slug_search(movieInfo, '-');
-    if (movieInfo && movieInfo.year) {
-        return base + '-' + String(movieInfo.year);
-    }
-    return base;
+    return libs.url_slug_search(movieInfo, '-');
 }
 function lridomovieFetchSearch(url, headers, attempt) {
     return __awaiter(_this, void 0, void 0, function () {
@@ -324,18 +318,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                console.log('[RN-Fetch][RIDO-VERSION] v12-global-hold');
-                // Reserve the single App WebView before IYesMovies FALLBACK (~8s).
-                try {
-                    if (typeof globalThis !== 'undefined') {
-                        globalThis.__lridomovieWvPending = true;
-                        globalThis.__lridomovieWvDone = false;
-                    }
-                }
-                catch (eG) { }
-                libs.__lridomovieWvPending = true;
-                libs.__lridomovieWvDone = false;
-                console.log('[RN-Fetch][RIDO-WV-HOLD] pending=1');
+                console.log('[RN-Fetch][RIDO-VERSION] v9-rn-mobile-su-sync');
                 headers = buildSiteHeaders(DOMAIN + '/');
                 _b.label = 1;
             case 1:
@@ -350,9 +333,6 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ slugDetail: slugDetail }, PROVIDER, 'SLUG_DETAIL');
                 if (!slugDetail) {
                     console.log('[RN-Fetch][RIDO-SKIP] slug-not-found');
-                    try { if (typeof globalThis !== 'undefined') { globalThis.__lridomovieWvPending = false; globalThis.__lridomovieWvDone = true; } } catch (e0) { }
-                    libs.__lridomovieWvPending = false;
-                    libs.__lridomovieWvDone = true;
                     return [2];
                 }
                 detailUrl = DOMAIN + '/movie/' + slugDetail;
@@ -368,9 +348,6 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 pageHtml = _b.sent();
                 if (!pageHtml || !pageHtml.ok) {
                     console.log('[RN-Fetch][RIDO-PAGE-BLOCK] status=' + (pageHtml ? pageHtml.status : 0));
-                    try { if (typeof globalThis !== 'undefined') { globalThis.__lridomovieWvPending = false; globalThis.__lridomovieWvDone = true; } } catch (e1) { }
-                    libs.__lridomovieWvPending = false;
-                    libs.__lridomovieWvDone = true;
                     return [2];
                 }
                 return [4, pageHtml.text()];
@@ -378,17 +355,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 pageHtml = _b.sent();
                 if (lridomovieIsCfChallenge(pageHtml)) {
                     console.log('[RN-Fetch][RIDO-PAGE-BLOCK] cf-challenge');
-                    try { if (typeof globalThis !== 'undefined') { globalThis.__lridomovieWvPending = false; globalThis.__lridomovieWvDone = true; } } catch (e2) { }
-                    libs.__lridomovieWvPending = false;
-                    libs.__lridomovieWvDone = true;
                     return [2];
                 }
                 pageStream = extractStreamFromText(pageHtml);
                 if (pageStream) {
                     console.log('[RN-Fetch][RIDO-DIRECT] page m3u8');
-                    try { if (typeof globalThis !== 'undefined') { globalThis.__lridomovieWvPending = false; globalThis.__lridomovieWvDone = true; } } catch (e3) { }
-                    libs.__lridomovieWvPending = false;
-                    libs.__lridomovieWvDone = true;
                     streamHeaders = buildSiteHeaders(detailUrl + '/');
                     libs.embed_callback(pageStream, PROVIDER, PROVIDER, 'Hls', callback, 0, [], [{ file: pageStream, quality: 1080 }], streamHeaders, { type: 'm3u8' });
                     return [2, true];
@@ -397,9 +368,6 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ iframe: iframe }, PROVIDER, 'IFRAME HTML');
                 if (!iframe) {
                     console.log('[RN-Fetch][RIDO-SKIP] embed-empty');
-                    try { if (typeof globalThis !== 'undefined') { globalThis.__lridomovieWvPending = false; globalThis.__lridomovieWvDone = true; } } catch (e4) { }
-                    libs.__lridomovieWvPending = false;
-                    libs.__lridomovieWvDone = true;
                     return [2];
                 }
                 iframeUrl = extractIframeUrl(iframe);
@@ -411,15 +379,9 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 libs.log({ embedUrlRaw: embedUrlRaw, iframeUrl: iframeUrlNormalized }, PROVIDER, 'IFRAME URL');
                 if (!embedUrlRaw) {
                     console.log('[RN-Fetch][RIDO-SKIP] iframe-parse-failed');
-                    try { if (typeof globalThis !== 'undefined') { globalThis.__lridomovieWvPending = false; globalThis.__lridomovieWvDone = true; } } catch (e5) { }
-                    libs.__lridomovieWvPending = false;
-                    libs.__lridomovieWvDone = true;
                     return [2];
                 }
                 if (embedUrlRaw.indexOf('.m3u8') != -1) {
-                    try { if (typeof globalThis !== 'undefined') { globalThis.__lridomovieWvPending = false; globalThis.__lridomovieWvDone = true; } } catch (e6) { }
-                    libs.__lridomovieWvPending = false;
-                    libs.__lridomovieWvDone = true;
                     streamHeaders = buildSiteHeaders(detailUrl + '/');
                     libs.embed_callback(embedUrlRaw, PROVIDER, PROVIDER, 'Hls', callback, 0, [], [{ file: embedUrlRaw, quality: 1080 }], streamHeaders, { type: 'm3u8' });
                     return [2, true];
@@ -441,9 +403,6 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 return [3, 7];
             case 6:
                 e_1 = _b.sent();
-                try { if (typeof globalThis !== 'undefined') { globalThis.__lridomovieWvPending = false; globalThis.__lridomovieWvDone = true; } } catch (e7) { }
-                libs.__lridomovieWvPending = false;
-                libs.__lridomovieWvDone = true;
                 libs.log({ e: e_1 }, PROVIDER, 'ERROR');
                 console.log('[RN-Fetch][RIDO-ERROR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 return [3, 7];

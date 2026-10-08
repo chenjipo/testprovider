@@ -61,53 +61,17 @@ callbacksEmbed['closeload-embed'] = function (dataCallback, provider, host, call
                 if (!(data.step === 'cl-url' && data.url)) {
                     return [2];
                 }
-                playUrl = String(data.url).replace(/&amp;/g, '&').replace(/\\\//g, '/').trim();
-                var deadList = (metadata && metadata.deadStreams) ? metadata.deadStreams : [];
-                var playBase = playUrl.split('#')[0].split('?')[0];
-                for (var di = 0; di < deadList.length; di++) {
-                    var deadBase = String(deadList[di] || '').split('#')[0].split('?')[0];
-                    if (deadBase && (playBase === deadBase || playBase.indexOf(deadBase) >= 0 || deadBase.indexOf(playBase) >= 0)) {
-                        console.log('[RN-Fetch][CLOSELOAD-WV-SKIP-DEAD] ' + playUrl.substring(0, 120));
-                        return [2];
-                    }
-                }
-                referer = 'https://closeload.top/';
+                playUrl = String(data.url);
+                referer = metadata && metadata.embedUrl ? metadata.embedUrl : (metadata && metadata.pageReferer ? metadata.pageReferer : 'https://closeload.top/');
                 state = getCloseloadState();
                 playKey = playUrl.substring(0, 180);
                 if (state.played[playKey]) {
                     return [2];
                 }
                 state.played[playKey] = true;
-                // Shared flag: WV callback realm may not share libs with EMBED-SLOT.
-                try {
-                    if (typeof globalThis !== 'undefined') {
-                        globalThis.__lridomovieWvPending = false;
-                        globalThis.__lridomovieWvDone = true;
-                    }
-                }
-                catch (eG) { }
-                try {
-                    libs.__lridomovieWvPending = false;
-                    libs.__lridomovieWvDone = true;
-                }
-                catch (eL) { }
-                console.log('[RN-Fetch][CLOSELOAD-WV] release-I-hold play');
                 console.log('[RN-Fetch][CLOSELOAD-WV-PLAY] ' + playUrl.substring(0, 120));
-                try {
-                    if (typeof libs.__kickEmbedWebviewSlot === 'function') {
-                        libs.__kickEmbedWebviewSlot('l-play');
-                    }
-                    else if (libs.__embedWebviewSlot) {
-                        libs.__embedWebviewSlot.busyUntil = 0;
-                    }
-                }
-                catch (eKick) { }
                 libs.embed_callback(playUrl, provider, provider, 'Hls', callback, 0, [], [{ file: playUrl, quality: 1080 }], {
                     referer: referer,
-                    Referer: referer,
-                    origin: 'https://closeload.top',
-                    Origin: 'https://closeload.top',
-                    Accept: 'application/vnd.apple.mpegurl,application/x-mpegURL,application/octet-stream,*/*',
                     'user-agent': 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36',
                 }, {
                     type: 'm3u8',
