@@ -36,7 +36,8 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var PROVIDER = 'LRIDOMOVIE';
-var DOMAIN = 'https://ridomovies.su';
+// Site moved: ridomovies.su → ridomovie.to (singular + .to)
+var DOMAIN = 'https://ridomovie.to';
 var USER_AGENT = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 function buildSiteHeaders(referer) {
     return {
@@ -222,7 +223,12 @@ function lridomovieSleep(ms) {
     });
 }
 function lridomovieBuildSlugFallback(movieInfo) {
-    return libs.url_slug_search(movieInfo, '-');
+    // Detail URLs look like /movie/jamie-foxx-take-care-of-yourself-2026
+    var base = libs.url_slug_search(movieInfo, '-');
+    if (movieInfo && movieInfo.year) {
+        return base + '-' + String(movieInfo.year);
+    }
+    return base;
 }
 function lridomovieFetchSearch(url, headers, attempt) {
     return __awaiter(_this, void 0, void 0, function () {
@@ -318,7 +324,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                console.log('[RN-Fetch][RIDO-VERSION] v9-rn-mobile-su-sync');
+                console.log('[RN-Fetch][RIDO-VERSION] v10-ridomovie-to');
                 headers = buildSiteHeaders(DOMAIN + '/');
                 _b.label = 1;
             case 1:
