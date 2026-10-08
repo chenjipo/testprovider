@@ -348,28 +348,36 @@ function buildCloseloadWebviewScript(deadUrls) {
         "var done=0,ticks=0,dead=" + deadJson + ";" +
         "function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}" +
         "function isDead(u){u=String(u||'').split('#')[0].split('?')[0];if(!u)return 1;for(var i=0;i<dead.length;i++){if(dead[i]&&(u===dead[i]||u.indexOf(dead[i])>=0||dead[i].indexOf(u)>=0))return 1;}return 0;}" +
-        "function postUrl(u,src){if(done||!u||String(u).indexOf('http')!==0)return;u=String(u).replace(/&amp;/g,'&');if(isDead(u)){pm({step:'cl-skip-dead',url:String(u).substring(0,120),source:src||''});return;}done=1;pm({step:'cl-url',url:u,source:src||'net'});}" +
+        "function postUrl(u,src){if(done||!u||String(u).indexOf('http')!==0)return;u=String(u).replace(/&amp;/g,'&');" +
+        "var fromNet=(src==='fetch'||src==='xhr'||src==='video');" +
+        "if(!fromNet&&isDead(u)){pm({step:'cl-skip-dead',url:String(u).substring(0,120),source:src||''});return;}" +
+        "done=1;pm({step:'cl-url',url:u,source:src||'net'});}" +
         "function hook(){if(window.__clHooked)return;window.__clHooked=1;" +
-        "try{var fo=window.fetch;if(fo){window.fetch=function(a,b){var s=typeof a==='string'?a:(a&&a.url?a.url:'');return fo.apply(this,arguments).then(function(r){try{if(!done&&s&&(String(s).indexOf('m3u8')>=0||String(s).indexOf('master.txt')>=0||String(s).indexOf('playmix')>=0))postUrl(String(s),'fetch');}catch(e){}return r;});};}}" +
+        "try{var fo=window.fetch;if(fo){window.fetch=function(a,b){var s=typeof a==='string'?a:(a&&a.url?a.url:'');return fo.apply(this,arguments).then(function(r){try{if(!done&&s&&(String(s).indexOf('m3u8')>=0||String(s).indexOf('master.txt')>=0||String(s).indexOf('playmix')>=0||String(s).indexOf('/hls/')>=0))postUrl(String(s),'fetch');}catch(e){}return r;});};}}" +
         "catch(e1){}" +
-        "try{var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{if(!done&&u&&(String(u).indexOf('m3u8')>=0||String(u).indexOf('master.txt')>=0||String(u).indexOf('playmix')>=0))postUrl(String(u),'xhr');}catch(e){}return XO.apply(this,arguments);};}" +
+        "try{var XO=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{if(!done&&u&&(String(u).indexOf('m3u8')>=0||String(u).indexOf('master.txt')>=0||String(u).indexOf('playmix')>=0||String(u).indexOf('/hls/')>=0))postUrl(String(u),'xhr');}catch(e){}return XO.apply(this,arguments);};}" +
         "catch(e2){}" +
+        "try{var vs=Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype,'src');if(vs&&vs.set){Object.defineProperty(HTMLMediaElement.prototype,'src',{set:function(v){try{if(!done&&v&&(String(v).indexOf('m3u8')>=0||String(v).indexOf('master.txt')>=0||String(v).indexOf('playmix')>=0))postUrl(String(v),'video');}catch(e){}return vs.set.call(this,v);},get:function(){return vs.get.call(this);}});}}" +
+        "catch(e3){}" +
         "}" +
-        "function scan(){if(done)return;try{var h=(document.documentElement&&document.documentElement.innerHTML)||'';" +
+        "function clickPlay(){try{var sels=['button','.play','.vjs-big-play-button','.jw-icon-display','[aria-label*=Play i]','video'];for(var i=0;i<sels.length;i++){var els=document.querySelectorAll(sels[i]);for(var j=0;j<els.length;j++){try{els[j].click();}catch(e){}}}}catch(e){}}" +
+        "function scan(){if(done)return;try{clickPlay();var h=(document.documentElement&&document.documentElement.innerHTML)||'';" +
         "var m1=h.match(/let\\s+url\\s*=\\s*['\"](https?:[^'\"]+)/i);if(m1&&m1[1]){postUrl(m1[1],'let-url');return;}" +
         "var m4=h.match(/https?:\\/\\/[^\\s'\"<>]+\\.m3u8[^\\s'\"<>]*/i);if(m4){postUrl(m4[0],'m3u8');return;}" +
-        "if(ticks<30)return;" +
+        "if(ticks<20)return;" +
         "var m2=h.match(/https?:\\/\\/[^\\s'\"<>]*playmix[^\\s'\"<>]*master\\.txt[^\\s'\"<>]*/i);if(m2){postUrl(m2[0],'playmix-late');return;}" +
-        "}catch(e3){pm({step:'cl-scan-err',msg:String(e3&&e3.message?e3.message:e3)});}}" +
+        "var m3=h.match(/\"contentUrl\"\\s*:\\s*\"(https?:[^\\\"]+)\"/i);if(m3&&m3[1]){postUrl(m3[1].replace(/\\\\\\//g,'/'),'contentUrl');return;}" +
+        "}catch(e4){pm({step:'cl-scan-err',msg:String(e4&&e4.message?e4.message:e4)});}}" +
         "hook();" +
         "pm({step:'cl-boot',href:String(location.href||'')});" +
-        "var iv=setInterval(function(){ticks++;scan();if(done||ticks>100)clearInterval(iv);},400);" +
+        "setTimeout(clickPlay,800);" +
+        "setTimeout(clickPlay,2000);" +
+        "var iv=setInterval(function(){ticks++;scan();if(done||ticks>120)clearInterval(iv);},400);" +
         "})();true;"
     );
 }
 function buildCloseloadWebviewScripts(deadUrls) {
-    var main = buildCloseloadWebviewScript(deadUrls);
-    // cl-ping path is proven; run the same main script from beforeLoad too.
+    var main = buildCloseloadWebviewScript(deadUrls || []);
     var before = "(function(){try{window.ReactNativeWebView.postMessage(JSON.stringify({step:'cl-ping',href:String(location.href||'')}));}catch(e){}})();" + main;
     return {
         beforeLoadScript: before,
@@ -435,7 +443,7 @@ function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, 
                 libs.__lridomovieWvPending = false;
                 console.log('[RN-Fetch][CLOSELOAD-WV] release-I-hold timeout');
             }
-        }, 14000);
+        }, 22000);
     }
     catch (e) {
         libs.__lridomovieWvPending = false;
@@ -658,7 +666,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v16-early-hold-i candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v17-net-allow-hold candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
@@ -730,16 +738,14 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 else {
                     if (contentUrlRaw) {
                         console.log('[RN-Fetch][CLOSELOAD-CONTENTURL-SKIP] ' + String(contentUrlRaw).substring(0, 120));
-                        deadStreams.push(normalizeCloseloadPlayUrl(contentUrlRaw));
                     }
                     if (directUrl) {
                         console.log('[RN-Fetch][CLOSELOAD-DIRECT-SKIP] ' + String(directUrl).substring(0, 120));
-                        deadStreams.push(normalizeCloseloadPlayUrl(directUrl));
                     }
                     console.log('[RN-Fetch][CLOSELOAD-WV-EARLY] no-decode idx=' + candidateIdx);
                     if (!wvOpened) {
                         wvOpened = true;
-                        queueCloseloadWebview(activeUrl || url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
+                        queueCloseloadWebview(activeUrl || url, movieInfo, provider, config, callback, urlCandidates, []);
                     } else {
                         console.log('[RN-Fetch][CLOSELOAD-WV-SKIP] already-opened');
                     }

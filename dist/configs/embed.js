@@ -400,7 +400,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v40-l-hold-i';
+libs.__embedSyncVersion = 'v41-slot-hold-l';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -660,7 +660,7 @@ libs.__deferProviderWebview = function (provider, task) {
         var elapsed = bag && bag.startMs ? (Date.now() - bag.startMs) : (Date.now() - startedAt);
         var flushed = !!(bag && bag.flushed);
         // Hold I while LRIDOMOVIE early WebView is extracting (single App WebView).
-        if (provider === 'IYesMovies' && libs.__lridomovieWvPending && elapsed < 20000) {
+        if (provider === 'IYesMovies' && libs.__lridomovieWvPending && elapsed < 25000) {
             setTimeout(tryRun, pollMs);
             return;
         }
@@ -1156,6 +1156,12 @@ libs.scheduleEmbedWebview = function (provider, task, slotMs) {
         var waitMs = Math.max(0, slot.busyUntil - now);
         var item = slot.queue.shift();
         setTimeout(function () {
+            if (item.provider === 'IYesMovies' && libs.__lridomovieWvPending) {
+                console.log('[RN-Fetch][EMBED-SLOT] hold-I-for-L queued=' + slot.queue.length);
+                slot.queue.push(item);
+                setTimeout(runNext, 1000);
+                return;
+            }
             console.log('[RN-Fetch][EMBED-SLOT] start provider=' + item.provider + ' wait=' + waitMs + 'ms queued=' + slot.queue.length);
             slot.busyUntil = Date.now() + holdMs;
             try {
