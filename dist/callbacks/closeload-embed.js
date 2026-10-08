@@ -62,9 +62,6 @@ callbacksEmbed['closeload-embed'] = function (dataCallback, provider, host, call
                     return [2];
                 }
                 playUrl = String(data.url).replace(/&amp;/g, '&').replace(/\\\//g, '/').trim();
-                if (playUrl.indexOf('master.txt') >= 0 && playUrl.indexOf('.m3u8') < 0 && playUrl.indexOf('#') < 0) {
-                    playUrl = playUrl + '#.m3u8';
-                }
                 referer = 'https://closeload.top/';
                 state = getCloseloadState();
                 playKey = playUrl.substring(0, 180);
