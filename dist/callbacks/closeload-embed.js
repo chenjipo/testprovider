@@ -62,6 +62,15 @@ callbacksEmbed['closeload-embed'] = function (dataCallback, provider, host, call
                     return [2];
                 }
                 playUrl = String(data.url).replace(/&amp;/g, '&').replace(/\\\//g, '/').trim();
+                var deadList = (metadata && metadata.deadStreams) ? metadata.deadStreams : [];
+                var playBase = playUrl.split('#')[0].split('?')[0];
+                for (var di = 0; di < deadList.length; di++) {
+                    var deadBase = String(deadList[di] || '').split('#')[0].split('?')[0];
+                    if (deadBase && (playBase === deadBase || playBase.indexOf(deadBase) >= 0 || deadBase.indexOf(playBase) >= 0)) {
+                        console.log('[RN-Fetch][CLOSELOAD-WV-SKIP-DEAD] ' + playUrl.substring(0, 120));
+                        return [2];
+                    }
+                }
                 referer = 'https://closeload.top/';
                 state = getCloseloadState();
                 playKey = playUrl.substring(0, 180);

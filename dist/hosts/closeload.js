@@ -336,25 +336,31 @@ function fetchCloseloadWithRetry(activeUrl, embedHeaders, maxAttempts) {
     }
     return attempt(0);
 }
-function buildCloseloadWebviewScript() {
-    return "(function(){var done=0;function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function postUrl(u){if(done||!u||String(u).indexOf('http')!==0)return;done=1;pm({step:'cl-url',url:u});}function scan(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m1=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m1&&m1[1]){postUrl(m1[1]);return;}var m2=h.match(/https?:[^'\"\\s<>]+playmix[^'\"\\s<>]*master\\.txt[^'\"\\s<>]*/i);if(m2){postUrl(m2[0]);return;}var m3=h.match(/https?:[^'\"\\s<>]+master\\.txt[^'\"\\s<>]*/i);if(m3){postUrl(m3[0]);return;}var m4=h.match(/https?:[^'\"\\s<>]+\\.(?:m3u8)[^'\"\\s<>]*/i);if(m4){postUrl(m4[0]);return;}var m=h.match(/\"contentUrl\"\\s*:\\s*\"(https?:\\\\\/\\\\\/[^\"]+)\"/i);if(m&&m[1]){postUrl(m[1].replace(/\\\\\\//g,'/'));return;}var m0=h.match(/\"contentUrl\"\\s*:\\s*\"(https?:\\/\\/[^\"]+)\"/i);if(m0&&m0[1])postUrl(m0[1]);}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){return fo(a,b).then(function(r){var s=typeof a==='string'?a:(a&&a.url?a.url:'');if(!done&&(s.indexOf('.m3u8')>=0||s.indexOf('master.txt')>=0))postUrl(s);return r;});};var xo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{if(!done&&u&&(String(u).indexOf('.m3u8')>=0||String(u).indexOf('master.txt')>=0))postUrl(String(u));}catch(e){}return xo.apply(this,arguments);};}hook();pm({step:'cl-boot',href:location.href});scan();var n=0;var iv=setInterval(function(){scan();n++;if(done||n>80)clearInterval(iv);},400);})();true;";
+function buildCloseloadWebviewScript(deadUrls) {
+    var dead = Array.isArray(deadUrls) ? deadUrls : [];
+    var deadJson = JSON.stringify(dead.map(function (u) {
+        return String(u || '').split('#')[0].split('?')[0];
+    }).filter(Boolean));
+    return "(function(){var done=0,ticks=0,dead=" + deadJson + ";function pm(m){try{window.ReactNativeWebView.postMessage(JSON.stringify(m));}catch(e){}}function isDead(u){u=String(u||'').split('#')[0].split('?')[0];if(!u)return 1;for(var i=0;i<dead.length;i++){if(!dead[i])continue;if(u===dead[i]||u.indexOf(dead[i])>=0||dead[i].indexOf(u)>=0)return 1;}return 0;}function postUrl(u,src){if(done||!u||String(u).indexOf('http')!==0)return;u=String(u).replace(/&amp;/g,'&');if(isDead(u)){pm({step:'cl-skip-dead',url:u.substring(0,120),source:src||''});return;}done=1;pm({step:'cl-url',url:u,source:src||'net'});}function scanStatic(){if(done)return;var h=document.documentElement?document.documentElement.innerHTML:'';var m1=h.match(/let\\s+url\\s*=\\s*['\"]([^'\"]+)/i);if(m1&&m1[1]){postUrl(m1[1],'let-url');return;}var m4=h.match(/https?:[^'\"\\s<>]+\\.m3u8[^'\"\\s<>]*/i);if(m4){postUrl(m4[0],'m3u8');return;}if(ticks<25)return;var m2=h.match(/https?:[^'\"\\s<>]+playmix[^'\"\\s<>]*master\\.txt[^'\"\\s<>]*/i);if(m2){postUrl(m2[0],'playmix-late');return;}var m=h.match(/\"contentUrl\"\\s*:\\s*\"(https?:\\\\/\\\\/[^\"]+)\"/i);if(m&&m[1]){postUrl(m[1].replace(/\\\\\\//g,'/'),'contentUrl-late');}}function hook(){if(window.__clHooked)return;window.__clHooked=1;var fo=fetch;fetch=function(a,b){var s=typeof a==='string'?a:(a&&a.url?a.url:'');return fo(a,b).then(function(r){if(!done&&s&&(String(s).indexOf('.m3u8')>=0||String(s).indexOf('master.txt')>=0||String(s).indexOf('playmix')>=0))postUrl(String(s),'fetch');return r;});};var xo=XMLHttpRequest.prototype.open;XMLHttpRequest.prototype.open=function(m,u){try{if(!done&&u&&(String(u).indexOf('.m3u8')>=0||String(u).indexOf('master.txt')>=0||String(u).indexOf('playmix')>=0))postUrl(String(u),'xhr');}catch(e){}return xo.apply(this,arguments);};}hook();pm({step:'cl-boot',href:location.href});var iv=setInterval(function(){ticks++;scanStatic();if(done||ticks>90)clearInterval(iv);},400);})();true;";
 }
-function buildCloseloadWebviewScripts() {
+function buildCloseloadWebviewScripts(deadUrls) {
+
     return {
         beforeLoadScript: "(function(){try{window.ReactNativeWebView.postMessage(JSON.stringify({step:'cl-ping',href:location.href}));}catch(e){}})();true;",
-        script: buildCloseloadWebviewScript(),
+        script: buildCloseloadWebviewScript(deadUrls),
     };
 }
-function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, candidates) {
+function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, candidates, deadUrls) {
     var pageReferer = config && config.pageReferer ? config.pageReferer : 'https://closeload.top/';
     var wvUrl = pickCloseloadWebviewUrl(embedUrl, config, candidates || [embedUrl]);
     var headers = buildCloseloadFetchHeaders(wvUrl, pageReferer);
-    var wvScripts = buildCloseloadWebviewScripts();
+    var deadList = deadUrls || (config && config.deadStreams) || [];
+    var wvScripts = buildCloseloadWebviewScripts(deadList);
     if (!libs.scheduleEmbedWebview) {
         console.log('[RN-Fetch][CLOSELOAD-SKIP] webview-unavailable');
         return;
     }
-    console.log('[RN-Fetch][CLOSELOAD-WV] queue ' + String(wvUrl).substring(0, 120));
+    console.log('[RN-Fetch][CLOSELOAD-WV] void ' + String(wvUrl).substring(0, 120) + ' dead=' + deadList.length);
     libs.scheduleEmbedWebview(provider === 'LRIDOMOVIE' ? provider : 'closeload', function () {
         callback({
             callback: {
@@ -371,10 +377,11 @@ function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, 
                     embedUrlRaw: config && config.embedUrlRaw ? config.embedUrlRaw : wvUrl,
                     pageReferer: pageReferer,
                     movieInfo: movieInfo,
+                    deadStreams: deadList,
                 },
             },
         });
-    }, 8000);
+    }, 10000);
 }
 hosts["closeload"] = function (url, movieInfo, provider, config, callback) { return __awaiter(_this, void 0, void 0, function () {
     function dc_o55npDX9dLL(value_parts) {
@@ -575,7 +582,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
         }
         return String(match[1] || '').replace(/[\s'"]/g, '');
     }
-    var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1, urlCandidates, candidateIdx, activeUrl, fetchResult, playUrlCandidate, playHeaders, probeStatus, contentUrlRaw;
+    var DOMAIN, HOST, pageReferer, embedHeaders, response, htmlText, directUrl, packerScript, unpacker, getKey, keyName, varName, parseDirect, decoders, _i, decoder, callbackHost, e_1, urlCandidates, candidateIdx, activeUrl, fetchResult, playUrlCandidate, playHeaders, probeStatus, contentUrlRaw, deadStreams;
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
@@ -585,15 +592,16 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 callbackHost = provider === 'LRIDOMOVIE' ? provider : HOST;
                 urlCandidates = buildCloseloadUrlCandidates(url, config);
                 candidateIdx = 0;
+                deadStreams = [];
                 console.log('[RN-Fetch][CLOSELOAD-URL] ' + String(url).substring(0, 140));
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v10-prefer-decode-probe candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v11-wv-on-dead candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
-                    voidCloseloadWebview(url, movieInfo, provider, config, callback, urlCandidates);
+                    voidCloseloadWebview(url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
                     return [2];
                 }
                 activeUrl = urlCandidates[candidateIdx];
@@ -658,18 +666,18 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                     playUrlCandidate = normalizeCloseloadPlayUrl(parseDirect);
                     console.log('[RN-Fetch][CLOSELOAD-PLAY] ' + playUrlCandidate.substring(0, 120));
                 }
-                else if (directUrl && directUrl.indexOf('http') === 0) {
-                    playUrlCandidate = normalizeCloseloadPlayUrl(directUrl);
-                    console.log('[RN-Fetch][CLOSELOAD-DIRECT] ' + playUrlCandidate.substring(0, 120));
-                }
-                else if (contentUrlRaw && contentUrlRaw.indexOf('http') === 0) {
-                    playUrlCandidate = normalizeCloseloadPlayUrl(contentUrlRaw);
-                    console.log('[RN-Fetch][CLOSELOAD-CONTENTURL] ' + playUrlCandidate.substring(0, 120));
-                }
-                if (!playUrlCandidate) {
-                    console.log('[RN-Fetch][CLOSELOAD-SKIP] no-play-url idx=' + candidateIdx);
-                    candidateIdx++;
-                    return [3, 1];
+                else {
+                    if (contentUrlRaw) {
+                        console.log('[RN-Fetch][CLOSELOAD-CONTENTURL-SKIP] ' + String(contentUrlRaw).substring(0, 120));
+                        deadStreams.push(normalizeCloseloadPlayUrl(contentUrlRaw));
+                    }
+                    if (directUrl) {
+                        console.log('[RN-Fetch][CLOSELOAD-DIRECT-SKIP] ' + String(directUrl).substring(0, 120));
+                        deadStreams.push(normalizeCloseloadPlayUrl(directUrl));
+                    }
+                    console.log('[RN-Fetch][CLOSELOAD-WV-EARLY] no-decode idx=' + candidateIdx);
+                    voidCloseloadWebview(activeUrl || url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
+                    return [2];
                 }
                 playHeaders = buildCloseloadPlayHeaders(activeUrl);
                 return [4, probeCloseloadStream(playUrlCandidate, playHeaders)];
@@ -678,8 +686,12 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 console.log('[RN-Fetch][CLOSELOAD-PROBE] status=' + probeStatus + ' url=' + String(playUrlCandidate).substring(0, 100));
                 if (!(probeStatus >= 200 && probeStatus < 400)) {
                     console.log('[RN-Fetch][CLOSELOAD-PROBE-DEAD] idx=' + candidateIdx);
-                    candidateIdx++;
-                    return [3, 1];
+                    if (playUrlCandidate) {
+                        deadStreams.push(playUrlCandidate);
+                    }
+                    console.log('[RN-Fetch][CLOSELOAD-WV-EARLY] probe-dead');
+                    voidCloseloadWebview(activeUrl || url, movieInfo, provider, config, callback, urlCandidates, deadStreams);
+                    return [2];
                 }
                 libs.embed_callback(playUrlCandidate, provider, callbackHost, 'Hls', callback, provider === 'LRIDOMOVIE' ? 0 : 1, [], [{ file: playUrlCandidate, quality: 1080 }], playHeaders, {
                     type: closeloadPlayType(playUrlCandidate),
