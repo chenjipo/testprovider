@@ -400,7 +400,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v38-iyes-handoff';
+libs.__embedSyncVersion = 'v39-flush-done';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -638,6 +638,7 @@ libs.__flushVodSyncItems = function () {
             libs.__runDeferredProviderWebviews();
         }, 0);
     }
+    console.log('[RN-Fetch][SYNC-FLUSH-DONE] version=' + libs.__embedSyncVersion);
 };
 libs.__deferProviderWebview = function (provider, task) {
     libs.__vodDeferredWebviews = libs.__vodDeferredWebviews || {};
