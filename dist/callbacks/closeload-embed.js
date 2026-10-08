@@ -78,10 +78,30 @@ callbacksEmbed['closeload-embed'] = function (dataCallback, provider, host, call
                     return [2];
                 }
                 state.played[playKey] = true;
-                libs.__lridomovieWvPending = false;
-                libs.__lridomovieWvDone = true;
+                // Shared flag: WV callback realm may not share libs with EMBED-SLOT.
+                try {
+                    if (typeof globalThis !== 'undefined') {
+                        globalThis.__lridomovieWvPending = false;
+                        globalThis.__lridomovieWvDone = true;
+                    }
+                }
+                catch (eG) { }
+                try {
+                    libs.__lridomovieWvPending = false;
+                    libs.__lridomovieWvDone = true;
+                }
+                catch (eL) { }
                 console.log('[RN-Fetch][CLOSELOAD-WV] release-I-hold play');
                 console.log('[RN-Fetch][CLOSELOAD-WV-PLAY] ' + playUrl.substring(0, 120));
+                try {
+                    if (typeof libs.__kickEmbedWebviewSlot === 'function') {
+                        libs.__kickEmbedWebviewSlot('l-play');
+                    }
+                    else if (libs.__embedWebviewSlot) {
+                        libs.__embedWebviewSlot.busyUntil = 0;
+                    }
+                }
+                catch (eKick) { }
                 libs.embed_callback(playUrl, provider, provider, 'Hls', callback, 0, [], [{ file: playUrl, quality: 1080 }], {
                     referer: referer,
                     Referer: referer,

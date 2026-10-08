@@ -110,6 +110,47 @@ function buildCloseloadWebviewPageUrl(embedUrl) {
     var sep = base.indexOf('?') >= 0 ? '&' : '?';
     return base + sep + '_wv=' + Date.now() + '_' + Math.floor(Math.random() * 1000000);
 }
+function getLridomovieHoldGlobal() {
+    if (typeof globalThis !== 'undefined') {
+        return globalThis;
+    }
+    if (typeof global !== 'undefined') {
+        return global;
+    }
+    return {};
+}
+function setLridomovieWvHold(pending, done) {
+    var g = getLridomovieHoldGlobal();
+    g.__lridomovieWvPending = !!pending;
+    if (done !== undefined) {
+        g.__lridomovieWvDone = !!done;
+    }
+    try {
+        libs.__lridomovieWvPending = !!pending;
+        if (done !== undefined) {
+            libs.__lridomovieWvDone = !!done;
+        }
+    }
+    catch (eHold) { }
+}
+function isLridomovieWvHolding() {
+    var g = getLridomovieHoldGlobal();
+    if (g.__lridomovieWvDone || (libs && libs.__lridomovieWvDone)) {
+        return false;
+    }
+    return !!(g.__lridomovieWvPending || (libs && libs.__lridomovieWvPending));
+}
+function kickEmbedSlotAfterL() {
+    try {
+        if (typeof libs.__kickEmbedWebviewSlot === 'function') {
+            libs.__kickEmbedWebviewSlot('l-play');
+        }
+        else if (libs.__embedWebviewSlot) {
+            libs.__embedWebviewSlot.busyUntil = 0;
+        }
+    }
+    catch (eKick) { }
+}
 function pickCloseloadWebviewUrl(rawUrl, config, candidates) {
     var pick = '';
     var idx = 0;
@@ -425,28 +466,28 @@ function queueCloseloadWebview(embedUrl, movieInfo, provider, config, callback, 
         };
         console.log('[RN-Fetch][CLOSELOAD-WV] queue ' + String(wvUrl).substring(0, 120) + ' dead=' + deadList.length + ' provider=' + provider);
         // NEVER call is_end_webview here — it freezes later WebViews.
-        // Open L IMMEDIATELY (v12 proved cl-ping works early). Hold I via __lridomovieWvPending.
-        libs.__lridomovieWvPending = true;
-        libs.__lridomovieWvDone = false;
+        // Open L IMMEDIATELY. Hold I via shared globalThis flag (WV callback libs may differ).
+        setLridomovieWvHold(true, false);
         console.log('[RN-Fetch][CLOSELOAD-WV] early-open hold-I=1');
         try {
             callback(payload);
             console.log('[RN-Fetch][CLOSELOAD-WV] payload-sent');
         }
         catch (eOpen) {
-            libs.__lridomovieWvPending = false;
+            setLridomovieWvHold(false, true);
             console.log('[RN-Fetch][CLOSELOAD-WV-ERR] open ' + String(eOpen && eOpen.message ? eOpen.message : eOpen));
         }
         // Release I hold even if L never gets a play URL.
         setTimeout(function () {
-            if (libs.__lridomovieWvPending) {
-                libs.__lridomovieWvPending = false;
+            if (isLridomovieWvHolding()) {
+                setLridomovieWvHold(false, true);
+                kickEmbedSlotAfterL();
                 console.log('[RN-Fetch][CLOSELOAD-WV] release-I-hold timeout');
             }
-        }, 22000);
+        }, 16000);
     }
     catch (e) {
-        libs.__lridomovieWvPending = false;
+        setLridomovieWvHold(false, true);
         console.log('[RN-Fetch][CLOSELOAD-WV-ERR] ' + String(e && e.message ? e.message : e));
     }
 }
@@ -666,7 +707,7 @@ hosts["closeload"] = function (url, movieInfo, provider, config, callback) { ret
                 if (config && config.embedUrlRaw) {
                     console.log('[RN-Fetch][CLOSELOAD-RAW] ' + String(config.embedUrlRaw).substring(0, 140));
                 }
-                console.log('[RN-Fetch][CLOSELOAD-VERSION] v17-net-allow-hold candidates=' + urlCandidates.length);
+                console.log('[RN-Fetch][CLOSELOAD-VERSION] v18-global-hold candidates=' + urlCandidates.length);
                 _a.label = 1;
             case 1:
                 if (candidateIdx >= urlCandidates.length) {
