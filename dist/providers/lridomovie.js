@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var PROVIDER = 'LRIDOMOVIE';
-var DOMAIN = 'https://ridomovies.su';
+var DOMAIN = 'https://ridomovie.to';
 var USER_AGENT = 'Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36';
 function buildSiteHeaders(referer) {
     return {

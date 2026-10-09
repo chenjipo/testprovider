@@ -5,6 +5,7 @@
     "dist/providers/xvidsrcvip.js",
     "dist/providers/iyesmovies.js",
     "dist/providers/lridomovie.js",
-    "dist/providers/blookmovie.js"
+    "dist/providers/blookmovie.js",
+    "dist/providers/ffawesome.js"
   ]
 }
