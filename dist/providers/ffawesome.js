@@ -83,6 +83,25 @@ function ffawesomeNormalizeTitle(text) {
         .replace(/\s+/g, ' ')
         .trim();
 }
+function ffawesomeSignificantParts(normTitle) {
+    var stop = {
+        the: 1, a: 1, an: 1, of: 1, and: 1, or: 1, vs: 1, versus: 1,
+        to: 1, in: 1, on: 1, for: 1, with: 1, from: 1,
+    };
+    var parts = String(normTitle || '').split(' ');
+    var out = [];
+    for (var i = 0; i < parts.length; i++) {
+        var word = parts[i];
+        if (!word || word.length < 3 || stop[word]) {
+            continue;
+        }
+        out.push(word);
+    }
+    return out;
+}
+function ffawesomeHasWholeWord(haystack, word) {
+    return (' ' + haystack + ' ').indexOf(' ' + word + ' ') >= 0;
+}
 function ffawesomeHasDrm(item) {
     if (!item) {
         return true;
@@ -158,41 +177,64 @@ function ffawesomeScoreItem(item, movieInfo) {
     if (!want || !got) {
         return -1;
     }
+    var wantParts = ffawesomeSignificantParts(want);
+    var gotParts = ffawesomeSignificantParts(got);
+    if (!wantParts.length) {
+        return -1;
+    }
     var score = 0;
     if (got === want) {
-        score += 100;
-    }
-    else if (got.indexOf(want) >= 0 || want.indexOf(got) >= 0) {
-        score += 60;
+        score = 120;
     }
     else {
-        var wantParts = want.split(' ');
+        // Require EVERY significant query word to appear as a whole word in the result title.
+        // Prevents "Coyote vs. Acme" -> "Coyote".
         var hit = 0;
         for (var i = 0; i < wantParts.length; i++) {
-            if (wantParts[i].length > 2 && got.indexOf(wantParts[i]) >= 0) {
+            if (ffawesomeHasWholeWord(got, wantParts[i])) {
                 hit++;
             }
         }
-        if (!hit) {
+        if (hit < wantParts.length) {
             return -1;
         }
-        score += hit * 8;
+        // Result may add subtitle words, but reject if result is only a tiny subset length-wise.
+        if (gotParts.length && gotParts.length * 2 < wantParts.length) {
+            return -1;
+        }
+        score = 90;
+        // Prefer titles that do not drag in many extra significant words.
+        var extra = gotParts.length - wantParts.length;
+        if (extra > 2) {
+            score -= (extra - 2) * 5;
+        }
+        // Allow longer catalog title that fully contains the query phrase.
+        if (got.indexOf(want) >= 0) {
+            score += 10;
+        }
     }
     if (movieInfo.year) {
         var year = String(movieInfo.year);
-        var blob = String(item.date || '') + ' ' + String(item.year || '') + ' ' + String(item.release_year || '');
+        var blob = String(item.date || '') + ' ' + String(item.year || '') + ' ' + String(item.release_year || '') + ' ' + String(item.title || '');
         if (blob.indexOf(year) >= 0) {
-            score += 25;
+            score += 20;
+        }
+        else {
+            // Year mismatch soft penalty when catalog year is present and different.
+            var yearMatch = blob.match(/\b(19|20)\d{2}\b/);
+            if (yearMatch && yearMatch[0] !== year) {
+                score -= 15;
+            }
         }
     }
-    if (ffawesomePickPlayUrl(item)) {
-        score += 15;
+    if (!ffawesomePickPlayUrl(item)) {
+        score -= 40;
     }
     if (ffawesomeHasDrm(item)) {
-        score -= 80;
+        return -1;
     }
-    if (String(item.type || '') === 'post') {
-        score += 5;
+    if (String(item.type || '') !== 'post' && String(item.feed_type || '') !== 'video') {
+        score -= 20;
     }
     return score;
 }
@@ -262,7 +304,8 @@ function ffawesomeSearch(movieInfo) {
                             best = item;
                         }
                     }
-                    if (bestScore >= 100) {
+                    if (bestScore >= 110) {
+                        console.log('[RN-Fetch][FAWESOME-MATCH] score=' + bestScore + ' title=' + String(best.title || '') + ' node=' + String(best.node_id || ''));
                         return [2, best];
                     }
                     _a.label = 3;
@@ -270,7 +313,9 @@ function ffawesomeSearch(movieInfo) {
                     qi++;
                     return [3, 1];
                 case 4:
-                    if (!best || bestScore < 40) {
+                    // Strict floor: better no link than wrong title.
+                    if (!best || bestScore < 90) {
+                        console.log('[RN-Fetch][FAWESOME-SKIP] weak-match score=' + bestScore + ' title=' + (best ? String(best.title || '') : ''));
                         return [2, null];
                     }
                     console.log('[RN-Fetch][FAWESOME-MATCH] score=' + bestScore + ' title=' + String(best.title || '') + ' node=' + String(best.node_id || ''));
@@ -332,7 +377,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][FAWESOME-VERSION] v1-direct-api');
+                console.log('[RN-Fetch][FAWESOME-VERSION] v2-strict-title');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 5, , 6]);
