@@ -36,7 +36,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var PROVIDER = 'OVidrift';
-var VERSION = 'v1-orion-evion';
+var VERSION = 'v2-sync-bag';
 var EMBED_ORIGIN = 'https://embed.vidrift.net';
 var USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
 var TMDB_API_KEYS = libs.TMDB_API_KEYS || [

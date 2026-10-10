@@ -342,11 +342,11 @@ libs.__vodStormKey = function (url) {
 };
 libs.__isVodYaxSyncProvider = function (provider) {
     var p = String(provider || '');
-    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie';
+    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie' || p === 'OVidrift';
 };
 libs.__isVodYaxBatchProvider = function (provider) {
     var p = String(provider || '');
-    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie';
+    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie' || p === 'OVidrift';
 };
 libs.__isVodBatchProvider = function (provider) {
     if (libs.__vodSyncYaxEnabled && libs.__isVodYaxBatchProvider(provider)) {
@@ -400,11 +400,12 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v42-global-hold';
+libs.__embedSyncVersion = 'v43-ovidrift-sync';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
-libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie'];
+// OVidrift must join the bag: early direct-deliver replaces the App list with Server O only.
+libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie', 'OVidrift'];
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 18000;
 libs.__vodSyncHardMaxMs = 26000;
@@ -522,25 +523,26 @@ libs.__vodSyncIsYaxReady = function (items, elapsed) {
     // Deferred non-YAX sources alone in bag.
     // IYesMovies must not flush by itself: that delivery replaces the list with only Server I.
     if (items.length >= 1 && familyCount === 0 && coreFamilies === 0 && elapsed >= (libs.__vodSyncCoalesceMs || 4500)) {
-        var waitingOnI = false;
-        for (var iyesIdx = 0; iyesIdx < items.length; iyesIdx++) {
-            if (items[iyesIdx][1] === 'IYesMovies') {
-                waitingOnI = true;
+        var waitingSolo = false;
+        for (var soloIdx = 0; soloIdx < items.length; soloIdx++) {
+            if (items[soloIdx][1] === 'IYesMovies') {
+                waitingSolo = true;
                 break;
             }
         }
-        if (!waitingOnI) {
+        if (!waitingSolo) {
             return true;
         }
     }
-    // L/B-only (YAX family but no Y/A/X core) — do not wait forever for core providers.
+    // L/B/O-only (YAX family but no Y/A/X core) — wait a bit for X/B, then flush.
+    // Do not flush on O alone before 8s (same App "keep only first server" issue).
     if (items.length >= 1 && coreFamilies === 0 && familyCount >= 1 && elapsed >= Math.max(libs.__vodSyncCoalesceMs || 4500, 8000)) {
         return true;
     }
     return false;
 };
 libs.__vodSyncSortItems = function (items) {
-    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300, 'LRIDOMOVIE': 400, 'BlookMovie': 500, 'IYesMovies': 600 };
+    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300, 'LRIDOMOVIE': 400, 'BlookMovie': 500, 'OVidrift': 550, 'IYesMovies': 600 };
     return items.slice().sort(function (left, right) {
         var leftBase = order[left[1]] || 500;
         var rightBase = order[right[1]] || 500;
