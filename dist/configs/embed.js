@@ -273,12 +273,6 @@ libs.__resolveVodBatchProvider = function (urlDirect, provider, host) {
     if (p === 'LookMovie' || p === 'lookmovie' || p === 'BlookMovie' || p === 'blookmovie') {
         return 'BlookMovie';
     }
-    if (p === 'Fawesome' || p === 'FFawesome' || p === 'ffawesome') {
-        return 'Fawesome';
-    }
-    if (url.indexOf('fawesome.tv') >= 0 || url.indexOf('ftmain.cachefly.net') >= 0 || url.indexOf('rapi.ifood.tv') >= 0) {
-        return 'Fawesome';
-    }
     if (url.indexOf('valking.store') >= 0) {
         return 'BlookMovie';
     }
@@ -348,11 +342,11 @@ libs.__vodStormKey = function (url) {
 };
 libs.__isVodYaxSyncProvider = function (provider) {
     var p = String(provider || '');
-    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie' || p === 'Fawesome';
+    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie';
 };
 libs.__isVodYaxBatchProvider = function (provider) {
     var p = String(provider || '');
-    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie' || p === 'Fawesome';
+    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie';
 };
 libs.__isVodBatchProvider = function (provider) {
     if (libs.__vodSyncYaxEnabled && libs.__isVodYaxBatchProvider(provider)) {
@@ -406,11 +400,11 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v43-fawesome';
+libs.__embedSyncVersion = 'v42-global-hold';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
-libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie', 'Fawesome'];
+libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie'];
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 18000;
 libs.__vodSyncHardMaxMs = 26000;
@@ -546,7 +540,7 @@ libs.__vodSyncIsYaxReady = function (items, elapsed) {
     return false;
 };
 libs.__vodSyncSortItems = function (items) {
-    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300, 'LRIDOMOVIE': 400, 'BlookMovie': 500, 'Fawesome': 550, 'IYesMovies': 600 };
+    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300, 'LRIDOMOVIE': 400, 'BlookMovie': 500, 'IYesMovies': 600 };
     return items.slice().sort(function (left, right) {
         var leftBase = order[left[1]] || 500;
         var rightBase = order[right[1]] || 500;

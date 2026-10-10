@@ -69,9 +69,6 @@ libs.string_provider = function (provider, rank) {
         'XVidsrcVip': 'X',
         'AVideasy': 'A',
         'V': 'A',
-        'Fawesome': 'F',
-        'FFawesome': 'F',
-        'ffawesome': 'F',
     };
     if (labels[provider]) {
         if (!rank) {
@@ -88,7 +85,7 @@ libs.string_provider = function (provider, rank) {
     }
     return "Server ".concat(provider[0].toUpperCase()).concat(rank);
 };
-console.log('[RN-Fetch][STRING-CFG] v13-fawesome');
+console.log('[RN-Fetch][STRING-CFG] v12-ployan-embed');
 libs.string_encrypt_fmovies = function (input) {
     var keytwo = "51wJ0FDq/UVCefLopEcmK3ni4WIQztMjZdSYOsbHr9R2h7PvxBGAuglaN8+kXT6y";
     var output = '';
