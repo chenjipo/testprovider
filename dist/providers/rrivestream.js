@@ -36,16 +36,96 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var PROVIDER = 'RRiveStream';
-var VERSION = 'v1-scrapper';
+var VERSION = 'v3-no-4k-ads';
 var SCRAPPER_ORIGIN = 'https://scrapper.rivestream.app';
 var SITE_ORIGIN = 'https://www.rivestream.app';
 var USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36';
-var PREFERRED_SERVICES = ['apogee', 'vanguard', 'zephyr', 'primevids', 'citadel', 'apollo', 'asiacloud'];
+// Skip vanguard/zephyr (4K HDR promo/ads). Keep 1080p/720p services only.
+var PREFERRED_SERVICES = ['apogee', 'primevids', 'citadel', 'apollo', 'asiacloud'];
 var MAX_DELIVER = 4;
-var TMDB_API_KEYS = libs.TMDB_API_KEYS || [
+var ALLOWED_QUALITIES = { 1080: true, 720: true };
+var RIVE_SALT = ["4Z7lUo", "gwIVSMD", "PLmz2elE2v", "Z4OFV0", "SZ6RZq6Zc", "zhJEFYxrz8", "FOm7b0", "axHS3q4KDq", "o9zuXQ", "4Aebt", "wgjjWwKKx", "rY4VIxqSN", "kfjbnSo", "2DyrFA1M", "YUixDM9B", "JQvgEj0", "mcuFx6JIek", "eoTKe26gL", "qaI9EVO1rB", "0xl33btZL", "1fszuAU", "a7jnHzst6P", "wQuJkX", "cBNhTJlEOf", "KNcFWhDvgT", "XipDGjST", "PCZJlbHoyt", "2AYnMZkqd", "HIpJh", "KH0C3iztrG", "W81hjts92", "rJhAT", "NON7LKoMQ", "NMdY3nsKzI", "t4En5v", "Qq5cOQ9H", "Y9nwrp", "VX5FYVfsf", "cE5SJG", "x1vj1", "HegbLe", "zJ3nmt4OA", "gt7rxW57dq", "clIE9b", "jyJ9g", "B5jXjMCSx", "cOzZBZTV", "FTXGy", "Dfh1q1", "ny9jqZ2POI", "X2NnMn", "MBtoyD", "qz4Ilys7wB", "68lbOMye", "3YUJnmxp", "1fv5Imona", "PlfvvXD7mA", "ZarKfHCaPR", "owORnX", "dQP1YU", "dVdkx", "qgiK0E", "cx9wQ", "5F9bGa", "7UjkKrp", "Yvhrj", "wYXez5Dg3", "pG4GMU", "MwMAu", "rFRD5wlM"];
+var TMDB_API_KEYS = (typeof libs !== 'undefined' && libs && libs.TMDB_API_KEYS) ? libs.TMDB_API_KEYS : [
     '4e44c9029b1270a41c75c666510b46f5',
     '4219e299c89411838049ab0dab19ebd5',
 ];
+console.log('[RN-Fetch][RIVESTREAM-CFG] ' + VERSION + ' provider=' + PROVIDER);
+function rriveBtoa(input) {
+    if (typeof btoa === 'function') {
+        return btoa(input);
+    }
+    if (libs && typeof libs.string_btoa === 'function') {
+        return libs.string_btoa(input);
+    }
+    return input;
+}
+function rriveHashOne(input) {
+    var e = String(input);
+    var t = 0;
+    for (var n = 0; n < e.length; n++) {
+        var r = e.charCodeAt(n);
+        var i = ((t = (r + (t << 6) + (t << 16) - t) >>> 0) << (n % 5) | t >>> (32 - n % 5)) >>> 0;
+        t ^= (i ^ (r << (n % 7) | r >>> (8 - n % 7))) >>> 0;
+        t = (t + ((t >>> 11) ^ (t << 3))) >>> 0;
+    }
+    t ^= t >>> 15;
+    t = ((65535 & t) * 49842 + (((t >>> 16) * 49842 & 65535) << 16)) >>> 0;
+    t ^= t >>> 13;
+    t = ((65535 & t) * 40503 + (((t >>> 16) * 40503 & 65535) << 16)) >>> 0;
+    return rrivePad8((t ^= t >>> 16).toString(16));
+}
+function rrivePad8(hex) {
+    var text = String(hex || '');
+    while (text.length < 8) {
+        text = '0' + text;
+    }
+    return text;
+}
+function rriveHashTwo(input) {
+    var t = String(input);
+    var n = 3735928559 ^ t.length;
+    for (var e = 0; e < t.length; e++) {
+        var r = t.charCodeAt(e);
+        r ^= (131 * e + 89 ^ (r << (e % 5))) & 255;
+        n = ((n << 7 | n >>> 25) >>> 0) ^ r;
+        var i = (65535 & n) * 60205;
+        var o = ((n >>> 16) * 60205) << 16;
+        n = (i + o) >>> 0;
+        n ^= n >>> 11;
+    }
+    n ^= n >>> 15;
+    n = ((65535 & n) * 49842 + ((n >>> 16) * 49842 << 16)) >>> 0;
+    n ^= n >>> 13;
+    n = ((65535 & n) * 40503 + ((n >>> 16) * 40503 << 16)) >>> 0;
+    n ^= n >>> 16;
+    n = ((65535 & n) * 10196 + ((n >>> 16) * 10196 << 16)) >>> 0;
+    return rrivePad8((n ^= n >>> 15).toString(16));
+}
+function rriveSecretKey(id) {
+    if (id === undefined || id === null || id === '') {
+        return 'rive';
+    }
+    try {
+        var r = String(id);
+        var salt = void 0;
+        var insertAt = void 0;
+        if (isNaN(Number(id))) {
+            var sum = r.split('').reduce(function (acc, ch) { return acc + ch.charCodeAt(0); }, 0);
+            salt = RIVE_SALT[sum % RIVE_SALT.length] || rriveBtoa(r);
+            insertAt = Math.floor(sum % r.length / 2);
+        }
+        else {
+            var num = Number(id);
+            salt = RIVE_SALT[num % RIVE_SALT.length] || rriveBtoa(r);
+            insertAt = Math.floor(num % r.length / 2);
+        }
+        var mixed = r.slice(0, insertAt) + salt + r.slice(insertAt);
+        return rriveBtoa(rriveHashTwo(rriveHashOne(mixed)));
+    }
+    catch (e) {
+        return 'topSecret';
+    }
+}
 function rriveBuildApiHeaders() {
     return {
         'user-agent': USER_AGENT,
@@ -63,11 +143,23 @@ function rriveBuildPlayHeaders(fileUrl) {
         referer: SITE_ORIGIN + '/',
         Referer: SITE_ORIGIN + '/',
     };
-    try {
-        var parsed = new URL(String(fileUrl || ''));
-        var embedded = parsed.searchParams.get('headers');
-        if (embedded) {
-            var decoded = JSON.parse(embedded);
+    var text = String(fileUrl || '');
+    if (text.indexOf('valhallastream.com') >= 0) {
+        headers.origin = 'https://proxy.valhallastream.com';
+        headers.Origin = headers.origin;
+        headers.referer = 'https://proxy.valhallastream.com/';
+        headers.Referer = headers.referer;
+    }
+    var marker = 'headers=';
+    var idx = text.indexOf(marker);
+    if (idx >= 0) {
+        try {
+            var raw = text.substring(idx + marker.length);
+            var amp = raw.indexOf('&');
+            if (amp >= 0) {
+                raw = raw.substring(0, amp);
+            }
+            var decoded = JSON.parse(decodeURIComponent(raw));
             if (decoded && typeof decoded === 'object') {
                 if (decoded['User-Agent'] || decoded['user-agent']) {
                     headers['user-agent'] = decoded['User-Agent'] || decoded['user-agent'];
@@ -82,14 +174,8 @@ function rriveBuildPlayHeaders(fileUrl) {
                 }
             }
         }
-        if (parsed.host.indexOf('valhallastream.com') >= 0) {
-            headers.origin = 'https://proxy.valhallastream.com';
-            headers.Origin = headers.origin;
-            headers.referer = 'https://proxy.valhallastream.com/';
-            headers.Referer = headers.referer;
+        catch (e) {
         }
-    }
-    catch (e) {
     }
     return headers;
 }
@@ -139,7 +225,7 @@ function rriveResolveTmdbId(movieInfo) {
                     cacheKey = imdbId + '|' + String(movieInfo.type || 'movie');
                     cached = rriveGetCachedTmdbId(cacheKey);
                     if (cached) {
-                        console.log('[RN-Fetch][RRIVE-TMDB] source=cache imdb=' + imdbId + ' tmdb=' + cached);
+                        console.log('[RN-Fetch][RIVESTREAM-TMDB] source=cache imdb=' + imdbId + ' tmdb=' + cached);
                         return [2, cached];
                     }
                     keyIndex = 0;
@@ -170,19 +256,19 @@ function rriveResolveTmdbId(movieInfo) {
                     }
                     if (resolved) {
                         rriveSetCachedTmdbId(cacheKey, resolved);
-                        console.log('[RN-Fetch][RRIVE-TMDB] imdb=' + imdbId + ' tmdb=' + resolved);
+                        console.log('[RN-Fetch][RIVESTREAM-TMDB] imdb=' + imdbId + ' tmdb=' + resolved);
                         return [2, resolved];
                     }
                     return [3, 5];
                 case 4:
                     e_1 = _a.sent();
-                    console.log('[RN-Fetch][RRIVE-TMDB-ERR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
+                    console.log('[RN-Fetch][RIVESTREAM-TMDB-ERR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
                     return [3, 5];
                 case 5:
                     keyIndex++;
                     return [3, 1];
                 case 6:
-                    console.log('[RN-Fetch][RRIVE-TMDB] miss imdb=' + imdbId);
+                    console.log('[RN-Fetch][RIVESTREAM-TMDB] miss imdb=' + imdbId);
                     return [2, String(movieInfo.tmdb_id || '')];
             }
         });
@@ -207,21 +293,40 @@ function rriveParseQuality(raw) {
     }
     return 1080;
 }
-function rriveBuildProviderUrl(movieInfo, tmdbId, service) {
+function rriveBuildScrapperUrl(movieInfo, tmdbId, service) {
     var id = String(tmdbId || '').trim();
     if (!id || !service) {
         return '';
     }
     var url = SCRAPPER_ORIGIN + '/api/provider?provider=' + encodeURIComponent(service) + '&id=' + encodeURIComponent(id);
     if (movieInfo.type == 'tv') {
-        var season = movieInfo.season || 1;
-        var episode = movieInfo.episode || 1;
-        url += '&season=' + encodeURIComponent(String(season)) + '&episode=' + encodeURIComponent(String(episode));
+        url += '&season=' + encodeURIComponent(String(movieInfo.season || 1))
+            + '&episode=' + encodeURIComponent(String(movieInfo.episode || 1));
     }
     if (service === 'primevids' || service === 'citadel') {
         url += '&cb=' + String(Math.floor(Date.now() / 3000000));
     }
     return url;
+}
+function rriveBuildProxyUrl(movieInfo, tmdbId, service) {
+    var id = String(tmdbId || '').trim();
+    if (!id || !service) {
+        return '';
+    }
+    var requestID = movieInfo.type == 'tv' ? 'tvVideoProvider' : 'movieVideoProvider';
+    var url = SITE_ORIGIN + '/api/backendfetch?requestID=' + requestID
+        + '&id=' + encodeURIComponent(id)
+        + '&service=' + encodeURIComponent(service)
+        + '&secretKey=' + encodeURIComponent(rriveSecretKey(id))
+        + '&proxyMode=noProxy';
+    if (movieInfo.type == 'tv') {
+        url += '&season=' + encodeURIComponent(String(movieInfo.season || 1))
+            + '&episode=' + encodeURIComponent(String(movieInfo.episode || 1));
+    }
+    return url;
+}
+function rriveIsAllowedQuality(quality) {
+    return !!ALLOWED_QUALITIES[quality];
 }
 function rriveExtractSources(payload, service) {
     var data = payload && payload.data ? payload.data : payload;
@@ -239,9 +344,15 @@ function rriveExtractSources(payload, service) {
         if (!file || file.indexOf('http') !== 0) {
             continue;
         }
+        var qualityLabel = String(item.quality || item.source || '');
+        var quality = rriveParseQuality(qualityLabel);
+        if (!rriveIsAllowedQuality(quality)) {
+            console.log('[RN-Fetch][RIVESTREAM-FILTER] drop q=' + quality + ' service=' + service + ' label=' + qualityLabel);
+            continue;
+        }
         out.push({
             file: file,
-            quality: rriveParseQuality(item.quality || item.source || ''),
+            quality: quality,
             label: String(item.source || item.quality || service),
             service: service,
             format: String(item.format || 'hls').toLowerCase(),
@@ -249,41 +360,57 @@ function rriveExtractSources(payload, service) {
     }
     return out;
 }
+function rriveNormalizePayload(payload) {
+    if (!payload) {
+        return null;
+    }
+    if (typeof payload === 'string') {
+        try {
+            return JSON.parse(payload);
+        }
+        catch (e) {
+            return null;
+        }
+    }
+    return payload;
+}
 function rriveFetchService(movieInfo, tmdbId, service) {
     return __awaiter(_this, void 0, void 0, function () {
-        var url, payload, e_2;
+        var urls, ui, payload, sources, e_2;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    url = rriveBuildProviderUrl(movieInfo, tmdbId, service);
-                    if (!url) {
-                        return [2, []];
-                    }
+                    urls = [
+                        rriveBuildScrapperUrl(movieInfo, tmdbId, service),
+                        rriveBuildProxyUrl(movieInfo, tmdbId, service),
+                    ];
+                    ui = 0;
                     _a.label = 1;
                 case 1:
-                    _a.trys.push([1, 3, , 4]);
-                    return [4, libs.request_get(url, rriveBuildApiHeaders(), false, true, 2)];
-                case 2:
-                    payload = _a.sent();
-                    if (!payload || typeof payload === 'string') {
-                        if (typeof payload === 'string' && payload) {
-                            try {
-                                payload = JSON.parse(payload);
-                            }
-                            catch (parseError) {
-                                return [2, []];
-                            }
-                        }
-                        else {
-                            return [2, []];
-                        }
+                    if (!(ui < urls.length)) return [3, 6];
+                    if (!urls[ui]) {
+                        return [3, 5];
                     }
-                    return [2, rriveExtractSources(payload, service)];
+                    _a.label = 2;
+                case 2:
+                    _a.trys.push([2, 4, , 5]);
+                    return [4, libs.request_get(urls[ui], rriveBuildApiHeaders(), false, true, 1)];
                 case 3:
+                    payload = rriveNormalizePayload(_a.sent());
+                    sources = rriveExtractSources(payload, service);
+                    if (sources.length) {
+                        console.log('[RN-Fetch][RIVESTREAM-SVC-OK] service=' + service + ' n=' + sources.length + ' via=' + (ui === 0 ? 'scrapper' : 'proxy'));
+                        return [2, sources];
+                    }
+                    return [3, 5];
+                case 4:
                     e_2 = _a.sent();
-                    console.log('[RN-Fetch][RRIVE-SVC-ERR] service=' + service + ' ' + String(e_2 && e_2.message ? e_2.message : e_2));
-                    return [2, []];
-                case 4: return [2];
+                    console.log('[RN-Fetch][RIVESTREAM-SVC-ERR] service=' + service + ' via=' + (ui === 0 ? 'scrapper' : 'proxy') + ' ' + String(e_2 && e_2.message ? e_2.message : e_2));
+                    return [3, 5];
+                case 5:
+                    ui++;
+                    return [3, 1];
+                case 6: return [2, []];
             }
         });
     });
@@ -292,10 +419,14 @@ function rrivePickBestSource(sources) {
     if (!sources || !sources.length) {
         return null;
     }
-    var best = sources[0];
-    for (var i = 1; i < sources.length; i++) {
-        if (sources[i].quality > best.quality) {
-            best = sources[i];
+    var best = null;
+    for (var i = 0; i < sources.length; i++) {
+        var item = sources[i];
+        if (!item || !rriveIsAllowedQuality(item.quality)) {
+            continue;
+        }
+        if (!best || item.quality > best.quality) {
+            best = item;
         }
     }
     return best;
@@ -303,61 +434,59 @@ function rrivePickBestSource(sources) {
 function rriveDeliver(playable, rank, callback) {
     var headers = rriveBuildPlayHeaders(playable.file);
     var streamType = playable.format === 'mp4' ? 'mp4' : 'm3u8';
-    console.log('[RN-Fetch][RRIVE-PLAY] rank=' + rank + ' service=' + playable.service + ' q=' + playable.quality + ' label=' + playable.label + ' file=' + playable.file.substring(0, 140));
+    console.log('[RN-Fetch][RIVESTREAM-PLAY] rank=' + rank + ' service=' + playable.service + ' q=' + playable.quality + ' label=Server R' + (rank || '') + ' file=' + playable.file.substring(0, 140));
     libs.embed_callback(playable.file, PROVIDER, PROVIDER, 'Hls', callback, rank, [], [{ file: playable.file, quality: playable.quality }], headers, { type: streamType });
 }
 source.getResource = function (movieInfo, config, callback) {
     return __awaiter(_this, void 0, void 0, function () {
-        var tmdbId, delivered, seen, serviceIndex, service, sources, best, rank, e_3;
+        var tmdbId, delivered, seen, tasks, settled, si, sources, best, rank, e_3;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
-                    console.log('[RN-Fetch][RRIVE-VERSION] ' + VERSION);
+                    console.log('[RN-Fetch][RIVESTREAM-VERSION] ' + VERSION);
                     _a.label = 1;
                 case 1:
-                    _a.trys.push([1, 7, , 8]);
+                    _a.trys.push([1, 4, , 5]);
                     return [4, rriveResolveTmdbId(movieInfo)];
                 case 2:
                     tmdbId = _a.sent();
                     if (!tmdbId) {
-                        console.log('[RN-Fetch][RRIVE-SKIP] tmdb-missing');
+                        console.log('[RN-Fetch][RIVESTREAM-SKIP] tmdb-missing');
                         return [2];
                     }
-                    console.log('[RN-Fetch][RRIVE-START] tmdb=' + tmdbId + ' type=' + String(movieInfo.type || 'movie'));
+                    console.log('[RN-Fetch][RIVESTREAM-START] tmdb=' + tmdbId + ' type=' + String(movieInfo.type || 'movie')
+                        + ' season=' + String(movieInfo.season || '') + ' episode=' + String(movieInfo.episode || ''));
                     delivered = 0;
                     seen = {};
-                    serviceIndex = 0;
-                    _a.label = 3;
+                    tasks = PREFERRED_SERVICES.map(function (service) {
+                        return rriveFetchService(movieInfo, tmdbId, service);
+                    });
+                    return [4, Promise.all(tasks)];
                 case 3:
-                    if (!(serviceIndex < PREFERRED_SERVICES.length && delivered < MAX_DELIVER)) return [3, 6];
-                    service = PREFERRED_SERVICES[serviceIndex];
-                    return [4, rriveFetchService(movieInfo, tmdbId, service)];
-                case 4:
-                    sources = _a.sent();
-                    best = rrivePickBestSource(sources);
-                    if (best && !seen[best.file]) {
+                    settled = _a.sent();
+                    for (si = 0; si < settled.length && delivered < MAX_DELIVER; si++) {
+                        sources = settled[si] || [];
+                        best = rrivePickBestSource(sources);
+                        if (!best || seen[best.file]) {
+                            continue;
+                        }
                         seen[best.file] = true;
                         rank = delivered === 0 ? 0 : delivered;
                         rriveDeliver(best, rank, callback);
                         delivered++;
                     }
-                    _a.label = 5;
-                case 5:
-                    serviceIndex++;
-                    return [3, 3];
-                case 6:
                     if (!delivered) {
-                        console.log('[RN-Fetch][RRIVE-SKIP] no-stream tmdb=' + tmdbId);
+                        console.log('[RN-Fetch][RIVESTREAM-SKIP] no-stream tmdb=' + tmdbId);
                         return [2];
                     }
-                    console.log('[RN-Fetch][RRIVE-DONE] delivered=' + delivered);
+                    console.log('[RN-Fetch][RIVESTREAM-DONE] delivered=' + delivered);
                     return [2, true];
-                case 7:
+                case 4:
                     e_3 = _a.sent();
                     libs.log({ e: e_3 }, PROVIDER, 'ERROR');
-                    console.log('[RN-Fetch][RRIVE-ERROR] ' + String(e_3 && e_3.message ? e_3.message : e_3));
+                    console.log('[RN-Fetch][RIVESTREAM-ERROR] ' + String(e_3 && e_3.message ? e_3.message : e_3));
                     return [2];
-                case 8: return [2];
+                case 5: return [2];
             }
         });
     });

@@ -400,7 +400,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v44-rrive-sync';
+libs.__embedSyncVersion = 'v45-rrive-sync';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
