@@ -342,11 +342,11 @@ libs.__vodStormKey = function (url) {
 };
 libs.__isVodYaxSyncProvider = function (provider) {
     var p = String(provider || '');
-    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie' || p === 'OVidrift';
+    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie' || p === 'OVidrift' || p === 'RRiveStream';
 };
 libs.__isVodYaxBatchProvider = function (provider) {
     var p = String(provider || '');
-    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie' || p === 'OVidrift';
+    return p === 'YMovies' || p === 'AVideasy' || p === 'XVidsrcVip' || p === 'LRIDOMOVIE' || p === 'BlookMovie' || p === 'OVidrift' || p === 'RRiveStream';
 };
 libs.__isVodBatchProvider = function (provider) {
     if (libs.__vodSyncYaxEnabled && libs.__isVodYaxBatchProvider(provider)) {
@@ -400,12 +400,12 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v43-ovidrift-sync';
+libs.__embedSyncVersion = 'v44-rrive-sync';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
-// OVidrift must join the bag: early direct-deliver replaces the App list with Server O only.
-libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie', 'OVidrift'];
+// O/R must join the bag: early direct-deliver replaces the App list with a single server.
+libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie', 'OVidrift', 'RRiveStream'];
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 18000;
 libs.__vodSyncHardMaxMs = 26000;
@@ -542,7 +542,7 @@ libs.__vodSyncIsYaxReady = function (items, elapsed) {
     return false;
 };
 libs.__vodSyncSortItems = function (items) {
-    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300, 'LRIDOMOVIE': 400, 'BlookMovie': 500, 'OVidrift': 550, 'IYesMovies': 600 };
+    var order = { 'YMovies': 100, 'AVideasy': 200, 'XVidsrcVip': 300, 'LRIDOMOVIE': 400, 'BlookMovie': 500, 'OVidrift': 550, 'RRiveStream': 560, 'IYesMovies': 600 };
     return items.slice().sort(function (left, right) {
         var leftBase = order[left[1]] || 500;
         var rightBase = order[right[1]] || 500;

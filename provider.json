@@ -6,6 +6,7 @@
     "dist/providers/iyesmovies.js",
     "dist/providers/lridomovie.js",
     "dist/providers/blookmovie.js",
-    "dist/providers/ovidrift.js"
+    "dist/providers/ovidrift.js",
+    "dist/providers/rrivestream.js"
   ]
 }
