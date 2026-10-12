@@ -129,7 +129,38 @@ libs.__inferSubHeaders = function (file, explicitHeaders) {
             Origin: 'https://www.lookmovie2.to',
         };
     }
+    if (url.indexOf('opensubtitles') >= 0) {
+        return {
+            'x-user-agent': 'VLSub 0.10.2',
+            'User-Agent': 'VLSub 0.10.2',
+        };
+    }
     return undefined;
+};
+libs.__vodBuildOpenSubsRows = function () {
+    var cache = libs.__vodOpenSubsCache || [];
+    var out = [];
+    var seen = {};
+    for (var i = 0; i < cache.length && out.length < 2; i++) {
+        var item = cache[i];
+        if (!item || !item.file || seen[item.file]) {
+            continue;
+        }
+        seen[item.file] = true;
+        var row = {
+            file: String(item.file),
+            kind: 'Captions',
+            label: item.label || 'sub',
+            // Force download path so App shows "Subtitles download success" toast.
+            type: 'download',
+            headers: item.headers || {
+                'x-user-agent': 'VLSub 0.10.2',
+                'User-Agent': 'VLSub 0.10.2',
+            },
+        };
+        out.push(row);
+    }
+    return out;
 };
 // Always refresh raw deliver so caption fixes apply after App reloads embed.js.
 libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
@@ -139,12 +170,20 @@ libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, c
     if (options === void 0) { options = {}; }
     var parseSubs = [];
     try {
+        // Prefer OpenSubtitles zip/download on the link itself. App getSubs auto-download
+        // often never starts (no GET dl.opensubtitles) even after emit=2.
+        var osRows = typeof libs.__vodBuildOpenSubsRows === 'function' ? libs.__vodBuildOpenSubsRows() : [];
+        if (osRows.length) {
+            parseSubs = osRows.slice();
+            console.log('[RN-Fetch][OS-INJECT] n=' + osRows.length + ' provider=' + String(provider || '')
+                + ' sample=' + String(osRows[0].file).substring(0, 90));
+        }
         if (libs.__vodPreferGlobalSubs) {
             if (subs && subs.length) {
                 console.log('[RN-Fetch][SUBDATAPARSE] strip-provider-subs n=' + subs.length + ' provider=' + String(provider || '') + ' prefer=global');
             }
         }
-        else if (subs && subs.length > 0) {
+        else if (subs && subs.length > 0 && parseSubs.length < 6) {
             var capped = subs;
             if (subs.length > 6 && typeof libs.__vodSyncTrimSubs === 'function') {
                 capped = libs.__vodSyncTrimSubs(subs);
@@ -183,10 +222,10 @@ libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, c
                     break;
                 }
             }
-            console.log('[RN-Fetch][SUBDATAPARSE] n=' + parseSubs.length + ' provider=' + String(provider || '')
-                + ' type=' + (parseSubs[0] ? parseSubs[0].type : '-')
-                + (parseSubs[0] ? (' sample=' + String(parseSubs[0].file).substring(0, 100)) : ''));
         }
+        console.log('[RN-Fetch][SUBDATAPARSE] n=' + parseSubs.length + ' provider=' + String(provider || '')
+            + ' type=' + (parseSubs[0] ? parseSubs[0].type : '-')
+            + (parseSubs[0] ? (' sample=' + String(parseSubs[0].file).substring(0, 100)) : ''));
     }
     catch (subErr) {
         parseSubs = [];
@@ -466,7 +505,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v53-subs-fast-toast';
+libs.__embedSyncVersion = 'v54-os-inject';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -474,10 +513,11 @@ libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
 libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie', 'OVidrift', 'RRiveStream'];
 // Cross-provider sub copy (v47) put 68~187 tracks on every server and broke play on titles like Spider-Man.
 libs.__vodSyncBackfillEnabled = false;
-// Lookmovie/office tracks listed in CC but App fetches them without Referer → blank + no toast.
-// Force type=download (+ headers) so App uses the zip/download path that shows "Subtitles download success".
-libs.__vodPreferGlobalSubs = false;
+// Strip provider office tracks; inject OpenSubtitles zip into link.subs (type=download) so App
+// actually GETs dl.opensubtitles and shows "Subtitles download success". getSubs-only path stalls.
+libs.__vodPreferGlobalSubs = true;
 libs.__vodForceSubDownload = true;
+libs.__vodOpenSubsCache = libs.__vodOpenSubsCache || [];
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 18000;
 libs.__vodSyncHardMaxMs = 26000;
@@ -790,6 +830,17 @@ libs.__flushVodSyncItems = function () {
     var bag = libs.__getVodSyncBag();
     var items = bag.items;
     if (!items.length || bag.flushed) {
+        return;
+    }
+    // Hold briefly so OpenSubtitles can fill __vodOpenSubsCache before link.subs inject.
+    var osCount = (libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0;
+    var elapsedForOs = bag.startMs ? (Date.now() - bag.startMs) : 0;
+    if (osCount < 1 && elapsedForOs < 6500 && !bag.__osWaitOnce) {
+        bag.__osWaitOnce = true;
+        console.log('[RN-Fetch][OS-WAIT] hold-flush elapsed=' + elapsedForOs + 'ms osCache=0');
+        setTimeout(function () {
+            libs.__flushVodSyncItems();
+        }, 1500);
         return;
     }
     bag.flushed = true;
@@ -1124,6 +1175,7 @@ libs.beginVodLinkSession = function (forceNew) {
         bag.startMs = now;
         bag.items = [];
         bag.flushed = false;
+        bag.__osWaitOnce = false;
         libs.__vodSyncStartMs = bag.startMs;
         libs.__vodSyncItems = bag.items;
         libs.__vodSyncFlushed = false;
@@ -1131,12 +1183,15 @@ libs.beginVodLinkSession = function (forceNew) {
         libs.__vodSyncDeliveredProviders = {};
         libs.__vidlinkDelivered = {};
         libs.__vidlinkPlayLock = {};
+        // Keep OpenSubtitles cache across join; only wipe on brand-new session.
+        // opensubtitles.js also resets cache when getSubs starts for this title.
         if (forceNew) {
             libs.__vodDeferredWebviews = {};
             libs.__resetIyesWvLocks();
             libs.__resetEmbedWebviewSlot();
         }
-        console.log('[RN-Fetch][SYNC-SESSION] start version=' + libs.__embedSyncVersion + ' force=' + (forceNew ? 1 : 0));
+        console.log('[RN-Fetch][SYNC-SESSION] start version=' + libs.__embedSyncVersion + ' force=' + (forceNew ? 1 : 0)
+            + ' osCache=' + ((libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0));
         libs.__ensureSyncPoller();
         libs.__scheduleSyncFlush();
     }

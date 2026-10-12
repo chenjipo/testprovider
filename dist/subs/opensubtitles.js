@@ -35,14 +35,21 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-var OPENSUBS_VERSION = 'v2-fast-toast';
+var OPENSUBS_VERSION = 'v3-inject-link';
 subs.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, subLang, nameToId, preferred, seen, userLangKey, imdbId, totalEmit, _i, preferred_1, item, urlLang, responseLang, dataLang, ranked, ri, itemLang, lang, season, episode, e_1;
+    var PROVIDER, subLang, nameToId, preferred, seen, userLangKey, imdbId, totalEmit, _i, preferred_1, item, urlLang, responseLang, dataLang, ranked, ri, itemLang, lang, season, episode, row, e_1;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
                 PROVIDER = "OpenSubtitles";
                 console.log('[RN-Fetch][OPENSUBS-VERSION] ' + OPENSUBS_VERSION);
+                try {
+                    if (typeof libs !== 'undefined') {
+                        libs.__vodOpenSubsCache = [];
+                        libs.__vodOpenSubsVersion = OPENSUBS_VERSION;
+                    }
+                }
+                catch (_cacheInitErr) { }
                 _b.label = 1;
             case 1:
                 _b.trys.push([1, 7, , 8]);
@@ -157,7 +164,7 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                     if (!subLang[lang]) {
                         continue;
                     }
-                    callback({
+                    row = {
                         file: itemLang.ZipDownloadLink,
                         kind: "Captions",
                         label: subLang[lang],
@@ -166,10 +173,19 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                         headers: {
                             "x-user-agent": "VLSub 0.10.2",
                         },
-                    });
+                    };
+                    try {
+                        if (typeof libs !== 'undefined') {
+                            libs.__vodOpenSubsCache = libs.__vodOpenSubsCache || [];
+                            libs.__vodOpenSubsCache.push(row);
+                        }
+                    }
+                    catch (_cachePushErr) { }
+                    callback(row);
                     totalEmit += 1;
                     console.log('[RN-Fetch][OPENSUBS] emit lang=' + lang
                         + ' dl=' + String(itemLang.SubDownloadsCnt || 0)
+                        + ' cache=' + String((typeof libs !== 'undefined' && libs.__vodOpenSubsCache) ? libs.__vodOpenSubsCache.length : 0)
                         + ' file=' + String(itemLang.ZipDownloadLink).substring(0, 90));
                     break;
                 }
