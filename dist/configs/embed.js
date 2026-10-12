@@ -178,7 +178,10 @@ libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, c
             console.log('[RN-Fetch][OS-INJECT] n=' + osRows.length + ' provider=' + String(provider || '')
                 + ' sample=' + String(osRows[0].file).substring(0, 90));
         }
-        if (libs.__vodPreferGlobalSubs) {
+        // Only strip provider tracks when OpenSubs actually filled the cache.
+        // Otherwise prefer-global left every link with n=0 (no CC / no download toast).
+        var preferGlobalOs = !!(libs.__vodPreferGlobalSubs && osRows.length);
+        if (preferGlobalOs) {
             if (subs && subs.length) {
                 console.log('[RN-Fetch][SUBDATAPARSE] strip-provider-subs n=' + subs.length + ' provider=' + String(provider || '') + ' prefer=global');
             }
@@ -505,7 +508,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v54-os-inject';
+libs.__embedSyncVersion = 'v55-os-inject';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -832,16 +835,22 @@ libs.__flushVodSyncItems = function () {
     if (!items.length || bag.flushed) {
         return;
     }
-    // Hold briefly so OpenSubtitles can fill __vodOpenSubsCache before link.subs inject.
+    // Hold so OpenSubtitles can fill __vodOpenSubsCache before link.subs inject.
     var osCount = (libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0;
+    var osDone = !!libs.__vodOpenSubsDone;
     var elapsedForOs = bag.startMs ? (Date.now() - bag.startMs) : 0;
-    if (osCount < 1 && elapsedForOs < 6500 && !bag.__osWaitOnce) {
-        bag.__osWaitOnce = true;
-        console.log('[RN-Fetch][OS-WAIT] hold-flush elapsed=' + elapsedForOs + 'ms osCache=0');
+    var osWaitMs = 9000;
+    if (osCount < 1 && !osDone && elapsedForOs < osWaitMs) {
+        bag.__osWaitN = (bag.__osWaitN || 0) + 1;
+        console.log('[RN-Fetch][OS-WAIT] hold-flush elapsed=' + elapsedForOs + 'ms osCache=0 done=0 n=' + bag.__osWaitN);
         setTimeout(function () {
             libs.__flushVodSyncItems();
-        }, 1500);
+        }, 1200);
         return;
+    }
+    if (osCount < 1) {
+        console.log('[RN-Fetch][OS-WAIT] proceed-empty elapsed=' + elapsedForOs + 'ms done=' + (osDone ? 1 : 0)
+            + ' emit=' + String(libs.__vodOpenSubsEmit || 0));
     }
     bag.flushed = true;
     bag.items = [];
@@ -871,7 +880,7 @@ libs.__flushVodSyncItems = function () {
     var deliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
     for (var i = 0; i < items.length; i++) {
         try {
-            if (libs.__vodPreferGlobalSubs) {
+            if (libs.__vodPreferGlobalSubs && ((libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0) > 0) {
                 items[i][6] = [];
             }
             var subCount = (items[i][6] && items[i][6].length) ? items[i][6].length : 0;
@@ -1176,6 +1185,7 @@ libs.beginVodLinkSession = function (forceNew) {
         bag.items = [];
         bag.flushed = false;
         bag.__osWaitOnce = false;
+        bag.__osWaitN = 0;
         libs.__vodSyncStartMs = bag.startMs;
         libs.__vodSyncItems = bag.items;
         libs.__vodSyncFlushed = false;
