@@ -115,46 +115,48 @@ libs.embed_parse_source = function (html) {
     eval(source);
     return parse;
 };
-if (!libs.__embedCallbackDeliver) {
-    libs.__embedCallbackDeliver = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
-        if (subs === void 0) { subs = []; }
-        if (direct_quality === void 0) { direct_quality = []; }
-        if (headers === void 0) { headers = {}; }
-        if (options === void 0) { options = {}; }
-        var parseSubs = [];
-        if (subs.length > 0) {
-            for (var _i = 0, subs_1 = subs; _i < subs_1.length; _i++) {
-                var item = subs_1[_i];
-                var type = "office";
-                if (item.file.indexOf(".srt") == -1 && item.file.indexOf(".vtt") == -1) {
-                    type = "download";
-                }
-                if (item.file.indexOf("opensubtitles") != -1) {
-                    continue;
-                }
-                parseSubs.push({
-                    file: item.file,
-                    kind: 'captions',
-                    label: item.label,
-                    type: type,
-                });
+// Always refresh raw deliver so caption fixes apply after App reloads embed.js.
+libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
+    if (subs === void 0) { subs = []; }
+    if (direct_quality === void 0) { direct_quality = []; }
+    if (headers === void 0) { headers = {}; }
+    if (options === void 0) { options = {}; }
+    var parseSubs = [];
+    if (subs.length > 0) {
+        for (var _i = 0, subs_1 = subs; _i < subs_1.length; _i++) {
+            var item = subs_1[_i];
+            if (!item || !item.file) {
+                continue;
             }
-            console.log({ subs: subs }, "SUBDATAPARSE");
+            var type = "office";
+            if (item.file.indexOf(".srt") == -1 && item.file.indexOf(".vtt") == -1) {
+                type = "download";
+            }
+            if (item.file.indexOf("opensubtitles") != -1) {
+                continue;
+            }
+            parseSubs.push({
+                file: item.file,
+                kind: 'captions',
+                label: item.label,
+                type: type,
+            });
         }
-        var linkRank = rank || 0;
-        var displayProvider = libs.string_provider(provider, linkRank);
-        var linkSource = String(provider || '');
-        var linkHost = String(host || provider || '');
-        if (linkRank > 0) {
-            linkHost = linkHost + '-' + linkRank;
-        }
-        callback(__assign({ file: urlDirect, quality: quality, host: linkHost, source: linkSource, provider: displayProvider, rank: linkRank, subs: parseSubs, direct_quality: direct_quality, headers: headers }, options));
-    };
-}
-libs.__embedCallbackBaseDeliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
-if (!libs.__embedCallbackCore) {
-    libs.__embedCallbackCore = libs.__embedCallbackDeliver;
-}
+        console.log('[RN-Fetch][SUBDATAPARSE] n=' + parseSubs.length + ' provider=' + String(provider || ''));
+    }
+    var linkRank = rank || 0;
+    var displayProvider = libs.string_provider(provider, linkRank);
+    var linkSource = String(provider || '');
+    var linkHost = String(host || provider || '');
+    if (linkRank > 0) {
+        linkHost = linkHost + '-' + linkRank;
+    }
+    // Keep parsed subs last so options cannot wipe captions.
+    callback(__assign({ file: urlDirect, quality: quality, host: linkHost, source: linkSource, provider: displayProvider, rank: linkRank, direct_quality: direct_quality, headers: headers }, options, { subs: parseSubs }));
+};
+libs.__embedCallbackBaseDeliver = libs.__embedCallbackDeliverRaw;
+libs.__embedCallbackDeliver = libs.__embedCallbackDeliverRaw;
+libs.__embedCallbackCore = libs.__embedCallbackDeliverRaw;
 libs.__unwrapVodCallback = function (callback) {
     if (!callback) {
         return callback;
@@ -400,7 +402,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v46-ovidrift-subs';
+libs.__embedSyncVersion = 'v47-subs-backfill';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -614,6 +616,52 @@ libs.__tryPushVodSyncLink = function (urlDirect, provider, host, quality, callba
     libs.__pushVodSyncItem(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
     return true;
 };
+libs.__vodSyncCloneSubs = function (subs) {
+    var source = subs || [];
+    var out = [];
+    for (var i = 0; i < source.length; i++) {
+        var item = source[i];
+        if (!item || !item.file) {
+            continue;
+        }
+        out.push({
+            file: item.file,
+            label: item.label || 'sub',
+            kind: item.kind || 'captions',
+        });
+    }
+    return out;
+};
+libs.__vodSyncPickRichestSubs = function (items) {
+    var best = [];
+    var bestProvider = '';
+    for (var i = 0; i < items.length; i++) {
+        var subs = items[i][6] || [];
+        if (subs.length > best.length) {
+            best = subs;
+            bestProvider = String(items[i][1] || '');
+        }
+    }
+    return { subs: best, provider: bestProvider };
+};
+libs.__vodSyncBackfillSubs = function (items) {
+    var picked = libs.__vodSyncPickRichestSubs(items);
+    if (!picked.subs || !picked.subs.length) {
+        console.log('[RN-Fetch][SYNC-SUBS] none-in-bag');
+        return 0;
+    }
+    var filled = 0;
+    for (var i = 0; i < items.length; i++) {
+        var current = items[i][6] || [];
+        if (current.length > 0) {
+            continue;
+        }
+        items[i][6] = libs.__vodSyncCloneSubs(picked.subs);
+        filled += 1;
+    }
+    console.log('[RN-Fetch][SYNC-SUBS] backfill=' + filled + ' from=' + picked.provider + ' tracks=' + picked.subs.length);
+    return filled;
+};
 libs.__flushVodSyncItems = function () {
     var bag = libs.__getVodSyncBag();
     var items = bag.items;
@@ -636,12 +684,14 @@ libs.__flushVodSyncItems = function () {
     if (libs.__vodSyncYaxEnabled) {
         items = libs.__vodSyncSortItems(items);
     }
+    libs.__vodSyncBackfillSubs(items);
     console.log('[RN-Fetch][SYNC-FLUSH] count=' + items.length + ' version=' + libs.__embedSyncVersion);
     libs.__vodSyncReleasing = true;
     libs.__vodSyncDeliveredProviders = libs.__vodSyncDeliveredProviders || {};
     var deliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
     for (var i = 0; i < items.length; i++) {
-        console.log('[RN-Fetch][SYNC-FLUSH-ITEM] provider=' + items[i][1] + ' rank=' + items[i][5]);
+        var subCount = (items[i][6] && items[i][6].length) ? items[i][6].length : 0;
+        console.log('[RN-Fetch][SYNC-FLUSH-ITEM] provider=' + items[i][1] + ' rank=' + items[i][5] + ' subs=' + subCount);
         libs.__vodSyncDeliveredProviders[items[i][1]] = true;
         deliver.apply(libs, items[i]);
     }
