@@ -36,9 +36,11 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var PROVIDER = 'OVidrift';
-var VERSION = 'v2-sync-bag';
+var VERSION = 'v3-subs-qcap';
 var EMBED_ORIGIN = 'https://embed.vidrift.net';
+var SUBS_ORIGIN = 'https://subs.1shows.app';
 var USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
+var MAX_REPORT_QUALITY = 1080;
 var TMDB_API_KEYS = libs.TMDB_API_KEYS || [
     '4e44c9029b1270a41c75c666510b46f5',
     '4219e299c89411838049ab0dab19ebd5',
@@ -218,15 +220,184 @@ function ovidriftQualityFromRungs(rungs) {
     var best = 0;
     for (var i = 0; i < rungs.length; i++) {
         var height = Number(rungs[i] && (rungs[i].height || rungs[i]) || 0);
+        if (height > MAX_REPORT_QUALITY) {
+            continue;
+        }
         if (height > best) {
             best = height;
         }
     }
-    return best || 1080;
+    if (!best) {
+        for (var j = 0; j < rungs.length; j++) {
+            var raw = Number(rungs[j] && (rungs[j].height || rungs[j]) || 0);
+            if (raw > best) {
+                best = raw;
+            }
+        }
+    }
+    if (!best) {
+        return 1080;
+    }
+    return best > MAX_REPORT_QUALITY ? MAX_REPORT_QUALITY : best;
+}
+function ovidriftPickSubFile(item) {
+    if (!item) {
+        return '';
+    }
+    var file = item.file || item.url || item.src || item.path || '';
+    return String(file || '').trim();
+}
+function ovidriftPickSubLabel(item) {
+    if (!item) {
+        return 'sub';
+    }
+    return String(item.label || item.language || item.lang || item.name || 'sub').trim() || 'sub';
+}
+function ovidriftExtractMetaSubs(meta) {
+    var tracks = [];
+    if (!meta) {
+        return tracks;
+    }
+    var lists = [meta.subtitles, meta.captions, meta.tracks, meta.subs, meta.subtitleTracks];
+    for (var li = 0; li < lists.length; li++) {
+        var list = lists[li];
+        if (!list || !list.length) {
+            continue;
+        }
+        for (var i = 0; i < list.length; i++) {
+            var item = list[i];
+            var file = ovidriftAbsoluteUrl(ovidriftPickSubFile(item), EMBED_ORIGIN + '/');
+            if (!file || file.indexOf('http') !== 0) {
+                continue;
+            }
+            tracks.push({
+                file: file,
+                label: ovidriftPickSubLabel(item),
+                kind: item.kind || 'captions',
+            });
+        }
+    }
+    return tracks;
+}
+function ovidriftBuildSubsUrl(movieInfo, tmdbId) {
+    var id = String(tmdbId || '').trim();
+    if (!id) {
+        return '';
+    }
+    if (movieInfo.type == 'tv') {
+        return SUBS_ORIGIN + '/data/subs/tv/' + encodeURIComponent(id)
+            + '/' + encodeURIComponent(String(movieInfo.season || 1))
+            + '/' + encodeURIComponent(String(movieInfo.episode || 1));
+    }
+    return SUBS_ORIGIN + '/data/subs/movie/' + encodeURIComponent(id);
+}
+function ovidriftNormalizeExternalSubs(payload) {
+    var tracks = [];
+    var list = null;
+    if (!payload) {
+        return tracks;
+    }
+    if (payload.data && payload.data.length) {
+        list = payload.data;
+    }
+    else if (payload.subtitles && payload.subtitles.length) {
+        list = payload.subtitles;
+    }
+    else if (payload.length) {
+        list = payload;
+    }
+    if (!list || !list.length) {
+        return tracks;
+    }
+    for (var i = 0; i < list.length; i++) {
+        var item = list[i];
+        var file = ovidriftPickSubFile(item);
+        if (!file) {
+            continue;
+        }
+        if (file.indexOf('http') !== 0) {
+            file = SUBS_ORIGIN + (file.charAt(0) === '/' ? file : '/' + file);
+        }
+        tracks.push({
+            file: file,
+            label: ovidriftPickSubLabel(item),
+            kind: item.kind || 'captions',
+        });
+    }
+    return tracks;
+}
+function ovidriftFetchExternalSubs(movieInfo, tmdbId) {
+    return __awaiter(_this, void 0, void 0, function () {
+        var url, payload, tracks, e_subs;
+        return __generator(this, function (_a) {
+            switch (_a.label) {
+                case 0:
+                    url = ovidriftBuildSubsUrl(movieInfo, tmdbId);
+                    if (!url) {
+                        return [2, []];
+                    }
+                    _a.label = 1;
+                case 1:
+                    _a.trys.push([1, 3, , 4]);
+                    return [4, libs.request_get(url, {
+                            'user-agent': USER_AGENT,
+                            accept: 'application/json',
+                            referer: EMBED_ORIGIN + '/',
+                        }, false, true, 1)];
+                case 2:
+                    payload = _a.sent();
+                    if (typeof payload === 'string' && payload) {
+                        try {
+                            payload = JSON.parse(payload);
+                        }
+                        catch (parseError) {
+                            return [2, []];
+                        }
+                    }
+                    tracks = ovidriftNormalizeExternalSubs(payload);
+                    console.log('[RN-Fetch][OVIDRIFT-SUBS] external=' + tracks.length + ' url=' + url);
+                    return [2, tracks];
+                case 3:
+                    e_subs = _a.sent();
+                    console.log('[RN-Fetch][OVIDRIFT-SUBS-ERR] ' + String(e_subs && e_subs.message ? e_subs.message : e_subs));
+                    return [2, []];
+                case 4: return [2];
+            }
+        });
+    });
+}
+function ovidriftMergeTracks(primary, secondary) {
+    var out = [];
+    var seen = {};
+    var lists = [primary || [], secondary || []];
+    for (var li = 0; li < lists.length; li++) {
+        var list = lists[li];
+        for (var i = 0; i < list.length; i++) {
+            var item = list[i];
+            if (!item || !item.file || seen[item.file]) {
+                continue;
+            }
+            seen[item.file] = true;
+            out.push(item);
+        }
+    }
+    return out;
 }
 function ovidriftSelectPlayable(meta) {
     if (!meta) {
         return null;
+    }
+    // Prefer Evion when present: better player/subtitle compatibility than Orion HEVC.
+    if (meta.evionUrl) {
+        var evionUrl = ovidriftAbsoluteUrl(meta.evionUrl, EMBED_ORIGIN + '/');
+        if (evionUrl) {
+            return {
+                file: evionUrl,
+                quality: 1080,
+                label: 'Evion',
+                kind: 'evion',
+            };
+        }
     }
     var orion = ovidriftPickOrionStream(meta.orionStreams);
     if (orion) {
@@ -237,17 +408,6 @@ function ovidriftSelectPlayable(meta) {
                 quality: ovidriftQualityFromRungs(orion.rungs),
                 label: String(orion.name || 'Orion'),
                 kind: 'orion',
-            };
-        }
-    }
-    if (meta.evionUrl) {
-        var evionUrl = ovidriftAbsoluteUrl(meta.evionUrl, EMBED_ORIGIN + '/');
-        if (evionUrl) {
-            return {
-                file: evionUrl,
-                quality: 1080,
-                label: 'Evion',
-                kind: 'evion',
             };
         }
     }
@@ -264,22 +424,24 @@ function ovidriftSelectPlayable(meta) {
     }
     return null;
 }
-function ovidriftDeliver(playable, embedUrl, callback) {
+function ovidriftDeliver(playable, embedUrl, tracks, callback) {
     var headers = ovidriftBuildHeaders(embedUrl);
-    var directQuality = [{ file: playable.file, quality: playable.quality }];
-    console.log('[RN-Fetch][OVIDRIFT-PLAY] kind=' + playable.kind + ' q=' + playable.quality + ' label=' + playable.label + ' file=' + playable.file);
-    libs.embed_callback(playable.file, PROVIDER, PROVIDER, 'Hls', callback, 0, [], directQuality, headers, { type: 'm3u8' });
+    var quality = playable.quality > MAX_REPORT_QUALITY ? MAX_REPORT_QUALITY : playable.quality;
+    var directQuality = [{ file: playable.file, quality: quality }];
+    var subs = tracks || [];
+    console.log('[RN-Fetch][OVIDRIFT-PLAY] kind=' + playable.kind + ' q=' + quality + ' subs=' + subs.length + ' label=' + playable.label + ' file=' + playable.file);
+    libs.embed_callback(playable.file, PROVIDER, PROVIDER, 'Hls', callback, 0, subs, directQuality, headers, { type: 'm3u8' });
 }
 source.getResource = function (movieInfo, config, callback) {
     return __awaiter(_this, void 0, void 0, function () {
-        var tmdbId, embedUrl, html, meta, playable, e_2;
+        var tmdbId, embedUrl, html, meta, playable, metaTracks, externalTracks, tracks, e_2;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
                     console.log('[RN-Fetch][OVIDRIFT-VERSION] ' + VERSION);
                     _a.label = 1;
                 case 1:
-                    _a.trys.push([1, 4, , 5]);
+                    _a.trys.push([1, 5, , 6]);
                     return [4, ovidriftResolveTmdbId(movieInfo)];
                 case 2:
                     tmdbId = _a.sent();
@@ -306,14 +468,19 @@ source.getResource = function (movieInfo, config, callback) {
                         console.log('[RN-Fetch][OVIDRIFT-SKIP] no-stream provider=' + String(meta.provider || '') + ' orion=' + (meta.orionStreams ? meta.orionStreams.length : 0));
                         return [2];
                     }
-                    ovidriftDeliver(playable, embedUrl, callback);
-                    return [2, true];
+                    metaTracks = ovidriftExtractMetaSubs(meta);
+                    return [4, ovidriftFetchExternalSubs(movieInfo, tmdbId)];
                 case 4:
+                    externalTracks = _a.sent();
+                    tracks = ovidriftMergeTracks(metaTracks, externalTracks);
+                    ovidriftDeliver(playable, embedUrl, tracks, callback);
+                    return [2, true];
+                case 5:
                     e_2 = _a.sent();
                     libs.log({ e: e_2 }, PROVIDER, 'ERROR');
                     console.log('[RN-Fetch][OVIDRIFT-ERROR] ' + String(e_2 && e_2.message ? e_2.message : e_2));
                     return [2];
-                case 5: return [2];
+                case 6: return [2];
             }
         });
     });

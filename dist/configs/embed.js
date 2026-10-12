@@ -400,7 +400,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v45-rrive-sync';
+libs.__embedSyncVersion = 'v46-ovidrift-subs';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -534,10 +534,21 @@ libs.__vodSyncIsYaxReady = function (items, elapsed) {
             return true;
         }
     }
-    // L/B/O-only (YAX family but no Y/A/X core) — wait a bit for X/B, then flush.
-    // Do not flush on O alone before 8s (same App "keep only first server" issue).
+    // L/B/O/R family present but no Y/A/X core — wait a bit, then flush.
+    // Do NOT flush when the bag only has O/R: they often ship empty provider-subs and
+    // App auto-plays listLink[0], which made subtitles look "broken" after O was added.
     if (items.length >= 1 && coreFamilies === 0 && familyCount >= 1 && elapsed >= Math.max(libs.__vodSyncCoalesceMs || 4500, 8000)) {
-        return true;
+        var hasStableFamily = false;
+        for (var fi = 0; fi < items.length; fi++) {
+            var fam = items[fi][1];
+            if (fam === 'LRIDOMOVIE' || fam === 'BlookMovie' || fam === 'YMovies' || fam === 'AVideasy' || fam === 'XVidsrcVip') {
+                hasStableFamily = true;
+                break;
+            }
+        }
+        if (hasStableFamily) {
+            return true;
+        }
     }
     return false;
 };
