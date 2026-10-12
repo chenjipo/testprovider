@@ -199,24 +199,22 @@ libs.__vodBuildOpenSubsRows = function () {
     var cache = libs.__vodOpenSubsCache || [];
     var out = [];
     var seen = {};
-    for (var i = 0; i < cache.length && out.length < 2; i++) {
+    for (var i = 0; i < cache.length && out.length < 6; i++) {
         var item = cache[i];
         if (!item || !item.file || seen[item.file]) {
             continue;
         }
         seen[item.file] = true;
-        var row = {
+        // Match formal getSubs OpenSubtitles: zip + Captions (not link-office).
+        out.push({
             file: String(item.file),
             kind: 'Captions',
             label: item.label || 'sub',
-            // Force download path so App shows "Subtitles download success" toast.
-            type: 'download',
+            type: 'zip',
             headers: item.headers || {
                 'x-user-agent': 'VLSub 0.10.2',
-                'User-Agent': 'VLSub 0.10.2',
             },
-        };
-        out.push(row);
+        });
     }
     return out;
 };
@@ -228,28 +226,16 @@ libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, c
     if (options === void 0) { options = {}; }
     var parseSubs = [];
     try {
-        // Prefer OpenSubtitles zip/download on the link itself. App getSubs auto-download
-        // often never starts (no GET dl.opensubtitles) even after emit=2.
-        var osRows = typeof libs.__vodBuildOpenSubsRows === 'function' ? libs.__vodBuildOpenSubsRows() : [];
-        if (osRows.length) {
-            parseSubs = osRows.slice();
-            console.log('[RN-Fetch][OS-INJECT] n=' + osRows.length + ' provider=' + String(provider || '')
-                + ' sample=' + String(osRows[0].file).substring(0, 90));
-        }
-        // Only strip provider tracks when OpenSubs actually filled the cache.
-        // Otherwise prefer-global left every link with n=0 (no CC / no download toast).
-        var preferGlobalOs = !!(libs.__vodPreferGlobalSubs && osRows.length);
-        if (preferGlobalOs) {
-            if (subs && subs.length) {
-                console.log('[RN-Fetch][SUBDATAPARSE] strip-provider-subs n=' + subs.length + ' provider=' + String(provider || '') + ' prefer=global');
-            }
-        }
-        else if (subs && subs.length > 0 && parseSubs.length < 6) {
+        // Parity with formal myprovider embed.js:
+        // - link.subs "Office" uses kind=captions + office/download by extension
+        // - do NOT force download when headers exist (that toast'd but blanked Lookmovie CC)
+        // - skip opensubtitles URLs here; those belong to getSubs OpenSubtitles list
+        if (subs && subs.length > 0) {
             var capped = subs;
-            if (subs.length > 6 && typeof libs.__vodSyncTrimSubs === 'function') {
+            if (subs.length > 12 && typeof libs.__vodSyncTrimSubs === 'function') {
                 capped = libs.__vodSyncTrimSubs(subs);
                 if (!capped || !capped.length) {
-                    capped = subs.slice(0, 6);
+                    capped = subs.slice(0, 12);
                 }
             }
             for (var _i = 0, subs_1 = capped; _i < subs_1.length; _i++) {
@@ -257,35 +243,39 @@ libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, c
                 if (!item || !item.file) {
                     continue;
                 }
-                if (item.file.indexOf("opensubtitles") != -1) {
+                if (String(item.file).indexOf('opensubtitles') !== -1) {
                     continue;
                 }
-                var subHeaders = libs.__inferSubHeaders(item.file, item.headers);
-                var type = "office";
-                if (item.file.indexOf(".srt") == -1 && item.file.indexOf(".vtt") == -1) {
-                    type = "download";
+                var type = 'office';
+                if (String(item.file).indexOf('.srt') === -1 && String(item.file).indexOf('.vtt') === -1) {
+                    type = 'download';
                 }
-                // App's "Subtitles download success" toast + Referer fetch use download/zip path, not office.
-                if (libs.__vodForceSubDownload || subHeaders) {
-                    type = "download";
-                }
-                var row = {
+                parseSubs.push({
                     file: item.file,
-                    kind: 'Captions',
-                    label: item.label || 'sub',
+                    kind: 'captions',
+                    label: item.label,
                     type: type,
-                };
-                if (subHeaders) {
-                    row.headers = subHeaders;
-                }
-                parseSubs.push(row);
-                if (parseSubs.length >= 6) {
+                });
+                if (parseSubs.length >= 12) {
                     break;
                 }
             }
         }
+        // Optional: append a couple OpenSubs zips onto empty-link providers (I), without replacing Office.
+        if (libs.__vodInjectOpenSubsOnLink && parseSubs.length < 2) {
+            var osRows = typeof libs.__vodBuildOpenSubsRows === 'function' ? libs.__vodBuildOpenSubsRows() : [];
+            for (var oi = 0; oi < osRows.length && parseSubs.length < 4; oi++) {
+                parseSubs.push(osRows[oi]);
+            }
+            if (osRows.length) {
+                console.log('[RN-Fetch][OS-INJECT] n=' + osRows.length + ' provider=' + String(provider || '')
+                    + ' total=' + parseSubs.length
+                    + ' sample=' + String(osRows[0].file).substring(0, 90));
+            }
+        }
         console.log('[RN-Fetch][SUBDATAPARSE] n=' + parseSubs.length + ' provider=' + String(provider || '')
             + ' type=' + (parseSubs[0] ? parseSubs[0].type : '-')
+            + ' kind=' + (parseSubs[0] ? parseSubs[0].kind : '-')
             + (parseSubs[0] ? (' sample=' + String(parseSubs[0].file).substring(0, 100)) : ''));
     }
     catch (subErr) {
@@ -566,7 +556,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v56-os-sticky';
+libs.__embedSyncVersion = 'v57-office-parity';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -574,10 +564,12 @@ libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
 libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie', 'OVidrift', 'RRiveStream'];
 // Cross-provider sub copy (v47) put 68~187 tracks on every server and broke play on titles like Spider-Man.
 libs.__vodSyncBackfillEnabled = false;
-// Strip provider office tracks; inject OpenSubtitles zip into link.subs (type=download) so App
-// actually GETs dl.opensubtitles and shows "Subtitles download success". getSubs-only path stalls.
-libs.__vodPreferGlobalSubs = true;
-libs.__vodForceSubDownload = true;
+// Formal myprovider: Office = link.subs (kind=captions). OpenSubtitles = getSubs zip list.
+// Forcing download / stripping Office caused toast-without-display on Lookmovie tracks.
+libs.__vodPreferGlobalSubs = false;
+libs.__vodForceSubDownload = false;
+// Only fill empty providers (e.g. IYesMovies); never replace B/X Office tracks.
+libs.__vodInjectOpenSubsOnLink = true;
 libs.__vodOpenSubsCache = libs.__vodOpenSubsCache || [];
 if (typeof libs.__vodRestoreOpenSubsFromSticky === 'function') {
     libs.__vodRestoreOpenSubsFromSticky();
@@ -947,14 +939,7 @@ libs.__flushVodSyncItems = function () {
     var deliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
     for (var i = 0; i < items.length; i++) {
         try {
-            if (libs.__vodPreferGlobalSubs) {
-                var osReadyN = typeof libs.__vodRestoreOpenSubsFromSticky === 'function'
-                    ? libs.__vodRestoreOpenSubsFromSticky()
-                    : ((libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0);
-                if (osReadyN > 0) {
-                    items[i][6] = [];
-                }
-            }
+            // Never wipe provider Office tracks at flush (formal keeps them).
             var subCount = (items[i][6] && items[i][6].length) ? items[i][6].length : 0;
             console.log('[RN-Fetch][SYNC-FLUSH-ITEM] provider=' + items[i][1] + ' rank=' + items[i][5] + ' subs=' + subCount
                 + ' file=' + String(items[i][0] || '').substring(0, 80));

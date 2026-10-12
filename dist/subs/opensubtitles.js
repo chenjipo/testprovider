@@ -35,7 +35,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-var OPENSUBS_VERSION = 'v5-sticky-os';
+var OPENSUBS_VERSION = 'v6-formal-list';
 function openSubsRoot() {
     try {
         if (typeof globalThis !== 'undefined' && globalThis) {
@@ -234,13 +234,16 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                     seen.eng = true;
                     preferred.push({ name: "English", id: "eng" });
                 }
-                if (!seen.chi && preferred.length < 2) {
+                if (!seen.chi) {
                     seen.chi = true;
                     preferred.push({ name: "Chinese", id: "chi" });
                 }
                 totalEmit = 0;
                 wantSeason = Number(movieInfo && movieInfo.season);
                 wantEpisode = Number(movieInfo && movieInfo.episode);
+                // Formal lists many English zips; keep a modest cap so App still starts downloads.
+                var maxEmit = 8;
+                var maxPerLang = 5;
                 console.log('[RN-Fetch][OPENSUBS] start imdb=' + imdbId
                     + ' langs=' + preferred.length
                     + ' type=' + String((movieInfo && movieInfo.type) || '')
@@ -251,7 +254,7 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                 _b.label = 6;
             case 6:
                 if (!(_i < preferred_1.length)) return [3, 9];
-                if (totalEmit >= 2) {
+                if (totalEmit >= maxEmit) {
                     return [3, 9];
                 }
                 item = preferred_1[_i];
@@ -259,7 +262,6 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                 filterSkip = 0;
                 return [4, libs.request_get(urlLang, {
                         "x-user-agent": "VLSub 0.10.2",
-                        "User-Agent": "VLSub 0.10.2",
                         accept: "application/json",
                     }, false, true, 1)];
             case 7:
@@ -280,6 +282,7 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                 ranked = dataLang.slice().sort(function (a, b) {
                     return Number((b && b.SubDownloadsCnt) || 0) - Number((a && a.SubDownloadsCnt) || 0);
                 });
+                var langEmit = 0;
                 for (ri = 0; ri < ranked.length; ri++) {
                     itemLang = ranked[ri];
                     if (!itemLang || !itemLang.ZipDownloadLink || !itemLang.SubLanguageID) {
@@ -306,19 +309,21 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                         provider: PROVIDER,
                         headers: {
                             "x-user-agent": "VLSub 0.10.2",
-                            "User-Agent": "VLSub 0.10.2",
                         },
                     };
                     totalEmit += 1;
-                    openSubsPushRow(row, totalEmit, totalEmit >= 2);
+                    langEmit += 1;
+                    openSubsPushRow(row, totalEmit, totalEmit >= maxEmit);
                     callback(row);
                     console.log('[RN-Fetch][OPENSUBS] emit lang=' + lang
                         + ' dl=' + String(itemLang.SubDownloadsCnt || 0)
                         + ' cache=' + String((openSubsSticky() && openSubsSticky().cache) ? openSubsSticky().cache.length : 0)
                         + ' file=' + String(itemLang.ZipDownloadLink).substring(0, 90));
-                    break;
+                    if (langEmit >= maxPerLang || totalEmit >= maxEmit) {
+                        break;
+                    }
                 }
-                if (!totalEmit && filterSkip) {
+                if (!langEmit && filterSkip) {
                     console.log('[RN-Fetch][OPENSUBS] filter-skip lang=' + item.id
                         + ' n=' + filterSkip + ' wantS=' + wantSeason + ' wantE=' + wantEpisode);
                 }
