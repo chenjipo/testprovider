@@ -35,14 +35,89 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-var OPENSUBS_VERSION = 'v4-tv-coerce';
+var OPENSUBS_VERSION = 'v5-sticky-os';
+function openSubsRoot() {
+    try {
+        if (typeof globalThis !== 'undefined' && globalThis) {
+            return globalThis;
+        }
+    }
+    catch (_e0) { }
+    try {
+        if (typeof global !== 'undefined' && global) {
+            return global;
+        }
+    }
+    catch (_e1) { }
+    try {
+        if (typeof window !== 'undefined' && window) {
+            return window;
+        }
+    }
+    catch (_e2) { }
+    return null;
+}
+function openSubsSticky() {
+    var root = openSubsRoot();
+    if (!root) {
+        return null;
+    }
+    if (!root.__VOD_OS_STICKY) {
+        root.__VOD_OS_STICKY = { cache: [], done: false, emit: 0, imdb: '', version: OPENSUBS_VERSION };
+    }
+    return root.__VOD_OS_STICKY;
+}
 function openSubsNormalizeImdb(raw) {
     if (!raw) {
         return '';
     }
     return String(raw).replace(/^tt/i, '').trim();
 }
+function openSubsSyncLibs(sticky) {
+    try {
+        if (typeof libs === 'undefined' || !sticky) {
+            return;
+        }
+        libs.__vodOpenSubsCache = sticky.cache.slice();
+        libs.__vodOpenSubsDone = !!sticky.done;
+        libs.__vodOpenSubsEmit = Number(sticky.emit) || 0;
+        libs.__vodOpenSubsVersion = OPENSUBS_VERSION;
+        libs.__vodOpenSubsImdb = sticky.imdb || '';
+    }
+    catch (_syncErr) { }
+}
+function openSubsReset(imdbId) {
+    var sticky = openSubsSticky();
+    if (sticky) {
+        sticky.cache = [];
+        sticky.done = false;
+        sticky.emit = 0;
+        sticky.imdb = imdbId || '';
+        sticky.version = OPENSUBS_VERSION;
+    }
+    openSubsSyncLibs(sticky || { cache: [], done: false, emit: 0, imdb: imdbId || '' });
+}
+function openSubsPushRow(row, totalEmit, finished) {
+    var sticky = openSubsSticky();
+    if (sticky) {
+        sticky.cache = sticky.cache || [];
+        sticky.cache.push(row);
+        sticky.emit = Number(totalEmit) || sticky.cache.length;
+        // Mark done on first successful emit so flush does not wait for a lost tail.
+        sticky.done = true;
+        if (finished) {
+            sticky.done = true;
+        }
+    }
+    openSubsSyncLibs(sticky);
+}
 function openSubsMarkDone(totalEmit) {
+    var sticky = openSubsSticky();
+    if (sticky) {
+        sticky.done = true;
+        sticky.emit = Number(totalEmit) || sticky.emit || 0;
+    }
+    openSubsSyncLibs(sticky);
     try {
         if (typeof libs !== 'undefined') {
             libs.__vodOpenSubsDone = true;
@@ -58,15 +133,6 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
             case 0:
                 PROVIDER = "OpenSubtitles";
                 console.log('[RN-Fetch][OPENSUBS-VERSION] ' + OPENSUBS_VERSION);
-                try {
-                    if (typeof libs !== 'undefined') {
-                        libs.__vodOpenSubsCache = [];
-                        libs.__vodOpenSubsVersion = OPENSUBS_VERSION;
-                        libs.__vodOpenSubsDone = false;
-                        libs.__vodOpenSubsEmit = 0;
-                    }
-                }
-                catch (_cacheInitErr) { }
                 _b.label = 1;
             case 1:
                 _b.trys.push([1, 10, , 11]);
@@ -110,6 +176,7 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                 ki++;
                 return [3, 2];
             case 5:
+                openSubsReset(imdbId);
                 if (!imdbId) {
                     console.log('[RN-Fetch][OPENSUBS] skip no-imdb tmdb=' + tmdbId
                         + ' rawImdb=' + String((movieInfo && movieInfo.imdb_id) || ''));
@@ -156,8 +223,6 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                     turkish: "tur",
                     indonesian: "ind",
                 };
-                // Formal myprovider floods 15 langs x many zips → App never starts dl.opensubtitles download/toast.
-                // Emit at most 1 zip per lang, max 2 langs total, finish fast.
                 preferred = [];
                 seen = {};
                 userLangKey = movieInfo.lang ? String(movieInfo.lang).toLowerCase() : "";
@@ -224,7 +289,6 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                     if (movieInfo.type == "tv") {
                         season = Number(itemLang.SeriesSeason);
                         episode = Number(itemLang.SeriesEpisode);
-                        // App often passes season/episode as strings; strict !== used to drop every TV hit.
                         if (!isFinite(wantSeason) || !isFinite(wantEpisode)
                             || wantSeason !== season || wantEpisode !== episode) {
                             filterSkip += 1;
@@ -245,18 +309,12 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                             "User-Agent": "VLSub 0.10.2",
                         },
                     };
-                    try {
-                        if (typeof libs !== 'undefined') {
-                            libs.__vodOpenSubsCache = libs.__vodOpenSubsCache || [];
-                            libs.__vodOpenSubsCache.push(row);
-                        }
-                    }
-                    catch (_cachePushErr) { }
-                    callback(row);
                     totalEmit += 1;
+                    openSubsPushRow(row, totalEmit, totalEmit >= 2);
+                    callback(row);
                     console.log('[RN-Fetch][OPENSUBS] emit lang=' + lang
                         + ' dl=' + String(itemLang.SubDownloadsCnt || 0)
-                        + ' cache=' + String((typeof libs !== 'undefined' && libs.__vodOpenSubsCache) ? libs.__vodOpenSubsCache.length : 0)
+                        + ' cache=' + String((openSubsSticky() && openSubsSticky().cache) ? openSubsSticky().cache.length : 0)
                         + ' file=' + String(itemLang.ZipDownloadLink).substring(0, 90));
                     break;
                 }
@@ -270,13 +328,13 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                 return [3, 6];
             case 9:
                 console.log('[RN-Fetch][OPENSUBS] done emit=' + totalEmit
-                    + ' cache=' + String((typeof libs !== 'undefined' && libs.__vodOpenSubsCache) ? libs.__vodOpenSubsCache.length : 0));
+                    + ' cache=' + String((openSubsSticky() && openSubsSticky().cache) ? openSubsSticky().cache.length : 0));
                 openSubsMarkDone(totalEmit);
                 return [3, 11];
             case 10:
                 e_1 = _b.sent();
                 console.log('[RN-Fetch][OPENSUBS-ERR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
-                openSubsMarkDone(0);
+                openSubsMarkDone(totalEmit || 0);
                 libs.log({ e: e_1 }, PROVIDER, "ERROR");
                 return [3, 11];
             case 11: return [2, true];

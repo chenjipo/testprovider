@@ -137,7 +137,65 @@ libs.__inferSubHeaders = function (file, explicitHeaders) {
     }
     return undefined;
 };
+libs.__vodOsRoot = function () {
+    try {
+        if (typeof globalThis !== 'undefined' && globalThis) {
+            return globalThis;
+        }
+    }
+    catch (_e0) { }
+    try {
+        if (typeof global !== 'undefined' && global) {
+            return global;
+        }
+    }
+    catch (_e1) { }
+    try {
+        if (typeof window !== 'undefined' && window) {
+            return window;
+        }
+    }
+    catch (_e2) { }
+    return null;
+};
+libs.__vodOsSticky = function () {
+    var root = libs.__vodOsRoot();
+    if (!root) {
+        return null;
+    }
+    if (!root.__VOD_OS_STICKY) {
+        root.__VOD_OS_STICKY = { cache: [], done: false, emit: 0, imdb: '' };
+    }
+    return root.__VOD_OS_STICKY;
+};
+// WebView / embed.js re-eval can wipe libs.*; recover OpenSubs rows from process sticky.
+libs.__vodRestoreOpenSubsFromSticky = function () {
+    var sticky = libs.__vodOsSticky();
+    var localN = (libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0;
+    if (!sticky || !sticky.cache || !sticky.cache.length) {
+        return localN;
+    }
+    if (localN < sticky.cache.length) {
+        libs.__vodOpenSubsCache = sticky.cache.slice();
+        libs.__vodOpenSubsDone = !!sticky.done;
+        libs.__vodOpenSubsEmit = Number(sticky.emit) || sticky.cache.length;
+        console.log('[RN-Fetch][OS-RESTORE] n=' + sticky.cache.length
+            + ' done=' + (sticky.done ? 1 : 0)
+            + ' emit=' + String(sticky.emit || 0)
+            + ' imdb=' + String(sticky.imdb || ''));
+    }
+    else {
+        if (sticky.done) {
+            libs.__vodOpenSubsDone = true;
+        }
+        if (sticky.emit) {
+            libs.__vodOpenSubsEmit = Number(sticky.emit) || libs.__vodOpenSubsEmit || 0;
+        }
+    }
+    return (libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0;
+};
 libs.__vodBuildOpenSubsRows = function () {
+    libs.__vodRestoreOpenSubsFromSticky();
     var cache = libs.__vodOpenSubsCache || [];
     var out = [];
     var seen = {};
@@ -508,7 +566,7 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v55-os-inject';
+libs.__embedSyncVersion = 'v56-os-sticky';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
@@ -521,6 +579,9 @@ libs.__vodSyncBackfillEnabled = false;
 libs.__vodPreferGlobalSubs = true;
 libs.__vodForceSubDownload = true;
 libs.__vodOpenSubsCache = libs.__vodOpenSubsCache || [];
+if (typeof libs.__vodRestoreOpenSubsFromSticky === 'function') {
+    libs.__vodRestoreOpenSubsFromSticky();
+}
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 18000;
 libs.__vodSyncHardMaxMs = 26000;
@@ -835,9 +896,12 @@ libs.__flushVodSyncItems = function () {
     if (!items.length || bag.flushed) {
         return;
     }
-    // Hold so OpenSubtitles can fill __vodOpenSubsCache before link.subs inject.
-    var osCount = (libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0;
-    var osDone = !!libs.__vodOpenSubsDone;
+    // Hold so OpenSubtitles can fill cache/sticky before link.subs inject.
+    var osCount = typeof libs.__vodRestoreOpenSubsFromSticky === 'function'
+        ? libs.__vodRestoreOpenSubsFromSticky()
+        : ((libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0);
+    var sticky = typeof libs.__vodOsSticky === 'function' ? libs.__vodOsSticky() : null;
+    var osDone = !!(libs.__vodOpenSubsDone || (sticky && sticky.done));
     var elapsedForOs = bag.startMs ? (Date.now() - bag.startMs) : 0;
     var osWaitMs = 9000;
     if (osCount < 1 && !osDone && elapsedForOs < osWaitMs) {
@@ -850,7 +914,10 @@ libs.__flushVodSyncItems = function () {
     }
     if (osCount < 1) {
         console.log('[RN-Fetch][OS-WAIT] proceed-empty elapsed=' + elapsedForOs + 'ms done=' + (osDone ? 1 : 0)
-            + ' emit=' + String(libs.__vodOpenSubsEmit || 0));
+            + ' emit=' + String(libs.__vodOpenSubsEmit || (sticky && sticky.emit) || 0));
+    }
+    else {
+        console.log('[RN-Fetch][OS-WAIT] proceed-cache n=' + osCount + ' elapsed=' + elapsedForOs + 'ms done=' + (osDone ? 1 : 0));
     }
     bag.flushed = true;
     bag.items = [];
@@ -880,8 +947,13 @@ libs.__flushVodSyncItems = function () {
     var deliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
     for (var i = 0; i < items.length; i++) {
         try {
-            if (libs.__vodPreferGlobalSubs && ((libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0) > 0) {
-                items[i][6] = [];
+            if (libs.__vodPreferGlobalSubs) {
+                var osReadyN = typeof libs.__vodRestoreOpenSubsFromSticky === 'function'
+                    ? libs.__vodRestoreOpenSubsFromSticky()
+                    : ((libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0);
+                if (osReadyN > 0) {
+                    items[i][6] = [];
+                }
             }
             var subCount = (items[i][6] && items[i][6].length) ? items[i][6].length : 0;
             console.log('[RN-Fetch][SYNC-FLUSH-ITEM] provider=' + items[i][1] + ' rank=' + items[i][5] + ' subs=' + subCount
@@ -1370,7 +1442,17 @@ libs.__installVodBatchDeliverWrap = function () {
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-console.log('[RN-Fetch][EMBED-CFG] ' + libs.__embedSyncVersion + ' yaxSync=' + (libs.__vodSyncYaxEnabled ? 'on' : 'off'));
+(function () {
+    var stickyN = 0;
+    try {
+        stickyN = typeof libs.__vodRestoreOpenSubsFromSticky === 'function'
+            ? libs.__vodRestoreOpenSubsFromSticky()
+            : ((libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0);
+    }
+    catch (_cfgOs) { }
+    console.log('[RN-Fetch][EMBED-CFG] ' + libs.__embedSyncVersion + ' yaxSync=' + (libs.__vodSyncYaxEnabled ? 'on' : 'off')
+        + ' osSticky=' + stickyN);
+})();
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {
