@@ -96,12 +96,10 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                     seen[nameToId[userLangKey]] = true;
                     preferred.push({ name: movieInfo.lang, id: nameToId[userLangKey] });
                 }
+                // Keep tiny + fast so App can auto-download before player settles.
                 [
                     { name: "English", id: "eng" },
                     { name: "Chinese", id: "chi" },
-                    { name: "Arabic", id: "ara" },
-                    { name: "Spanish", id: "spa" },
-                    { name: "French", id: "fre" },
                 ].forEach(function (row) {
                     if (!seen[row.id]) {
                         seen[row.id] = true;

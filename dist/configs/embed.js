@@ -157,21 +157,24 @@ libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, c
                 if (!item || !item.file) {
                     continue;
                 }
+                if (item.file.indexOf("opensubtitles") != -1) {
+                    continue;
+                }
+                var subHeaders = libs.__inferSubHeaders(item.file, item.headers);
                 var type = "office";
                 if (item.file.indexOf(".srt") == -1 && item.file.indexOf(".vtt") == -1) {
                     type = "download";
                 }
-                if (item.file.indexOf("opensubtitles") != -1) {
-                    continue;
+                // App's "Subtitles download success" toast + Referer fetch use download/zip path, not office.
+                if (libs.__vodForceSubDownload || subHeaders) {
+                    type = "download";
                 }
-                // Match getSubs shape: kind "Captions" (capital C). Lowercase was ignored by App UI.
                 var row = {
                     file: item.file,
                     kind: 'Captions',
                     label: item.label || 'sub',
                     type: type,
                 };
-                var subHeaders = libs.__inferSubHeaders(item.file, item.headers);
                 if (subHeaders) {
                     row.headers = subHeaders;
                 }
@@ -181,6 +184,7 @@ libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, c
                 }
             }
             console.log('[RN-Fetch][SUBDATAPARSE] n=' + parseSubs.length + ' provider=' + String(provider || '')
+                + ' type=' + (parseSubs[0] ? parseSubs[0].type : '-')
                 + (parseSubs[0] ? (' sample=' + String(parseSubs[0].file).substring(0, 100)) : ''));
         }
     }
@@ -462,18 +466,18 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v51-global-subs-toast';
+libs.__embedSyncVersion = 'v52-download-toast';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
 // O/R must join the bag: early direct-deliver replaces the App list with a single server.
 libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie', 'OVidrift', 'RRiveStream'];
 // Cross-provider sub copy (v47) put 68~187 tracks on every server and broke play on titles like Spider-Man.
-// Keep shrink-only; re-enable backfill after play is confirmed stable.
 libs.__vodSyncBackfillEnabled = false;
-// Restore classic App path: empty link.subs → getSubs downloads OpenSubtitles zip → "Subtitles download success".
-// Provider-embedded office tracks (esp. B Lookmovie) suppress that zip toast and previously flooded the player.
-libs.__vodPreferGlobalSubs = true;
+// Lookmovie/office tracks listed in CC but App fetches them without Referer → blank + no toast.
+// Force type=download (+ headers) so App uses the zip/download path that shows "Subtitles download success".
+libs.__vodPreferGlobalSubs = false;
+libs.__vodForceSubDownload = true;
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 18000;
 libs.__vodSyncHardMaxMs = 26000;
@@ -816,6 +820,9 @@ libs.__flushVodSyncItems = function () {
     var deliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
     for (var i = 0; i < items.length; i++) {
         try {
+            if (libs.__vodPreferGlobalSubs) {
+                items[i][6] = [];
+            }
             var subCount = (items[i][6] && items[i][6].length) ? items[i][6].length : 0;
             console.log('[RN-Fetch][SYNC-FLUSH-ITEM] provider=' + items[i][1] + ' rank=' + items[i][5] + ' subs=' + subCount
                 + ' file=' + String(items[i][0] || '').substring(0, 80));
