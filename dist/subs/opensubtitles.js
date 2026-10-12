@@ -35,12 +35,14 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
+var OPENSUBS_VERSION = 'v2-fast-toast';
 subs.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, subLang, nameToId, preferred, seen, userLangKey, imdbId, _i, preferred_1, item, urlLang, responseLang, dataLang, emitted, sampleName, _a, dataLang_1, itemLang, lang, season, episode, e_1;
+    var PROVIDER, subLang, nameToId, preferred, seen, userLangKey, imdbId, totalEmit, _i, preferred_1, item, urlLang, responseLang, dataLang, ranked, ri, itemLang, lang, season, episode, e_1;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
                 PROVIDER = "OpenSubtitles";
+                console.log('[RN-Fetch][OPENSUBS-VERSION] ' + OPENSUBS_VERSION);
                 _b.label = 1;
             case 1:
                 _b.trys.push([1, 7, , 8]);
@@ -88,7 +90,8 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                     turkish: "tur",
                     indonesian: "ind",
                 };
-                // Prefer few langs: old 15-lang sequential loop was too slow after LibreSub died (CF 403).
+                // Formal myprovider floods 15 langs x many zips → App never starts dl.opensubtitles download/toast.
+                // Emit at most 1 zip per lang, max 2 langs total, finish fast.
                 preferred = [];
                 seen = {};
                 userLangKey = movieInfo.lang ? String(movieInfo.lang).toLowerCase() : "";
@@ -96,22 +99,24 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                     seen[nameToId[userLangKey]] = true;
                     preferred.push({ name: movieInfo.lang, id: nameToId[userLangKey] });
                 }
-                // Keep tiny + fast so App can auto-download before player settles.
-                [
-                    { name: "English", id: "eng" },
-                    { name: "Chinese", id: "chi" },
-                ].forEach(function (row) {
-                    if (!seen[row.id]) {
-                        seen[row.id] = true;
-                        preferred.push(row);
-                    }
-                });
+                if (!seen.eng) {
+                    seen.eng = true;
+                    preferred.push({ name: "English", id: "eng" });
+                }
+                if (!seen.chi && preferred.length < 2) {
+                    seen.chi = true;
+                    preferred.push({ name: "Chinese", id: "chi" });
+                }
                 imdbId = String(movieInfo.imdb_id).replace(/^tt/i, "");
+                totalEmit = 0;
                 console.log('[RN-Fetch][OPENSUBS] start imdb=' + imdbId + ' langs=' + preferred.length);
                 _i = 0, preferred_1 = preferred;
                 _b.label = 2;
             case 2:
                 if (!(_i < preferred_1.length)) return [3, 6];
+                if (totalEmit >= 2) {
+                    return [3, 6];
+                }
                 item = preferred_1[_i];
                 urlLang = "https://rest.opensubtitles.org/search/imdbid-".concat(imdbId, "/sublanguageid-").concat(item.id);
                 return [4, fetch(urlLang, {
@@ -129,14 +134,15 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                 return [4, responseLang.json()];
             case 4:
                 dataLang = _b.sent();
-                if (!Array.isArray(dataLang)) {
-                    console.log('[RN-Fetch][OPENSUBS] non-array lang=' + item.id);
+                if (!Array.isArray(dataLang) || !dataLang.length) {
+                    console.log('[RN-Fetch][OPENSUBS] empty lang=' + item.id);
                     return [3, 5];
                 }
-                emitted = 0;
-                sampleName = "";
-                for (_a = 0, dataLang_1 = dataLang; _a < dataLang_1.length; _a++) {
-                    itemLang = dataLang_1[_a];
+                ranked = dataLang.slice().sort(function (a, b) {
+                    return Number((b && b.SubDownloadsCnt) || 0) - Number((a && a.SubDownloadsCnt) || 0);
+                });
+                for (ri = 0; ri < ranked.length; ri++) {
+                    itemLang = ranked[ri];
                     if (!itemLang || !itemLang.ZipDownloadLink || !itemLang.SubLanguageID) {
                         continue;
                     }
@@ -151,9 +157,6 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                     if (!subLang[lang]) {
                         continue;
                     }
-                    if (!sampleName && itemLang.SubFileName) {
-                        sampleName = String(itemLang.SubFileName);
-                    }
                     callback({
                         file: itemLang.ZipDownloadLink,
                         kind: "Captions",
@@ -164,19 +167,18 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                             "x-user-agent": "VLSub 0.10.2",
                         },
                     });
-                    emitted += 1;
-                    if (emitted >= 3) {
-                        break;
-                    }
+                    totalEmit += 1;
+                    console.log('[RN-Fetch][OPENSUBS] emit lang=' + lang
+                        + ' dl=' + String(itemLang.SubDownloadsCnt || 0)
+                        + ' file=' + String(itemLang.ZipDownloadLink).substring(0, 90));
+                    break;
                 }
-                console.log('[RN-Fetch][OPENSUBS] lang=' + item.id + ' hits=' + dataLang.length + ' emit=' + emitted
-                    + (sampleName ? (' sample=' + sampleName.substring(0, 60)) : ''));
                 _b.label = 5;
             case 5:
                 _i++;
                 return [3, 2];
             case 6:
-                console.log('[RN-Fetch][OPENSUBS] done');
+                console.log('[RN-Fetch][OPENSUBS] done emit=' + totalEmit);
                 return [3, 8];
             case 7:
                 e_1 = _b.sent();
