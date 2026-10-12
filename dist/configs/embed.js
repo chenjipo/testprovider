@@ -115,6 +115,22 @@ libs.embed_parse_source = function (html) {
     eval(source);
     return parse;
 };
+libs.__inferSubHeaders = function (file, explicitHeaders) {
+    if (explicitHeaders && typeof explicitHeaders === 'object') {
+        return explicitHeaders;
+    }
+    var url = String(file || '').toLowerCase();
+    if (url.indexOf('lookmovie') >= 0) {
+        return {
+            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
+            referer: 'https://www.lookmovie2.to/',
+            Referer: 'https://www.lookmovie2.to/',
+            origin: 'https://www.lookmovie2.to',
+            Origin: 'https://www.lookmovie2.to',
+        };
+    }
+    return undefined;
+};
 // Always refresh raw deliver so caption fixes apply after App reloads embed.js.
 libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
     if (subs === void 0) { subs = []; }
@@ -122,27 +138,55 @@ libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, c
     if (headers === void 0) { headers = {}; }
     if (options === void 0) { options = {}; }
     var parseSubs = [];
-    if (subs.length > 0) {
-        for (var _i = 0, subs_1 = subs; _i < subs_1.length; _i++) {
-            var item = subs_1[_i];
-            if (!item || !item.file) {
-                continue;
+    try {
+        if (libs.__vodPreferGlobalSubs) {
+            if (subs && subs.length) {
+                console.log('[RN-Fetch][SUBDATAPARSE] strip-provider-subs n=' + subs.length + ' provider=' + String(provider || '') + ' prefer=global');
             }
-            var type = "office";
-            if (item.file.indexOf(".srt") == -1 && item.file.indexOf(".vtt") == -1) {
-                type = "download";
-            }
-            if (item.file.indexOf("opensubtitles") != -1) {
-                continue;
-            }
-            parseSubs.push({
-                file: item.file,
-                kind: 'captions',
-                label: item.label,
-                type: type,
-            });
         }
-        console.log('[RN-Fetch][SUBDATAPARSE] n=' + parseSubs.length + ' provider=' + String(provider || ''));
+        else if (subs && subs.length > 0) {
+            var capped = subs;
+            if (subs.length > 6 && typeof libs.__vodSyncTrimSubs === 'function') {
+                capped = libs.__vodSyncTrimSubs(subs);
+                if (!capped || !capped.length) {
+                    capped = subs.slice(0, 6);
+                }
+            }
+            for (var _i = 0, subs_1 = capped; _i < subs_1.length; _i++) {
+                var item = subs_1[_i];
+                if (!item || !item.file) {
+                    continue;
+                }
+                var type = "office";
+                if (item.file.indexOf(".srt") == -1 && item.file.indexOf(".vtt") == -1) {
+                    type = "download";
+                }
+                if (item.file.indexOf("opensubtitles") != -1) {
+                    continue;
+                }
+                // Match getSubs shape: kind "Captions" (capital C). Lowercase was ignored by App UI.
+                var row = {
+                    file: item.file,
+                    kind: 'Captions',
+                    label: item.label || 'sub',
+                    type: type,
+                };
+                var subHeaders = libs.__inferSubHeaders(item.file, item.headers);
+                if (subHeaders) {
+                    row.headers = subHeaders;
+                }
+                parseSubs.push(row);
+                if (parseSubs.length >= 6) {
+                    break;
+                }
+            }
+            console.log('[RN-Fetch][SUBDATAPARSE] n=' + parseSubs.length + ' provider=' + String(provider || '')
+                + (parseSubs[0] ? (' sample=' + String(parseSubs[0].file).substring(0, 100)) : ''));
+        }
+    }
+    catch (subErr) {
+        parseSubs = [];
+        console.log('[RN-Fetch][SUBDATAPARSE-ERR] provider=' + String(provider || '') + ' ' + String(subErr && subErr.message ? subErr.message : subErr));
     }
     var linkRank = rank || 0;
     var displayProvider = libs.string_provider(provider, linkRank);
@@ -151,8 +195,24 @@ libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, c
     if (linkRank > 0) {
         linkHost = linkHost + '-' + linkRank;
     }
-    // Keep parsed subs last so options cannot wipe captions.
-    callback(__assign({ file: urlDirect, quality: quality, host: linkHost, source: linkSource, provider: displayProvider, rank: linkRank, direct_quality: direct_quality, headers: headers }, options, { subs: parseSubs }));
+    // Prefer explicit stream headers; fall back to options.headers so empty {} does not wipe Referer.
+    var playHeaders = headers;
+    if (!playHeaders || (typeof playHeaders === 'object' && Object.keys(playHeaders).length === 0)) {
+        playHeaders = (options && options.headers) || {};
+    }
+    // options first, then required playback fields — never let options wipe file/headers/subs.
+    // (Regression: some movies stopped playing after subs work when assign order was wrong.)
+    callback(__assign({}, options, {
+        file: urlDirect,
+        quality: quality,
+        host: linkHost,
+        source: linkSource,
+        provider: displayProvider,
+        rank: linkRank,
+        direct_quality: direct_quality,
+        headers: playHeaders || {},
+        subs: parseSubs,
+    }));
 };
 libs.__embedCallbackBaseDeliver = libs.__embedCallbackDeliverRaw;
 libs.__embedCallbackDeliver = libs.__embedCallbackDeliverRaw;
@@ -402,12 +462,18 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v47-subs-backfill';
+libs.__embedSyncVersion = 'v51-global-subs-toast';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
 // O/R must join the bag: early direct-deliver replaces the App list with a single server.
 libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie', 'OVidrift', 'RRiveStream'];
+// Cross-provider sub copy (v47) put 68~187 tracks on every server and broke play on titles like Spider-Man.
+// Keep shrink-only; re-enable backfill after play is confirmed stable.
+libs.__vodSyncBackfillEnabled = false;
+// Restore classic App path: empty link.subs → getSubs downloads OpenSubtitles zip → "Subtitles download success".
+// Provider-embedded office tracks (esp. B Lookmovie) suppress that zip toast and previously flooded the player.
+libs.__vodPreferGlobalSubs = true;
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 18000;
 libs.__vodSyncHardMaxMs = 26000;
@@ -537,8 +603,7 @@ libs.__vodSyncIsYaxReady = function (items, elapsed) {
         }
     }
     // L/B/O/R family present but no Y/A/X core — wait a bit, then flush.
-    // Do NOT flush when the bag only has O/R: they often ship empty provider-subs and
-    // App auto-plays listLink[0], which made subtitles look "broken" after O was added.
+    // Prefer waiting briefly so O/R alone are not listLink[0] before B/X arrive.
     if (items.length >= 1 && coreFamilies === 0 && familyCount >= 1 && elapsed >= Math.max(libs.__vodSyncCoalesceMs || 4500, 8000)) {
         var hasStableFamily = false;
         for (var fi = 0; fi < items.length; fi++) {
@@ -551,6 +616,10 @@ libs.__vodSyncIsYaxReady = function (items, elapsed) {
         if (hasStableFamily) {
             return true;
         }
+    }
+    // Escape hatch: never leave X/B/O/I stuck in the bag (play regression on some titles).
+    if (items.length >= 1 && elapsed >= hardMax) {
+        return true;
     }
     return false;
 };
@@ -616,19 +685,49 @@ libs.__tryPushVodSyncLink = function (urlDirect, provider, host, quality, callba
     libs.__pushVodSyncItem(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
     return true;
 };
-libs.__vodSyncCloneSubs = function (subs) {
-    var source = subs || [];
+libs.__vodSyncPreferSubLabel = function (label) {
+    var text = String(label || '').toLowerCase();
+    if (text.indexOf('english') >= 0 || text === 'en' || text.indexOf('eng') === 0) {
+        return 0;
+    }
+    if (text.indexOf('chinese') >= 0 || text.indexOf('中') >= 0 || text === 'zh' || text === 'cn' || text.indexOf('chi') === 0) {
+        return 1;
+    }
+    if (text.indexOf('spanish') >= 0 || text.indexOf('arabic') >= 0 || text.indexOf('french') >= 0) {
+        return 2;
+    }
+    return 5;
+};
+libs.__vodSyncTrimSubs = function (subs) {
+    var source = (subs || []).slice();
+    source.sort(function (a, b) {
+        return libs.__vodSyncPreferSubLabel(a && a.label) - libs.__vodSyncPreferSubLabel(b && b.label);
+    });
     var out = [];
-    for (var i = 0; i < source.length; i++) {
+    var seen = {};
+    // Keep tiny: v47 copied 68~187 tracks onto every server and broke playback on some titles.
+    for (var i = 0; i < source.length && out.length < 6; i++) {
         var item = source[i];
-        if (!item || !item.file) {
+        if (!item || !item.file || seen[item.file]) {
             continue;
         }
-        out.push({
-            file: item.file,
+        // Prefer real caption files; skip unknown blobs that force type=download.
+        var file = String(item.file);
+        var lower = file.toLowerCase();
+        if (lower.indexOf('.srt') < 0 && lower.indexOf('.vtt') < 0 && lower.indexOf('subtitle') < 0 && lower.indexOf('/sub') < 0) {
+            continue;
+        }
+        seen[item.file] = true;
+        var row = {
+            file: file,
             label: item.label || 'sub',
-            kind: item.kind || 'captions',
-        });
+            kind: 'Captions',
+        };
+        var subHeaders = item.headers || libs.__inferSubHeaders(file);
+        if (subHeaders) {
+            row.headers = subHeaders;
+        }
+        out.push(row);
     }
     return out;
 };
@@ -645,21 +744,42 @@ libs.__vodSyncPickRichestSubs = function (items) {
     return { subs: best, provider: bestProvider };
 };
 libs.__vodSyncBackfillSubs = function (items) {
+    // Always shrink oversized native bags (e.g. B with 187) so App does not choke.
+    for (var j = 0; j < items.length; j++) {
+        var cur = items[j][6] || [];
+        if (cur.length > 6) {
+            var shrunk = libs.__vodSyncTrimSubs(cur);
+            items[j][6] = (shrunk && shrunk.length) ? shrunk : cur.slice(0, 6);
+            console.log('[RN-Fetch][SYNC-SUBS] shrink provider=' + items[j][1] + ' to=' + items[j][6].length);
+        }
+    }
+    if (libs.__vodSyncBackfillEnabled === false) {
+        console.log('[RN-Fetch][SYNC-SUBS] backfill=off (play-first)');
+        return 0;
+    }
     var picked = libs.__vodSyncPickRichestSubs(items);
     if (!picked.subs || !picked.subs.length) {
         console.log('[RN-Fetch][SYNC-SUBS] none-in-bag');
         return 0;
     }
+    var trimmed = libs.__vodSyncTrimSubs(picked.subs);
+    if (!trimmed.length) {
+        console.log('[RN-Fetch][SYNC-SUBS] trim-empty raw=' + picked.subs.length + ' from=' + picked.provider);
+        return 0;
+    }
     var filled = 0;
     for (var i = 0; i < items.length; i++) {
         var current = items[i][6] || [];
-        if (current.length > 0) {
+        // Only fill empty providers. Do NOT rewrite B/X native subs (avoids play regressions).
+        if (current.length) {
             continue;
         }
-        items[i][6] = libs.__vodSyncCloneSubs(picked.subs);
+        items[i][6] = trimmed.slice();
         filled += 1;
     }
-    console.log('[RN-Fetch][SYNC-SUBS] backfill=' + filled + ' from=' + picked.provider + ' tracks=' + picked.subs.length);
+    console.log('[RN-Fetch][SYNC-SUBS] backfill=' + filled + ' from=' + picked.provider
+        + ' raw=' + picked.subs.length + ' tracks=' + trimmed.length
+        + (trimmed[0] ? (' sample=' + String(trimmed[0].file).substring(0, 100)) : ''));
     return filled;
 };
 libs.__flushVodSyncItems = function () {
@@ -684,16 +804,27 @@ libs.__flushVodSyncItems = function () {
     if (libs.__vodSyncYaxEnabled) {
         items = libs.__vodSyncSortItems(items);
     }
-    libs.__vodSyncBackfillSubs(items);
+    try {
+        libs.__vodSyncBackfillSubs(items);
+    }
+    catch (bfErr) {
+        console.log('[RN-Fetch][SYNC-SUBS-ERR] ' + String(bfErr && bfErr.message ? bfErr.message : bfErr));
+    }
     console.log('[RN-Fetch][SYNC-FLUSH] count=' + items.length + ' version=' + libs.__embedSyncVersion);
     libs.__vodSyncReleasing = true;
     libs.__vodSyncDeliveredProviders = libs.__vodSyncDeliveredProviders || {};
     var deliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
     for (var i = 0; i < items.length; i++) {
-        var subCount = (items[i][6] && items[i][6].length) ? items[i][6].length : 0;
-        console.log('[RN-Fetch][SYNC-FLUSH-ITEM] provider=' + items[i][1] + ' rank=' + items[i][5] + ' subs=' + subCount);
-        libs.__vodSyncDeliveredProviders[items[i][1]] = true;
-        deliver.apply(libs, items[i]);
+        try {
+            var subCount = (items[i][6] && items[i][6].length) ? items[i][6].length : 0;
+            console.log('[RN-Fetch][SYNC-FLUSH-ITEM] provider=' + items[i][1] + ' rank=' + items[i][5] + ' subs=' + subCount
+                + ' file=' + String(items[i][0] || '').substring(0, 80));
+            libs.__vodSyncDeliveredProviders[items[i][1]] = true;
+            deliver.apply(libs, items[i]);
+        }
+        catch (delErr) {
+            console.log('[RN-Fetch][SYNC-FLUSH-ERR] provider=' + items[i][1] + ' ' + String(delErr && delErr.message ? delErr.message : delErr));
+        }
     }
     libs.__vodSyncReleasing = false;
     if (typeof libs.__runDeferredProviderWebviews === 'function') {

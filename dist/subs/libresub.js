@@ -77,6 +77,11 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
             case 3:
                 dataLang = _b.sent();
                 libs.log({ urlLang: urlLang, dataLang: dataLang, item: item }, PROVIDER, "URL SEARCH LANG");
+                // Cloudflare HTML / non-JSON: abort instead of looping 15 langs on a dead host.
+                if (!Array.isArray(dataLang)) {
+                    console.log('[RN-Fetch][LIBRESUB] abort non-array (likely CF 403)');
+                    return [2, true];
+                }
                 stt = 0;
                 for (_a = 0, dataLang_1 = dataLang; _a < dataLang_1.length; _a++) {
                     itemLang = dataLang_1[_a];

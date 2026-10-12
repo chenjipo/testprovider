@@ -8,8 +8,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 var __generator = (this && this.__generator) || function (thisArg, body) {
-    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
-    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
+    var _ = { label: 0, sent: function () { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function () { return this; }), g;
     function verb(n) { return function (v) { return step([n, v]); }; }
     function step(op) {
         if (f) throw new TypeError("Generator is already executing.");
@@ -36,15 +36,18 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 subs.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, DOMAIN, subLang, subLanguageIds, url, _i, subLanguageIds_1, item, urlLang, responseLang, dataLang, _a, dataLang_1, itemLang, fileName, lang, season, episode, e_1;
+    var PROVIDER, subLang, nameToId, preferred, seen, userLangKey, imdbId, _i, preferred_1, item, urlLang, responseLang, dataLang, emitted, sampleName, _a, dataLang_1, itemLang, lang, season, episode, e_1;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
                 PROVIDER = "OpenSubtitles";
-                DOMAIN = "https://www.opensubtitles.org";
                 _b.label = 1;
             case 1:
                 _b.trys.push([1, 7, , 8]);
+                if (!movieInfo || !movieInfo.imdb_id) {
+                    console.log('[RN-Fetch][OPENSUBS] skip no-imdb');
+                    return [2, true];
+                }
                 subLang = {
                     eng: "English",
                     spa: "Spanish",
@@ -68,31 +71,51 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                     vie: "Vietnamese",
                     ind: "Indonesian",
                 };
-                subLanguageIds = [
-                    { name: 'English', id: 'eng' },
-                    { name: 'Arabic', id: 'ara' },
-                    { name: 'Spanish', id: 'spa' },
-                    { name: 'French', id: 'fre' },
-                    { name: 'Vietnamese', id: 'vie' },
-                    { name: 'Italian', id: 'ita' },
-                    { name: 'Portuguese', id: 'por' },
-                    { name: 'Chinese', id: 'chi' },
-                    { name: 'Korean', id: 'kor' },
-                    { name: 'Hindi', id: 'hin' },
-                    { name: 'Dutch', id: 'dut' },
-                    { name: 'Swedish', id: 'swe' },
-                    { name: 'Polish', id: 'pol' },
-                    { name: 'Turkish', id: 'tur' },
-                    { name: 'Indonesian', id: 'ind' },
-                ];
-                url = "https://rest.opensubtitles.org/search/imdbid-".concat(movieInfo.imdb_id.replace("tt", ""));
-                libs.log({ url: url }, PROVIDER, "URL SEARCH");
-                _i = 0, subLanguageIds_1 = subLanguageIds;
+                nameToId = {
+                    english: "eng",
+                    arabic: "ara",
+                    spanish: "spa",
+                    french: "fre",
+                    vietnamese: "vie",
+                    italian: "ita",
+                    portuguese: "por",
+                    chinese: "chi",
+                    korean: "kor",
+                    hindi: "hin",
+                    dutch: "dut",
+                    swedish: "swe",
+                    polish: "pol",
+                    turkish: "tur",
+                    indonesian: "ind",
+                };
+                // Prefer few langs: old 15-lang sequential loop was too slow after LibreSub died (CF 403).
+                preferred = [];
+                seen = {};
+                userLangKey = movieInfo.lang ? String(movieInfo.lang).toLowerCase() : "";
+                if (userLangKey && nameToId[userLangKey] && !seen[nameToId[userLangKey]]) {
+                    seen[nameToId[userLangKey]] = true;
+                    preferred.push({ name: movieInfo.lang, id: nameToId[userLangKey] });
+                }
+                [
+                    { name: "English", id: "eng" },
+                    { name: "Chinese", id: "chi" },
+                    { name: "Arabic", id: "ara" },
+                    { name: "Spanish", id: "spa" },
+                    { name: "French", id: "fre" },
+                ].forEach(function (row) {
+                    if (!seen[row.id]) {
+                        seen[row.id] = true;
+                        preferred.push(row);
+                    }
+                });
+                imdbId = String(movieInfo.imdb_id).replace(/^tt/i, "");
+                console.log('[RN-Fetch][OPENSUBS] start imdb=' + imdbId + ' langs=' + preferred.length);
+                _i = 0, preferred_1 = preferred;
                 _b.label = 2;
             case 2:
-                if (!(_i < subLanguageIds_1.length)) return [3, 6];
-                item = subLanguageIds_1[_i];
-                urlLang = "https://rest.opensubtitles.org/search/imdbid-".concat(movieInfo.imdb_id.replace("tt", ""), "/sublanguageid-").concat(item.id);
+                if (!(_i < preferred_1.length)) return [3, 6];
+                item = preferred_1[_i];
+                urlLang = "https://rest.opensubtitles.org/search/imdbid-".concat(imdbId, "/sublanguageid-").concat(item.id);
                 return [4, fetch(urlLang, {
                         method: "GET",
                         headers: {
@@ -101,38 +124,38 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                     })];
             case 3:
                 responseLang = _b.sent();
+                if (!responseLang || !responseLang.ok) {
+                    console.log('[RN-Fetch][OPENSUBS] http=' + (responseLang && responseLang.status) + ' lang=' + item.id);
+                    return [3, 5];
+                }
                 return [4, responseLang.json()];
             case 4:
                 dataLang = _b.sent();
-                libs.log({ urlLang: urlLang, dataLang: dataLang, item: item }, PROVIDER, "URL SEARCH LANG");
+                if (!Array.isArray(dataLang)) {
+                    console.log('[RN-Fetch][OPENSUBS] non-array lang=' + item.id);
+                    return [3, 5];
+                }
+                emitted = 0;
+                sampleName = "";
                 for (_a = 0, dataLang_1 = dataLang; _a < dataLang_1.length; _a++) {
                     itemLang = dataLang_1[_a];
-                    fileName = itemLang.SubFileName;
-                    lang = itemLang.SubLanguageID.toLowerCase();
-                    libs.log({ fileName: fileName, langID: itemLang.SubLanguageID, zip: itemLang.ZipDownloadLink }, PROVIDER, "ITEM INFO");
+                    if (!itemLang || !itemLang.ZipDownloadLink || !itemLang.SubLanguageID) {
+                        continue;
+                    }
+                    lang = String(itemLang.SubLanguageID).toLowerCase();
                     if (movieInfo.type == "tv") {
                         season = Number(itemLang.SeriesSeason);
                         episode = Number(itemLang.SeriesEpisode);
-                        libs.log({
-                            episode: episode,
-                            season: season,
-                            fileName: fileName,
-                            lang: lang,
-                            zip: itemLang.ZipDownloadLink,
-                            movieInfo: movieInfo,
-                        }, PROVIDER, "EPISODE COMPARE");
                         if (movieInfo.season !== season || movieInfo.episode !== episode) {
                             continue;
                         }
                     }
-                    libs.log({ lang: lang, subLang: subLang[lang], zip: itemLang.ZipDownloadLink }, PROVIDER, "LANG INFO");
                     if (!subLang[lang]) {
                         continue;
                     }
-                    if (!itemLang.ZipDownloadLink) {
-                        continue;
+                    if (!sampleName && itemLang.SubFileName) {
+                        sampleName = String(itemLang.SubFileName);
                     }
-                    libs.log({ fileName: fileName, lang: lang, zip: itemLang.ZipDownloadLink }, PROVIDER, "ITEM INFO PASS==>");
                     callback({
                         file: itemLang.ZipDownloadLink,
                         kind: "Captions",
@@ -143,14 +166,23 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                             "x-user-agent": "VLSub 0.10.2",
                         },
                     });
+                    emitted += 1;
+                    if (emitted >= 3) {
+                        break;
+                    }
                 }
+                console.log('[RN-Fetch][OPENSUBS] lang=' + item.id + ' hits=' + dataLang.length + ' emit=' + emitted
+                    + (sampleName ? (' sample=' + sampleName.substring(0, 60)) : ''));
                 _b.label = 5;
             case 5:
                 _i++;
                 return [3, 2];
-            case 6: return [3, 8];
+            case 6:
+                console.log('[RN-Fetch][OPENSUBS] done');
+                return [3, 8];
             case 7:
                 e_1 = _b.sent();
+                console.log('[RN-Fetch][OPENSUBS-ERR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 libs.log({ e: e_1 }, PROVIDER, "ERROR");
                 return [3, 8];
             case 8: return [2, true];
