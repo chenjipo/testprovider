@@ -8,8 +8,8 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 var __generator = (this && this.__generator) || function (thisArg, body) {
-    var _ = { label: 0, sent: function () { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
-    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function () { return this; }), g;
+    var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
+    return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function() { return this; }), g;
     function verb(n) { return function (v) { return step([n, v]); }; }
     function step(op) {
         if (f) throw new TypeError("Generator is already executing.");
@@ -35,154 +35,16 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
-var OPENSUBS_VERSION = 'v6-formal-list';
-function openSubsRoot() {
-    try {
-        if (typeof globalThis !== 'undefined' && globalThis) {
-            return globalThis;
-        }
-    }
-    catch (_e0) { }
-    try {
-        if (typeof global !== 'undefined' && global) {
-            return global;
-        }
-    }
-    catch (_e1) { }
-    try {
-        if (typeof window !== 'undefined' && window) {
-            return window;
-        }
-    }
-    catch (_e2) { }
-    return null;
-}
-function openSubsSticky() {
-    var root = openSubsRoot();
-    if (!root) {
-        return null;
-    }
-    if (!root.__VOD_OS_STICKY) {
-        root.__VOD_OS_STICKY = { cache: [], done: false, emit: 0, imdb: '', version: OPENSUBS_VERSION };
-    }
-    return root.__VOD_OS_STICKY;
-}
-function openSubsNormalizeImdb(raw) {
-    if (!raw) {
-        return '';
-    }
-    return String(raw).replace(/^tt/i, '').trim();
-}
-function openSubsSyncLibs(sticky) {
-    try {
-        if (typeof libs === 'undefined' || !sticky) {
-            return;
-        }
-        libs.__vodOpenSubsCache = sticky.cache.slice();
-        libs.__vodOpenSubsDone = !!sticky.done;
-        libs.__vodOpenSubsEmit = Number(sticky.emit) || 0;
-        libs.__vodOpenSubsVersion = OPENSUBS_VERSION;
-        libs.__vodOpenSubsImdb = sticky.imdb || '';
-    }
-    catch (_syncErr) { }
-}
-function openSubsReset(imdbId) {
-    var sticky = openSubsSticky();
-    if (sticky) {
-        sticky.cache = [];
-        sticky.done = false;
-        sticky.emit = 0;
-        sticky.imdb = imdbId || '';
-        sticky.version = OPENSUBS_VERSION;
-    }
-    openSubsSyncLibs(sticky || { cache: [], done: false, emit: 0, imdb: imdbId || '' });
-}
-function openSubsPushRow(row, totalEmit, finished) {
-    var sticky = openSubsSticky();
-    if (sticky) {
-        sticky.cache = sticky.cache || [];
-        sticky.cache.push(row);
-        sticky.emit = Number(totalEmit) || sticky.cache.length;
-        // Mark done on first successful emit so flush does not wait for a lost tail.
-        sticky.done = true;
-        if (finished) {
-            sticky.done = true;
-        }
-    }
-    openSubsSyncLibs(sticky);
-}
-function openSubsMarkDone(totalEmit) {
-    var sticky = openSubsSticky();
-    if (sticky) {
-        sticky.done = true;
-        sticky.emit = Number(totalEmit) || sticky.emit || 0;
-    }
-    openSubsSyncLibs(sticky);
-    try {
-        if (typeof libs !== 'undefined') {
-            libs.__vodOpenSubsDone = true;
-            libs.__vodOpenSubsEmit = Number(totalEmit) || 0;
-        }
-    }
-    catch (_doneErr) { }
-}
 subs.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, subLang, nameToId, preferred, seen, userLangKey, imdbId, tmdbId, apiKeys, ki, apiKey, extUrl, extData, totalEmit, wantSeason, wantEpisode, _i, preferred_1, item, urlLang, dataLang, ranked, ri, itemLang, lang, season, episode, row, filterSkip, e_1;
+    var PROVIDER, DOMAIN, subLang, subLanguageIds, url, _i, subLanguageIds_1, item, urlLang, responseLang, dataLang, _a, dataLang_1, itemLang, fileName, lang, season, episode, e_1;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
                 PROVIDER = "OpenSubtitles";
-                console.log('[RN-Fetch][OPENSUBS-VERSION] ' + OPENSUBS_VERSION);
+                DOMAIN = "https://www.opensubtitles.org";
                 _b.label = 1;
             case 1:
-                _b.trys.push([1, 10, , 11]);
-                imdbId = openSubsNormalizeImdb(movieInfo && movieInfo.imdb_id);
-                tmdbId = movieInfo && movieInfo.tmdb_id !== undefined && movieInfo.tmdb_id !== null
-                    ? String(movieInfo.tmdb_id).trim()
-                    : '';
-                if (!(!imdbId && tmdbId && !/^tt/i.test(tmdbId))) return [3, 5];
-                apiKeys = (typeof libs !== 'undefined' && libs.TMDB_API_KEYS) || [
-                    '3161de04ca660985f0b42e883eb49fef',
-                    '4e44c9029b1270a41c75c666510b46f5',
-                ];
-                ki = 0;
-                _b.label = 2;
-            case 2:
-                if (!(ki < apiKeys.length && !imdbId)) return [3, 5];
-                apiKey = apiKeys[ki];
-                extUrl = 'https://api.themoviedb.org/3/'
-                    + ((movieInfo && movieInfo.type == 'tv') ? 'tv' : 'movie')
-                    + '/' + encodeURIComponent(tmdbId)
-                    + '/external_ids?api_key=' + encodeURIComponent(apiKey);
-                return [4, libs.request_get(extUrl, {
-                        accept: 'application/json',
-                    }, false, true, 1)];
-            case 3:
-                extData = _b.sent();
-                if (typeof extData === 'string' && extData) {
-                    try {
-                        extData = JSON.parse(extData);
-                    }
-                    catch (_parseExt) {
-                        extData = null;
-                    }
-                }
-                imdbId = openSubsNormalizeImdb(extData && extData.imdb_id);
-                if (imdbId) {
-                    console.log('[RN-Fetch][OPENSUBS] imdb-from-tmdb tmdb=' + tmdbId + ' imdb=' + imdbId);
-                }
-                _b.label = 4;
-            case 4:
-                ki++;
-                return [3, 2];
-            case 5:
-                openSubsReset(imdbId);
-                if (!imdbId) {
-                    console.log('[RN-Fetch][OPENSUBS] skip no-imdb tmdb=' + tmdbId
-                        + ' rawImdb=' + String((movieInfo && movieInfo.imdb_id) || ''));
-                    openSubsMarkDone(0);
-                    return [2, true];
-                }
+                _b.trys.push([1, 7, , 8]);
                 subLang = {
                     eng: "English",
                     spa: "Spanish",
@@ -206,102 +68,72 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                     vie: "Vietnamese",
                     ind: "Indonesian",
                 };
-                nameToId = {
-                    english: "eng",
-                    arabic: "ara",
-                    spanish: "spa",
-                    french: "fre",
-                    vietnamese: "vie",
-                    italian: "ita",
-                    portuguese: "por",
-                    chinese: "chi",
-                    korean: "kor",
-                    hindi: "hin",
-                    dutch: "dut",
-                    swedish: "swe",
-                    polish: "pol",
-                    turkish: "tur",
-                    indonesian: "ind",
-                };
-                preferred = [];
-                seen = {};
-                userLangKey = movieInfo.lang ? String(movieInfo.lang).toLowerCase() : "";
-                if (userLangKey && nameToId[userLangKey] && !seen[nameToId[userLangKey]]) {
-                    seen[nameToId[userLangKey]] = true;
-                    preferred.push({ name: movieInfo.lang, id: nameToId[userLangKey] });
-                }
-                if (!seen.eng) {
-                    seen.eng = true;
-                    preferred.push({ name: "English", id: "eng" });
-                }
-                if (!seen.chi) {
-                    seen.chi = true;
-                    preferred.push({ name: "Chinese", id: "chi" });
-                }
-                totalEmit = 0;
-                wantSeason = Number(movieInfo && movieInfo.season);
-                wantEpisode = Number(movieInfo && movieInfo.episode);
-                // Formal lists many English zips; keep a modest cap so App still starts downloads.
-                var maxEmit = 8;
-                var maxPerLang = 5;
-                console.log('[RN-Fetch][OPENSUBS] start imdb=' + imdbId
-                    + ' langs=' + preferred.length
-                    + ' type=' + String((movieInfo && movieInfo.type) || '')
-                    + ' s=' + String(movieInfo && movieInfo.season)
-                    + ' e=' + String(movieInfo && movieInfo.episode)
-                    + ' wantS=' + wantSeason + ' wantE=' + wantEpisode);
-                _i = 0, preferred_1 = preferred;
-                _b.label = 6;
-            case 6:
-                if (!(_i < preferred_1.length)) return [3, 9];
-                if (totalEmit >= maxEmit) {
-                    return [3, 9];
-                }
-                item = preferred_1[_i];
-                urlLang = "https://rest.opensubtitles.org/search/imdbid-".concat(imdbId, "/sublanguageid-").concat(item.id);
-                filterSkip = 0;
-                return [4, libs.request_get(urlLang, {
-                        "x-user-agent": "VLSub 0.10.2",
-                        accept: "application/json",
-                    }, false, true, 1)];
-            case 7:
+                subLanguageIds = [
+                    { name: 'English', id: 'eng' },
+                    { name: 'Arabic', id: 'ara' },
+                    { name: 'Spanish', id: 'spa' },
+                    { name: 'French', id: 'fre' },
+                    { name: 'Vietnamese', id: 'vie' },
+                    { name: 'Italian', id: 'ita' },
+                    { name: 'Portuguese', id: 'por' },
+                    { name: 'Chinese', id: 'chi' },
+                    { name: 'Korean', id: 'kor' },
+                    { name: 'Hindi', id: 'hin' },
+                    { name: 'Dutch', id: 'dut' },
+                    { name: 'Swedish', id: 'swe' },
+                    { name: 'Polish', id: 'pol' },
+                    { name: 'Turkish', id: 'tur' },
+                    { name: 'Indonesian', id: 'ind' },
+                ];
+                url = "https://rest.opensubtitles.org/search/imdbid-".concat(movieInfo.imdb_id.replace("tt", ""));
+                libs.log({ url: url }, PROVIDER, "URL SEARCH");
+                _i = 0, subLanguageIds_1 = subLanguageIds;
+                _b.label = 2;
+            case 2:
+                if (!(_i < subLanguageIds_1.length)) return [3, 6];
+                item = subLanguageIds_1[_i];
+                urlLang = "https://rest.opensubtitles.org/search/imdbid-".concat(movieInfo.imdb_id.replace("tt", ""), "/sublanguageid-").concat(item.id);
+                return [4, fetch(urlLang, {
+                        method: "GET",
+                        headers: {
+                            "x-user-agent": "VLSub 0.10.2",
+                        },
+                    })];
+            case 3:
+                responseLang = _b.sent();
+                return [4, responseLang.json()];
+            case 4:
                 dataLang = _b.sent();
-                if (typeof dataLang === 'string' && dataLang) {
-                    try {
-                        dataLang = JSON.parse(dataLang);
-                    }
-                    catch (_parseLang) {
-                        dataLang = null;
-                    }
-                }
-                if (!Array.isArray(dataLang) || !dataLang.length) {
-                    console.log('[RN-Fetch][OPENSUBS] empty lang=' + item.id
-                        + ' typeof=' + (dataLang === null || dataLang === undefined ? 'null' : typeof dataLang));
-                    return [3, 8];
-                }
-                ranked = dataLang.slice().sort(function (a, b) {
-                    return Number((b && b.SubDownloadsCnt) || 0) - Number((a && a.SubDownloadsCnt) || 0);
-                });
-                var langEmit = 0;
-                for (ri = 0; ri < ranked.length; ri++) {
-                    itemLang = ranked[ri];
-                    if (!itemLang || !itemLang.ZipDownloadLink || !itemLang.SubLanguageID) {
-                        continue;
-                    }
-                    lang = String(itemLang.SubLanguageID).toLowerCase();
+                libs.log({ urlLang: urlLang, dataLang: dataLang, item: item }, PROVIDER, "URL SEARCH LANG");
+                for (_a = 0, dataLang_1 = dataLang; _a < dataLang_1.length; _a++) {
+                    itemLang = dataLang_1[_a];
+                    fileName = itemLang.SubFileName;
+                    lang = itemLang.SubLanguageID.toLowerCase();
+                    libs.log({ fileName: fileName, langID: itemLang.SubLanguageID, zip: itemLang.ZipDownloadLink }, PROVIDER, "ITEM INFO");
                     if (movieInfo.type == "tv") {
                         season = Number(itemLang.SeriesSeason);
                         episode = Number(itemLang.SeriesEpisode);
-                        if (!isFinite(wantSeason) || !isFinite(wantEpisode)
-                            || wantSeason !== season || wantEpisode !== episode) {
-                            filterSkip += 1;
+                        libs.log({
+                            episode: episode,
+                            season: season,
+                            fileName: fileName,
+                            lang: lang,
+                            zip: itemLang.ZipDownloadLink,
+                            movieInfo: movieInfo,
+                        }, PROVIDER, "EPISODE COMPARE");
+                        if (movieInfo.season !== season || movieInfo.episode !== episode) {
                             continue;
                         }
                     }
+                    libs.log({ lang: lang, subLang: subLang[lang], zip: itemLang.ZipDownloadLink }, PROVIDER, "LANG INFO");
                     if (!subLang[lang]) {
                         continue;
                     }
-                    row = {
+                    if (!itemLang.ZipDownloadLink) {
+                        continue;
+                    }
+                    libs.log({ fileName: fileName, lang: lang, zip: itemLang.ZipDownloadLink }, PROVIDER, "ITEM INFO PASS==>");
+                    callback({
                         file: itemLang.ZipDownloadLink,
                         kind: "Captions",
                         label: subLang[lang],
@@ -310,39 +142,18 @@ subs.getResource = function (movieInfo, config, callback) { return __awaiter(_th
                         headers: {
                             "x-user-agent": "VLSub 0.10.2",
                         },
-                    };
-                    totalEmit += 1;
-                    langEmit += 1;
-                    openSubsPushRow(row, totalEmit, totalEmit >= maxEmit);
-                    callback(row);
-                    console.log('[RN-Fetch][OPENSUBS] emit lang=' + lang
-                        + ' dl=' + String(itemLang.SubDownloadsCnt || 0)
-                        + ' cache=' + String((openSubsSticky() && openSubsSticky().cache) ? openSubsSticky().cache.length : 0)
-                        + ' file=' + String(itemLang.ZipDownloadLink).substring(0, 90));
-                    if (langEmit >= maxPerLang || totalEmit >= maxEmit) {
-                        break;
-                    }
+                    });
                 }
-                if (!langEmit && filterSkip) {
-                    console.log('[RN-Fetch][OPENSUBS] filter-skip lang=' + item.id
-                        + ' n=' + filterSkip + ' wantS=' + wantSeason + ' wantE=' + wantEpisode);
-                }
-                _b.label = 8;
-            case 8:
+                _b.label = 5;
+            case 5:
                 _i++;
-                return [3, 6];
-            case 9:
-                console.log('[RN-Fetch][OPENSUBS] done emit=' + totalEmit
-                    + ' cache=' + String((openSubsSticky() && openSubsSticky().cache) ? openSubsSticky().cache.length : 0));
-                openSubsMarkDone(totalEmit);
-                return [3, 11];
-            case 10:
+                return [3, 2];
+            case 6: return [3, 8];
+            case 7:
                 e_1 = _b.sent();
-                console.log('[RN-Fetch][OPENSUBS-ERR] ' + String(e_1 && e_1.message ? e_1.message : e_1));
-                openSubsMarkDone(totalEmit || 0);
                 libs.log({ e: e_1 }, PROVIDER, "ERROR");
-                return [3, 11];
-            case 11: return [2, true];
+                return [3, 8];
+            case 8: return [2, true];
         }
     });
 }); };

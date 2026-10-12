@@ -36,18 +36,9 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
 };
 var _this = this;
 var PROVIDER = 'OVidrift';
-var VERSION = 'v4-libresub';
+var VERSION = 'v2-sync-bag';
 var EMBED_ORIGIN = 'https://embed.vidrift.net';
-var LIBRE_SUBS_ORIGIN = 'https://libre-subs.fifthwit.net';
 var USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36';
-var MAX_REPORT_QUALITY = 1080;
-var SUB_LANGS = [
-    { id: 'en', name: 'English' },
-    { id: 'zh', name: 'Chinese' },
-    { id: 'cn', name: 'Chinese' },
-    { id: 'es', name: 'Spanish' },
-    { id: 'ar', name: 'Arabic' },
-];
 var TMDB_API_KEYS = libs.TMDB_API_KEYS || [
     '4e44c9029b1270a41c75c666510b46f5',
     '4219e299c89411838049ab0dab19ebd5',
@@ -227,195 +218,15 @@ function ovidriftQualityFromRungs(rungs) {
     var best = 0;
     for (var i = 0; i < rungs.length; i++) {
         var height = Number(rungs[i] && (rungs[i].height || rungs[i]) || 0);
-        if (height > MAX_REPORT_QUALITY) {
-            continue;
-        }
         if (height > best) {
             best = height;
         }
     }
-    if (!best) {
-        for (var j = 0; j < rungs.length; j++) {
-            var raw = Number(rungs[j] && (rungs[j].height || rungs[j]) || 0);
-            if (raw > best) {
-                best = raw;
-            }
-        }
-    }
-    if (!best) {
-        return 1080;
-    }
-    return best > MAX_REPORT_QUALITY ? MAX_REPORT_QUALITY : best;
-}
-function ovidriftPickSubFile(item) {
-    if (!item) {
-        return '';
-    }
-    var file = item.file || item.url || item.src || item.path || '';
-    return String(file || '').trim();
-}
-function ovidriftPickSubLabel(item) {
-    if (!item) {
-        return 'sub';
-    }
-    return String(item.label || item.language || item.lang || item.name || 'sub').trim() || 'sub';
-}
-function ovidriftExtractMetaSubs(meta) {
-    var tracks = [];
-    if (!meta) {
-        return tracks;
-    }
-    var lists = [meta.subtitles, meta.captions, meta.tracks, meta.subs, meta.subtitleTracks];
-    for (var li = 0; li < lists.length; li++) {
-        var list = lists[li];
-        if (!list || !list.length) {
-            continue;
-        }
-        for (var i = 0; i < list.length; i++) {
-            var item = list[i];
-            var file = ovidriftAbsoluteUrl(ovidriftPickSubFile(item), EMBED_ORIGIN + '/');
-            if (!file || file.indexOf('http') !== 0) {
-                continue;
-            }
-            tracks.push({
-                file: file,
-                label: ovidriftPickSubLabel(item),
-                kind: item.kind || 'captions',
-            });
-        }
-    }
-    return tracks;
-}
-function ovidriftBuildLibreSubsUrl(movieInfo, tmdbId, langId) {
-    var id = String(tmdbId || '').trim();
-    if (!id) {
-        return '';
-    }
-    var url = LIBRE_SUBS_ORIGIN + '/search?id=' + encodeURIComponent(id) + '&language=' + encodeURIComponent(langId);
-    if (movieInfo.type == 'tv') {
-        url += '&season=' + encodeURIComponent(String(movieInfo.season || 1))
-            + '&episode=' + encodeURIComponent(String(movieInfo.episode || 1));
-    }
-    return url;
-}
-function ovidriftNormalizeLibreSubs(payload, fallbackLabel) {
-    var tracks = [];
-    var list = payload;
-    if (!list) {
-        return tracks;
-    }
-    if (!list.length && payload.data) {
-        list = payload.data;
-    }
-    if (!list || !list.length) {
-        return tracks;
-    }
-    for (var i = 0; i < list.length && tracks.length < 3; i++) {
-        var item = list[i];
-        var file = ovidriftPickSubFile(item) || String(item.url || '');
-        if (!file || file.indexOf('http') !== 0) {
-            continue;
-        }
-        if (file.indexOf('opensubtitles') >= 0) {
-            continue;
-        }
-        tracks.push({
-            file: file,
-            label: String(item.display || item.label || fallbackLabel || 'sub'),
-            kind: 'captions',
-        });
-    }
-    return tracks;
-}
-function ovidriftFetchExternalSubs(movieInfo, tmdbId) {
-    return __awaiter(_this, void 0, void 0, function () {
-        var tracks, seen, li, lang, url, payload, part, pi, e_subs;
-        return __generator(this, function (_a) {
-            switch (_a.label) {
-                case 0:
-                    tracks = [];
-                    seen = {};
-                    li = 0;
-                    _a.label = 1;
-                case 1:
-                    if (!(li < SUB_LANGS.length && tracks.length < 8)) return [3, 6];
-                    lang = SUB_LANGS[li];
-                    url = ovidriftBuildLibreSubsUrl(movieInfo, tmdbId, lang.id);
-                    if (!url) {
-                        return [3, 5];
-                    }
-                    _a.label = 2;
-                case 2:
-                    _a.trys.push([2, 4, , 5]);
-                    return [4, libs.request_get(url, {
-                            'user-agent': USER_AGENT,
-                            accept: 'application/json',
-                        }, false, true, 1)];
-                case 3:
-                    payload = _a.sent();
-                    if (typeof payload === 'string' && payload) {
-                        try {
-                            payload = JSON.parse(payload);
-                        }
-                        catch (parseError) {
-                            payload = null;
-                        }
-                    }
-                    part = ovidriftNormalizeLibreSubs(payload, lang.name);
-                    for (pi = 0; pi < part.length; pi++) {
-                        if (seen[part[pi].file]) {
-                            continue;
-                        }
-                        seen[part[pi].file] = true;
-                        tracks.push(part[pi]);
-                    }
-                    return [3, 5];
-                case 4:
-                    e_subs = _a.sent();
-                    console.log('[RN-Fetch][OVIDRIFT-SUBS-ERR] lang=' + lang.id + ' ' + String(e_subs && e_subs.message ? e_subs.message : e_subs));
-                    return [3, 5];
-                case 5:
-                    li++;
-                    return [3, 1];
-                case 6:
-                    console.log('[RN-Fetch][OVIDRIFT-SUBS] external=' + tracks.length + ' tmdb=' + tmdbId);
-                    return [2, tracks];
-            }
-        });
-    });
-}
-function ovidriftMergeTracks(primary, secondary) {
-    var out = [];
-    var seen = {};
-    var lists = [primary || [], secondary || []];
-    for (var li = 0; li < lists.length; li++) {
-        var list = lists[li];
-        for (var i = 0; i < list.length; i++) {
-            var item = list[i];
-            if (!item || !item.file || seen[item.file]) {
-                continue;
-            }
-            seen[item.file] = true;
-            out.push(item);
-        }
-    }
-    return out;
+    return best || 1080;
 }
 function ovidriftSelectPlayable(meta) {
     if (!meta) {
         return null;
-    }
-    // Prefer Evion when present: better player/subtitle compatibility than Orion HEVC.
-    if (meta.evionUrl) {
-        var evionUrl = ovidriftAbsoluteUrl(meta.evionUrl, EMBED_ORIGIN + '/');
-        if (evionUrl) {
-            return {
-                file: evionUrl,
-                quality: 1080,
-                label: 'Evion',
-                kind: 'evion',
-            };
-        }
     }
     var orion = ovidriftPickOrionStream(meta.orionStreams);
     if (orion) {
@@ -426,6 +237,17 @@ function ovidriftSelectPlayable(meta) {
                 quality: ovidriftQualityFromRungs(orion.rungs),
                 label: String(orion.name || 'Orion'),
                 kind: 'orion',
+            };
+        }
+    }
+    if (meta.evionUrl) {
+        var evionUrl = ovidriftAbsoluteUrl(meta.evionUrl, EMBED_ORIGIN + '/');
+        if (evionUrl) {
+            return {
+                file: evionUrl,
+                quality: 1080,
+                label: 'Evion',
+                kind: 'evion',
             };
         }
     }
@@ -442,24 +264,22 @@ function ovidriftSelectPlayable(meta) {
     }
     return null;
 }
-function ovidriftDeliver(playable, embedUrl, tracks, callback) {
+function ovidriftDeliver(playable, embedUrl, callback) {
     var headers = ovidriftBuildHeaders(embedUrl);
-    var quality = playable.quality > MAX_REPORT_QUALITY ? MAX_REPORT_QUALITY : playable.quality;
-    var directQuality = [{ file: playable.file, quality: quality }];
-    var subs = tracks || [];
-    console.log('[RN-Fetch][OVIDRIFT-PLAY] kind=' + playable.kind + ' q=' + quality + ' subs=' + subs.length + ' label=' + playable.label + ' file=' + playable.file);
-    libs.embed_callback(playable.file, PROVIDER, PROVIDER, 'Hls', callback, 0, subs, directQuality, headers, { type: 'm3u8' });
+    var directQuality = [{ file: playable.file, quality: playable.quality }];
+    console.log('[RN-Fetch][OVIDRIFT-PLAY] kind=' + playable.kind + ' q=' + playable.quality + ' label=' + playable.label + ' file=' + playable.file);
+    libs.embed_callback(playable.file, PROVIDER, PROVIDER, 'Hls', callback, 0, [], directQuality, headers, { type: 'm3u8' });
 }
 source.getResource = function (movieInfo, config, callback) {
     return __awaiter(_this, void 0, void 0, function () {
-        var tmdbId, embedUrl, html, meta, playable, metaTracks, externalTracks, tracks, e_2;
+        var tmdbId, embedUrl, html, meta, playable, e_2;
         return __generator(this, function (_a) {
             switch (_a.label) {
                 case 0:
                     console.log('[RN-Fetch][OVIDRIFT-VERSION] ' + VERSION);
                     _a.label = 1;
                 case 1:
-                    _a.trys.push([1, 5, , 6]);
+                    _a.trys.push([1, 4, , 5]);
                     return [4, ovidriftResolveTmdbId(movieInfo)];
                 case 2:
                     tmdbId = _a.sent();
@@ -486,19 +306,14 @@ source.getResource = function (movieInfo, config, callback) {
                         console.log('[RN-Fetch][OVIDRIFT-SKIP] no-stream provider=' + String(meta.provider || '') + ' orion=' + (meta.orionStreams ? meta.orionStreams.length : 0));
                         return [2];
                     }
-                    metaTracks = ovidriftExtractMetaSubs(meta);
-                    return [4, ovidriftFetchExternalSubs(movieInfo, tmdbId)];
-                case 4:
-                    externalTracks = _a.sent();
-                    tracks = ovidriftMergeTracks(metaTracks, externalTracks);
-                    ovidriftDeliver(playable, embedUrl, tracks, callback);
+                    ovidriftDeliver(playable, embedUrl, callback);
                     return [2, true];
-                case 5:
+                case 4:
                     e_2 = _a.sent();
                     libs.log({ e: e_2 }, PROVIDER, 'ERROR');
                     console.log('[RN-Fetch][OVIDRIFT-ERROR] ' + String(e_2 && e_2.message ? e_2.message : e_2));
                     return [2];
-                case 6: return [2];
+                case 5: return [2];
             }
         });
     });

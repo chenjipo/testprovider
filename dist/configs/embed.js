@@ -115,140 +115,22 @@ libs.embed_parse_source = function (html) {
     eval(source);
     return parse;
 };
-libs.__inferSubHeaders = function (file, explicitHeaders) {
-    if (explicitHeaders && typeof explicitHeaders === 'object') {
-        return explicitHeaders;
-    }
-    var url = String(file || '').toLowerCase();
-    if (url.indexOf('lookmovie') >= 0) {
-        return {
-            'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36',
-            referer: 'https://www.lookmovie2.to/',
-            Referer: 'https://www.lookmovie2.to/',
-            origin: 'https://www.lookmovie2.to',
-            Origin: 'https://www.lookmovie2.to',
-        };
-    }
-    if (url.indexOf('opensubtitles') >= 0) {
-        return {
-            'x-user-agent': 'VLSub 0.10.2',
-            'User-Agent': 'VLSub 0.10.2',
-        };
-    }
-    return undefined;
-};
-libs.__vodOsRoot = function () {
-    try {
-        if (typeof globalThis !== 'undefined' && globalThis) {
-            return globalThis;
-        }
-    }
-    catch (_e0) { }
-    try {
-        if (typeof global !== 'undefined' && global) {
-            return global;
-        }
-    }
-    catch (_e1) { }
-    try {
-        if (typeof window !== 'undefined' && window) {
-            return window;
-        }
-    }
-    catch (_e2) { }
-    return null;
-};
-libs.__vodOsSticky = function () {
-    var root = libs.__vodOsRoot();
-    if (!root) {
-        return null;
-    }
-    if (!root.__VOD_OS_STICKY) {
-        root.__VOD_OS_STICKY = { cache: [], done: false, emit: 0, imdb: '' };
-    }
-    return root.__VOD_OS_STICKY;
-};
-// WebView / embed.js re-eval can wipe libs.*; recover OpenSubs rows from process sticky.
-libs.__vodRestoreOpenSubsFromSticky = function () {
-    var sticky = libs.__vodOsSticky();
-    var localN = (libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0;
-    if (!sticky || !sticky.cache || !sticky.cache.length) {
-        return localN;
-    }
-    if (localN < sticky.cache.length) {
-        libs.__vodOpenSubsCache = sticky.cache.slice();
-        libs.__vodOpenSubsDone = !!sticky.done;
-        libs.__vodOpenSubsEmit = Number(sticky.emit) || sticky.cache.length;
-        console.log('[RN-Fetch][OS-RESTORE] n=' + sticky.cache.length
-            + ' done=' + (sticky.done ? 1 : 0)
-            + ' emit=' + String(sticky.emit || 0)
-            + ' imdb=' + String(sticky.imdb || ''));
-    }
-    else {
-        if (sticky.done) {
-            libs.__vodOpenSubsDone = true;
-        }
-        if (sticky.emit) {
-            libs.__vodOpenSubsEmit = Number(sticky.emit) || libs.__vodOpenSubsEmit || 0;
-        }
-    }
-    return (libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0;
-};
-libs.__vodBuildOpenSubsRows = function () {
-    libs.__vodRestoreOpenSubsFromSticky();
-    var cache = libs.__vodOpenSubsCache || [];
-    var out = [];
-    var seen = {};
-    for (var i = 0; i < cache.length && out.length < 6; i++) {
-        var item = cache[i];
-        if (!item || !item.file || seen[item.file]) {
-            continue;
-        }
-        seen[item.file] = true;
-        // Match formal getSubs OpenSubtitles: zip + Captions (not link-office).
-        out.push({
-            file: String(item.file),
-            kind: 'Captions',
-            label: item.label || 'sub',
-            type: 'zip',
-            headers: item.headers || {
-                'x-user-agent': 'VLSub 0.10.2',
-            },
-        });
-    }
-    return out;
-};
-// Always refresh raw deliver so caption fixes apply after App reloads embed.js.
-libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
-    if (subs === void 0) { subs = []; }
-    if (direct_quality === void 0) { direct_quality = []; }
-    if (headers === void 0) { headers = {}; }
-    if (options === void 0) { options = {}; }
-    var parseSubs = [];
-    try {
-        // Parity with formal myprovider embed.js:
-        // - link.subs "Office" uses kind=captions + office/download by extension
-        // - do NOT force download when headers exist (that toast'd but blanked Lookmovie CC)
-        // - skip opensubtitles URLs here; those belong to getSubs OpenSubtitles list
-        if (subs && subs.length > 0) {
-            var capped = subs;
-            if (subs.length > 12 && typeof libs.__vodSyncTrimSubs === 'function') {
-                capped = libs.__vodSyncTrimSubs(subs);
-                if (!capped || !capped.length) {
-                    capped = subs.slice(0, 12);
-                }
-            }
-            for (var _i = 0, subs_1 = capped; _i < subs_1.length; _i++) {
+if (!libs.__embedCallbackDeliver) {
+    libs.__embedCallbackDeliver = function (urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options) {
+        if (subs === void 0) { subs = []; }
+        if (direct_quality === void 0) { direct_quality = []; }
+        if (headers === void 0) { headers = {}; }
+        if (options === void 0) { options = {}; }
+        var parseSubs = [];
+        if (subs.length > 0) {
+            for (var _i = 0, subs_1 = subs; _i < subs_1.length; _i++) {
                 var item = subs_1[_i];
-                if (!item || !item.file) {
-                    continue;
+                var type = "office";
+                if (item.file.indexOf(".srt") == -1 && item.file.indexOf(".vtt") == -1) {
+                    type = "download";
                 }
-                if (String(item.file).indexOf('opensubtitles') !== -1) {
+                if (item.file.indexOf("opensubtitles") != -1) {
                     continue;
-                }
-                var type = 'office';
-                if (String(item.file).indexOf('.srt') === -1 && String(item.file).indexOf('.vtt') === -1) {
-                    type = 'download';
                 }
                 parseSubs.push({
                     file: item.file,
@@ -256,61 +138,23 @@ libs.__embedCallbackDeliverRaw = function (urlDirect, provider, host, quality, c
                     label: item.label,
                     type: type,
                 });
-                if (parseSubs.length >= 12) {
-                    break;
-                }
             }
+            console.log({ subs: subs }, "SUBDATAPARSE");
         }
-        // Optional: append a couple OpenSubs zips onto empty-link providers (I), without replacing Office.
-        if (libs.__vodInjectOpenSubsOnLink && parseSubs.length < 2) {
-            var osRows = typeof libs.__vodBuildOpenSubsRows === 'function' ? libs.__vodBuildOpenSubsRows() : [];
-            for (var oi = 0; oi < osRows.length && parseSubs.length < 4; oi++) {
-                parseSubs.push(osRows[oi]);
-            }
-            if (osRows.length) {
-                console.log('[RN-Fetch][OS-INJECT] n=' + osRows.length + ' provider=' + String(provider || '')
-                    + ' total=' + parseSubs.length
-                    + ' sample=' + String(osRows[0].file).substring(0, 90));
-            }
+        var linkRank = rank || 0;
+        var displayProvider = libs.string_provider(provider, linkRank);
+        var linkSource = String(provider || '');
+        var linkHost = String(host || provider || '');
+        if (linkRank > 0) {
+            linkHost = linkHost + '-' + linkRank;
         }
-        console.log('[RN-Fetch][SUBDATAPARSE] n=' + parseSubs.length + ' provider=' + String(provider || '')
-            + ' type=' + (parseSubs[0] ? parseSubs[0].type : '-')
-            + ' kind=' + (parseSubs[0] ? parseSubs[0].kind : '-')
-            + (parseSubs[0] ? (' sample=' + String(parseSubs[0].file).substring(0, 100)) : ''));
-    }
-    catch (subErr) {
-        parseSubs = [];
-        console.log('[RN-Fetch][SUBDATAPARSE-ERR] provider=' + String(provider || '') + ' ' + String(subErr && subErr.message ? subErr.message : subErr));
-    }
-    var linkRank = rank || 0;
-    var displayProvider = libs.string_provider(provider, linkRank);
-    var linkSource = String(provider || '');
-    var linkHost = String(host || provider || '');
-    if (linkRank > 0) {
-        linkHost = linkHost + '-' + linkRank;
-    }
-    // Prefer explicit stream headers; fall back to options.headers so empty {} does not wipe Referer.
-    var playHeaders = headers;
-    if (!playHeaders || (typeof playHeaders === 'object' && Object.keys(playHeaders).length === 0)) {
-        playHeaders = (options && options.headers) || {};
-    }
-    // options first, then required playback fields — never let options wipe file/headers/subs.
-    // (Regression: some movies stopped playing after subs work when assign order was wrong.)
-    callback(__assign({}, options, {
-        file: urlDirect,
-        quality: quality,
-        host: linkHost,
-        source: linkSource,
-        provider: displayProvider,
-        rank: linkRank,
-        direct_quality: direct_quality,
-        headers: playHeaders || {},
-        subs: parseSubs,
-    }));
-};
-libs.__embedCallbackBaseDeliver = libs.__embedCallbackDeliverRaw;
-libs.__embedCallbackDeliver = libs.__embedCallbackDeliverRaw;
-libs.__embedCallbackCore = libs.__embedCallbackDeliverRaw;
+        callback(__assign({ file: urlDirect, quality: quality, host: linkHost, source: linkSource, provider: displayProvider, rank: linkRank, subs: parseSubs, direct_quality: direct_quality, headers: headers }, options));
+    };
+}
+libs.__embedCallbackBaseDeliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
+if (!libs.__embedCallbackCore) {
+    libs.__embedCallbackCore = libs.__embedCallbackDeliver;
+}
 libs.__unwrapVodCallback = function (callback) {
     if (!callback) {
         return callback;
@@ -556,24 +400,12 @@ libs.__batchHasProvider = function (provider) {
     }
     return false;
 };
-libs.__embedSyncVersion = 'v57-office-parity';
+libs.__embedSyncVersion = 'v45-rrive-sync';
 libs.__vodSyncYaxEnabled = true;
 // Rollback: set __vodSyncYaxEnabled=false to restore direct deliver (pre-v13 / direct-v25).
 libs.__vodSyncYaxCoreProviders = ['YMovies', 'AVideasy', 'XVidsrcVip'];
 // O/R must join the bag: early direct-deliver replaces the App list with a single server.
 libs.__vodSyncYaxProviders = ['YMovies', 'AVideasy', 'XVidsrcVip', 'LRIDOMOVIE', 'BlookMovie', 'OVidrift', 'RRiveStream'];
-// Cross-provider sub copy (v47) put 68~187 tracks on every server and broke play on titles like Spider-Man.
-libs.__vodSyncBackfillEnabled = false;
-// Formal myprovider: Office = link.subs (kind=captions). OpenSubtitles = getSubs zip list.
-// Forcing download / stripping Office caused toast-without-display on Lookmovie tracks.
-libs.__vodPreferGlobalSubs = false;
-libs.__vodForceSubDownload = false;
-// Only fill empty providers (e.g. IYesMovies); never replace B/X Office tracks.
-libs.__vodInjectOpenSubsOnLink = true;
-libs.__vodOpenSubsCache = libs.__vodOpenSubsCache || [];
-if (typeof libs.__vodRestoreOpenSubsFromSticky === 'function') {
-    libs.__vodRestoreOpenSubsFromSticky();
-}
 libs.__vodSyncFlushMs = 3500;
 libs.__vodSyncMaxMs = 18000;
 libs.__vodSyncHardMaxMs = 26000;
@@ -702,23 +534,9 @@ libs.__vodSyncIsYaxReady = function (items, elapsed) {
             return true;
         }
     }
-    // L/B/O/R family present but no Y/A/X core — wait a bit, then flush.
-    // Prefer waiting briefly so O/R alone are not listLink[0] before B/X arrive.
+    // L/B/O-only (YAX family but no Y/A/X core) — wait a bit for X/B, then flush.
+    // Do not flush on O alone before 8s (same App "keep only first server" issue).
     if (items.length >= 1 && coreFamilies === 0 && familyCount >= 1 && elapsed >= Math.max(libs.__vodSyncCoalesceMs || 4500, 8000)) {
-        var hasStableFamily = false;
-        for (var fi = 0; fi < items.length; fi++) {
-            var fam = items[fi][1];
-            if (fam === 'LRIDOMOVIE' || fam === 'BlookMovie' || fam === 'YMovies' || fam === 'AVideasy' || fam === 'XVidsrcVip') {
-                hasStableFamily = true;
-                break;
-            }
-        }
-        if (hasStableFamily) {
-            return true;
-        }
-    }
-    // Escape hatch: never leave X/B/O/I stuck in the bag (play regression on some titles).
-    if (items.length >= 1 && elapsed >= hardMax) {
         return true;
     }
     return false;
@@ -785,131 +603,11 @@ libs.__tryPushVodSyncLink = function (urlDirect, provider, host, quality, callba
     libs.__pushVodSyncItem(urlDirect, provider, host, quality, callback, rank, subs, direct_quality, headers, options);
     return true;
 };
-libs.__vodSyncPreferSubLabel = function (label) {
-    var text = String(label || '').toLowerCase();
-    if (text.indexOf('english') >= 0 || text === 'en' || text.indexOf('eng') === 0) {
-        return 0;
-    }
-    if (text.indexOf('chinese') >= 0 || text.indexOf('中') >= 0 || text === 'zh' || text === 'cn' || text.indexOf('chi') === 0) {
-        return 1;
-    }
-    if (text.indexOf('spanish') >= 0 || text.indexOf('arabic') >= 0 || text.indexOf('french') >= 0) {
-        return 2;
-    }
-    return 5;
-};
-libs.__vodSyncTrimSubs = function (subs) {
-    var source = (subs || []).slice();
-    source.sort(function (a, b) {
-        return libs.__vodSyncPreferSubLabel(a && a.label) - libs.__vodSyncPreferSubLabel(b && b.label);
-    });
-    var out = [];
-    var seen = {};
-    // Keep tiny: v47 copied 68~187 tracks onto every server and broke playback on some titles.
-    for (var i = 0; i < source.length && out.length < 6; i++) {
-        var item = source[i];
-        if (!item || !item.file || seen[item.file]) {
-            continue;
-        }
-        // Prefer real caption files; skip unknown blobs that force type=download.
-        var file = String(item.file);
-        var lower = file.toLowerCase();
-        if (lower.indexOf('.srt') < 0 && lower.indexOf('.vtt') < 0 && lower.indexOf('subtitle') < 0 && lower.indexOf('/sub') < 0) {
-            continue;
-        }
-        seen[item.file] = true;
-        var row = {
-            file: file,
-            label: item.label || 'sub',
-            kind: 'Captions',
-        };
-        var subHeaders = item.headers || libs.__inferSubHeaders(file);
-        if (subHeaders) {
-            row.headers = subHeaders;
-        }
-        out.push(row);
-    }
-    return out;
-};
-libs.__vodSyncPickRichestSubs = function (items) {
-    var best = [];
-    var bestProvider = '';
-    for (var i = 0; i < items.length; i++) {
-        var subs = items[i][6] || [];
-        if (subs.length > best.length) {
-            best = subs;
-            bestProvider = String(items[i][1] || '');
-        }
-    }
-    return { subs: best, provider: bestProvider };
-};
-libs.__vodSyncBackfillSubs = function (items) {
-    // Always shrink oversized native bags (e.g. B with 187) so App does not choke.
-    for (var j = 0; j < items.length; j++) {
-        var cur = items[j][6] || [];
-        if (cur.length > 6) {
-            var shrunk = libs.__vodSyncTrimSubs(cur);
-            items[j][6] = (shrunk && shrunk.length) ? shrunk : cur.slice(0, 6);
-            console.log('[RN-Fetch][SYNC-SUBS] shrink provider=' + items[j][1] + ' to=' + items[j][6].length);
-        }
-    }
-    if (libs.__vodSyncBackfillEnabled === false) {
-        console.log('[RN-Fetch][SYNC-SUBS] backfill=off (play-first)');
-        return 0;
-    }
-    var picked = libs.__vodSyncPickRichestSubs(items);
-    if (!picked.subs || !picked.subs.length) {
-        console.log('[RN-Fetch][SYNC-SUBS] none-in-bag');
-        return 0;
-    }
-    var trimmed = libs.__vodSyncTrimSubs(picked.subs);
-    if (!trimmed.length) {
-        console.log('[RN-Fetch][SYNC-SUBS] trim-empty raw=' + picked.subs.length + ' from=' + picked.provider);
-        return 0;
-    }
-    var filled = 0;
-    for (var i = 0; i < items.length; i++) {
-        var current = items[i][6] || [];
-        // Only fill empty providers. Do NOT rewrite B/X native subs (avoids play regressions).
-        if (current.length) {
-            continue;
-        }
-        items[i][6] = trimmed.slice();
-        filled += 1;
-    }
-    console.log('[RN-Fetch][SYNC-SUBS] backfill=' + filled + ' from=' + picked.provider
-        + ' raw=' + picked.subs.length + ' tracks=' + trimmed.length
-        + (trimmed[0] ? (' sample=' + String(trimmed[0].file).substring(0, 100)) : ''));
-    return filled;
-};
 libs.__flushVodSyncItems = function () {
     var bag = libs.__getVodSyncBag();
     var items = bag.items;
     if (!items.length || bag.flushed) {
         return;
-    }
-    // Hold so OpenSubtitles can fill cache/sticky before link.subs inject.
-    var osCount = typeof libs.__vodRestoreOpenSubsFromSticky === 'function'
-        ? libs.__vodRestoreOpenSubsFromSticky()
-        : ((libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0);
-    var sticky = typeof libs.__vodOsSticky === 'function' ? libs.__vodOsSticky() : null;
-    var osDone = !!(libs.__vodOpenSubsDone || (sticky && sticky.done));
-    var elapsedForOs = bag.startMs ? (Date.now() - bag.startMs) : 0;
-    var osWaitMs = 9000;
-    if (osCount < 1 && !osDone && elapsedForOs < osWaitMs) {
-        bag.__osWaitN = (bag.__osWaitN || 0) + 1;
-        console.log('[RN-Fetch][OS-WAIT] hold-flush elapsed=' + elapsedForOs + 'ms osCache=0 done=0 n=' + bag.__osWaitN);
-        setTimeout(function () {
-            libs.__flushVodSyncItems();
-        }, 1200);
-        return;
-    }
-    if (osCount < 1) {
-        console.log('[RN-Fetch][OS-WAIT] proceed-empty elapsed=' + elapsedForOs + 'ms done=' + (osDone ? 1 : 0)
-            + ' emit=' + String(libs.__vodOpenSubsEmit || (sticky && sticky.emit) || 0));
-    }
-    else {
-        console.log('[RN-Fetch][OS-WAIT] proceed-cache n=' + osCount + ' elapsed=' + elapsedForOs + 'ms done=' + (osDone ? 1 : 0));
     }
     bag.flushed = true;
     bag.items = [];
@@ -927,28 +625,14 @@ libs.__flushVodSyncItems = function () {
     if (libs.__vodSyncYaxEnabled) {
         items = libs.__vodSyncSortItems(items);
     }
-    try {
-        libs.__vodSyncBackfillSubs(items);
-    }
-    catch (bfErr) {
-        console.log('[RN-Fetch][SYNC-SUBS-ERR] ' + String(bfErr && bfErr.message ? bfErr.message : bfErr));
-    }
     console.log('[RN-Fetch][SYNC-FLUSH] count=' + items.length + ' version=' + libs.__embedSyncVersion);
     libs.__vodSyncReleasing = true;
     libs.__vodSyncDeliveredProviders = libs.__vodSyncDeliveredProviders || {};
     var deliver = libs.__embedCallbackBaseDeliver || libs.__embedCallbackDeliver;
     for (var i = 0; i < items.length; i++) {
-        try {
-            // Never wipe provider Office tracks at flush (formal keeps them).
-            var subCount = (items[i][6] && items[i][6].length) ? items[i][6].length : 0;
-            console.log('[RN-Fetch][SYNC-FLUSH-ITEM] provider=' + items[i][1] + ' rank=' + items[i][5] + ' subs=' + subCount
-                + ' file=' + String(items[i][0] || '').substring(0, 80));
-            libs.__vodSyncDeliveredProviders[items[i][1]] = true;
-            deliver.apply(libs, items[i]);
-        }
-        catch (delErr) {
-            console.log('[RN-Fetch][SYNC-FLUSH-ERR] provider=' + items[i][1] + ' ' + String(delErr && delErr.message ? delErr.message : delErr));
-        }
+        console.log('[RN-Fetch][SYNC-FLUSH-ITEM] provider=' + items[i][1] + ' rank=' + items[i][5]);
+        libs.__vodSyncDeliveredProviders[items[i][1]] = true;
+        deliver.apply(libs, items[i]);
     }
     libs.__vodSyncReleasing = false;
     if (typeof libs.__runDeferredProviderWebviews === 'function') {
@@ -1241,8 +925,6 @@ libs.beginVodLinkSession = function (forceNew) {
         bag.startMs = now;
         bag.items = [];
         bag.flushed = false;
-        bag.__osWaitOnce = false;
-        bag.__osWaitN = 0;
         libs.__vodSyncStartMs = bag.startMs;
         libs.__vodSyncItems = bag.items;
         libs.__vodSyncFlushed = false;
@@ -1250,15 +932,12 @@ libs.beginVodLinkSession = function (forceNew) {
         libs.__vodSyncDeliveredProviders = {};
         libs.__vidlinkDelivered = {};
         libs.__vidlinkPlayLock = {};
-        // Keep OpenSubtitles cache across join; only wipe on brand-new session.
-        // opensubtitles.js also resets cache when getSubs starts for this title.
         if (forceNew) {
             libs.__vodDeferredWebviews = {};
             libs.__resetIyesWvLocks();
             libs.__resetEmbedWebviewSlot();
         }
-        console.log('[RN-Fetch][SYNC-SESSION] start version=' + libs.__embedSyncVersion + ' force=' + (forceNew ? 1 : 0)
-            + ' osCache=' + ((libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0));
+        console.log('[RN-Fetch][SYNC-SESSION] start version=' + libs.__embedSyncVersion + ' force=' + (forceNew ? 1 : 0));
         libs.__ensureSyncPoller();
         libs.__scheduleSyncFlush();
     }
@@ -1427,17 +1106,7 @@ libs.__installVodBatchDeliverWrap = function () {
     libs.__embedCallbackDeliver.__vodBatchWrapInner = inner;
 };
 libs.__installVodBatchDeliverWrap();
-(function () {
-    var stickyN = 0;
-    try {
-        stickyN = typeof libs.__vodRestoreOpenSubsFromSticky === 'function'
-            ? libs.__vodRestoreOpenSubsFromSticky()
-            : ((libs.__vodOpenSubsCache && libs.__vodOpenSubsCache.length) || 0);
-    }
-    catch (_cfgOs) { }
-    console.log('[RN-Fetch][EMBED-CFG] ' + libs.__embedSyncVersion + ' yaxSync=' + (libs.__vodSyncYaxEnabled ? 'on' : 'off')
-        + ' osSticky=' + stickyN);
-})();
+console.log('[RN-Fetch][EMBED-CFG] ' + libs.__embedSyncVersion + ' yaxSync=' + (libs.__vodSyncYaxEnabled ? 'on' : 'off'));
 libs.parse_size = function (file, provider, host, type, callback, rank, tracks) { return __awaiter(_this, void 0, void 0, function () {
     var directSizes, patternSize, directQuality, _i, patternSize_1, patternItem, sizeQuality;
     return __generator(this, function (_a) {
