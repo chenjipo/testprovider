@@ -35,78 +35,156 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var _this = this;
+var SUBSOURCE_VERSION = 'v1-fix-eng-chi';
+// api.subsource.net works (search + zip download). Limit eng/chi to avoid flood.
+// Chinese API keys: chinese_bg_code / big_5_code / chinese_cantonese.
+console.log('[RN-Fetch][SUBSOURCE-LOADED] ' + SUBSOURCE_VERSION);
+function subSourceResolveLabel(lang) {
+    var key = String(lang || '').toLowerCase();
+    var map = {
+        english: 'English',
+        chinese_bg_code: 'Chinese',
+        big_5_code: 'Chinese',
+        chinese_cantonese: 'Chinese',
+        arabic: 'Arabic',
+        vietnamese: 'Vietnamese',
+        indonesian: 'Indonesian',
+        french: 'French',
+        spanish: 'Spanish',
+        portuguese: 'Portuguese',
+        brazilian_portuguese: 'Portuguese',
+        russian: 'Russian',
+        rusian: 'Russian',
+        korean: 'Korean',
+        japanese: 'Japanese',
+        thai: 'Thai',
+        turkish: 'Turkish',
+        italian: 'Italian',
+        german: 'German',
+        polish: 'Polish',
+        dutch: 'Dutch',
+        swedish: 'Swedish',
+        hebrew: 'Hebrew',
+        greek: 'Greek',
+        ukrainian: 'Ukrainian',
+    };
+    return map[key] || '';
+}
+function subSourceIsPreferred(lang) {
+    var key = String(lang || '').toLowerCase();
+    return key === 'english'
+        || key === 'chinese_bg_code'
+        || key === 'big_5_code'
+        || key === 'chinese_cantonese';
+}
+function subSourcePickCandidates(list, maxPerLabel) {
+    var buckets = {};
+    var out = [];
+    if (!Array.isArray(list)) {
+        return out;
+    }
+    var ranked = list.slice().sort(function (a, b) {
+        return Number((b && b.id) || 0) - Number((a && a.id) || 0);
+    });
+    for (var i = 0; i < ranked.length; i++) {
+        var item = ranked[i];
+        if (!item || !item.link || !subSourceIsPreferred(item.language)) {
+            continue;
+        }
+        var label = subSourceResolveLabel(item.language);
+        if (!label) {
+            continue;
+        }
+        if (!buckets[label]) {
+            buckets[label] = 0;
+        }
+        if (buckets[label] >= maxPerLabel) {
+            continue;
+        }
+        buckets[label] += 1;
+        out.push({ item: item, label: label });
+    }
+    return out;
+}
 subs.getResource = function (movieInfo, config, callback) { return __awaiter(_this, void 0, void 0, function () {
-    var PROVIDER, DOMAIN, langDirect, url, subsData, _i, _a, item, lang, link, subLinksData, downloadToken, downloadTokenLink, parseLang, e_1;
+    var PROVIDER, DOMAIN, slug, url, subsData, candidates, ci, row, item, label, link, subLinksData, downloadToken, downloadTokenLink, emitCount, e_1;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
-                PROVIDER = "SubSource";
-                DOMAIN = "https://api.subsource.net";
+                PROVIDER = 'SubSource';
+                DOMAIN = 'https://api.subsource.net';
+                console.log('[RN-Fetch][SUBSOURCE-VERSION] ' + SUBSOURCE_VERSION);
                 _b.label = 1;
             case 1:
                 _b.trys.push([1, 7, , 8]);
-                langDirect = {
-                    "english": "English",
-                    "arabic": "Arabic",
-                    "vietnamese": "Vietnamese",
-                    "indonesian": "Indonesia",
-                    "ukrainian": "Ukrainian",
-                    "turkish": "Turkish",
-                    "french": "French",
-                    "greek": "Greek",
-                    "hebrew": "Hebrew",
-                    "italian": "Italian",
-                    "polish": "Polish",
-                    "portuguese": "Portuguese",
-                    "rusian": "Russian",
-                    "spanish": "Spanish",
-                    "swedish": "Swedish",
-                    "thai": "Thai",
-                };
-                url = "".concat(DOMAIN, "/v1/subtitles/").concat(libs.url_slug_search(movieInfo, '-'), "-").concat(movieInfo.year);
-                if (movieInfo.type == 'tv') {
-                    url += "/season-".concat(movieInfo.season);
+                if (!movieInfo || !movieInfo.year) {
+                    console.log('[RN-Fetch][SUBSOURCE] skip no-year');
+                    return [2, true];
                 }
+                slug = libs.url_slug_search
+                    ? libs.url_slug_search(movieInfo, '-')
+                    : String(movieInfo.title || '').toLowerCase().replace(/[^a-z0-9]+/g, '-');
+                if (!slug) {
+                    console.log('[RN-Fetch][SUBSOURCE] skip no-slug');
+                    return [2, true];
+                }
+                url = DOMAIN + '/v1/subtitles/' + slug + '-' + movieInfo.year;
+                if (movieInfo.type == 'tv') {
+                    url += '/season-' + movieInfo.season;
+                }
+                console.log('[RN-Fetch][SUBSOURCE] search ' + url);
                 return [4, libs.request_get(url, {}, false)];
             case 2:
                 subsData = _b.sent();
-                libs.log({ subsData: subsData }, PROVIDER, "SUB DATA");
-                _i = 0, _a = subsData.subtitles;
+                if (!subsData || !Array.isArray(subsData.subtitles) || !subsData.subtitles.length) {
+                    console.log('[RN-Fetch][SUBSOURCE] empty');
+                    return [2, true];
+                }
+                candidates = subSourcePickCandidates(subsData.subtitles, 2);
+                console.log('[RN-Fetch][SUBSOURCE] pick n=' + candidates.length
+                    + ' from=' + subsData.subtitles.length);
+                ci = 0;
+                emitCount = 0;
                 _b.label = 3;
             case 3:
-                if (!(_i < _a.length)) return [3, 6];
-                item = _a[_i];
-                lang = item.language;
-                link = "".concat(DOMAIN, "/v1/subtitle/").concat(item.link);
+                if (!(ci < candidates.length)) return [3, 6];
+                row = candidates[ci];
+                item = row.item;
+                label = row.label;
+                link = DOMAIN + '/v1/subtitle/' + item.link;
                 return [4, libs.request_get(link, {}, false)];
             case 4:
                 subLinksData = _b.sent();
-                downloadToken = subLinksData.subtitle.download_token;
-                libs.log({ lang: lang, link: link, downloadToken: downloadToken }, PROVIDER, "DOWNLOAD TOKEN");
+                downloadToken = subLinksData
+                    && subLinksData.subtitle
+                    && subLinksData.subtitle.download_token;
                 if (!downloadToken) {
+                    console.log('[RN-Fetch][SUBSOURCE] no-token lang=' + String(item.language || ''));
                     return [3, 5];
                 }
-                downloadTokenLink = "".concat(DOMAIN, "/v1/subtitle/download/").concat(downloadToken);
-                libs.log({ downloadTokenLink: downloadTokenLink }, PROVIDER, "DOWNLOAD TOKEN LINK");
-                parseLang = langDirect[lang];
-                if (!parseLang) {
-                    return [3, 5];
-                }
+                downloadTokenLink = DOMAIN + '/v1/subtitle/download/' + downloadToken;
+                emitCount += 1;
+                console.log('[RN-Fetch][SUBSOURCE] emit label=' + label
+                    + ' lang=' + String(item.language || '')
+                    + ' file=' + downloadTokenLink.substring(0, 90));
                 callback({
                     file: downloadTokenLink,
-                    kind: "Captions_Season",
-                    label: parseLang,
-                    type: "zip",
+                    kind: 'Captions',
+                    label: label,
+                    type: 'zip',
                     provider: PROVIDER,
                 });
                 _b.label = 5;
             case 5:
-                _i++;
+                ci++;
                 return [3, 3];
-            case 6: return [2];
+            case 6:
+                console.log('[RN-Fetch][SUBSOURCE] done emit=' + emitCount);
+                return [3, 8];
             case 7:
                 e_1 = _b.sent();
-                libs.log({ e: e_1 }, PROVIDER, "ERROR");
+                libs.log({ e: e_1 }, PROVIDER, 'ERROR');
+                console.log('[RN-Fetch][SUBSOURCE] error ' + String(e_1 && e_1.message ? e_1.message : e_1));
                 return [3, 8];
             case 8: return [2, true];
         }
