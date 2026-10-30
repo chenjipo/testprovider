@@ -1053,8 +1053,8 @@ function xvidsrcvipGetState() {
     return root.__xvipState;
 }
 var XVIP_DOMAIN_CANDIDATES = [
-    'https://vidrock.ru',
     'https://vidrock.net',
+    'https://vidrock.to',
 ];
 function xvidsrcvipBuildApiUrl(movieInfo, domain) {
     var base = domain || XVIP_DOMAIN_CANDIDATES[0];
