@@ -110,19 +110,115 @@ function lookmovieParseStorageBlock(html, varName) {
         title: pick([/title:\s*'([^']*)'/, /title:\s*"([^"]*)"/]),
     };
 }
+function lookmovieUnescapeJsStringBody(raw) {
+    var out = '';
+    var i = 0;
+    var next = '';
+    while (i < raw.length) {
+        if (raw.charAt(i) === '\\' && i + 1 < raw.length) {
+            next = raw.charAt(i + 1);
+            if (next === 'n') {
+                out += '\n';
+            }
+            else if (next === 'r') {
+                out += '\r';
+            }
+            else if (next === 't') {
+                out += '\t';
+            }
+            else if (next === "'" || next === '"' || next === '\\' || next === '/') {
+                out += next;
+            }
+            else if (next === 'u' && i + 5 < raw.length) {
+                out += String.fromCharCode(parseInt(raw.substr(i + 2, 4), 16));
+                i += 4;
+            }
+            else {
+                out += next;
+            }
+            i += 2;
+            continue;
+        }
+        out += raw.charAt(i);
+        i += 1;
+    }
+    return out;
+}
+function lookmovieExtractQuotedAssignment(html, varName) {
+    var marker = String(varName || '') + '=';
+    var idx = html.indexOf(marker);
+    var startQuote = -1;
+    var i = 0;
+    var raw = '';
+    var ch = '';
+    if (idx < 0) {
+        return '';
+    }
+    startQuote = html.indexOf("'", idx + marker.length);
+    if (startQuote < 0 || startQuote > idx + marker.length + 3) {
+        startQuote = html.indexOf('"', idx + marker.length);
+        if (startQuote < 0 || startQuote > idx + marker.length + 3) {
+            return '';
+        }
+        i = startQuote + 1;
+        while (i < html.length) {
+            ch = html.charAt(i);
+            if (ch === '\\' && i + 1 < html.length) {
+                raw += ch + html.charAt(i + 1);
+                i += 2;
+                continue;
+            }
+            if (ch === '"') {
+                break;
+            }
+            raw += ch;
+            i += 1;
+        }
+        return raw;
+    }
+    i = startQuote + 1;
+    while (i < html.length) {
+        ch = html.charAt(i);
+        if (ch === '\\' && i + 1 < html.length) {
+            raw += ch + html.charAt(i + 1);
+            i += 2;
+            continue;
+        }
+        if (ch === "'") {
+            break;
+        }
+        raw += ch;
+        i += 1;
+    }
+    return raw;
+}
 function lookmovieParseSeasonsMap(html) {
-    var m = html.match(/window\.seasons\s*=\s*'(\{[\s\S]*?\})';/) || html.match(/window\.seasons\s*=\s*(\{[\s\S]*?\});/);
-    if (!m) {
+    var raw = lookmovieExtractQuotedAssignment(html, 'window.seasons');
+    var bare = null;
+    if (raw) {
+        try {
+            return JSON.parse(lookmovieUnescapeJsStringBody(raw));
+        }
+        catch (e1) {
+            try {
+                return JSON.parse(raw.replace(/\\"/g, '"').replace(/\\'/g, "'"));
+            }
+            catch (e2) {
+            }
+        }
+    }
+    bare = html.match(/window\.seasons\s*=\s*(\{[\s\S]*?\});/);
+    if (!bare) {
         return null;
     }
     try {
-        return JSON.parse(m[1].replace(/\\"/g, '"'));
+        return JSON.parse(bare[1].replace(/\\"/g, '"'));
     }
-    catch (e1) {
+    catch (e3) {
         try {
-            return JSON.parse(m[1]);
+            return JSON.parse(bare[1]);
         }
-        catch (e2) {
+        catch (e4) {
             return null;
         }
     }
@@ -131,11 +227,11 @@ function lookmovieResolveEpisodeId(seasonsMap, season, episode) {
     if (!seasonsMap) {
         return '';
     }
-    var seasonNode = seasonsMap[String(season)];
+    var seasonNode = seasonsMap[String(season)] || seasonsMap[Number(season)];
     if (!seasonNode || !seasonNode.episodes) {
         return '';
     }
-    var epNode = seasonNode.episodes[String(episode)];
+    var epNode = seasonNode.episodes[String(episode)] || seasonNode.episodes[Number(episode)];
     if (!epNode) {
         return '';
     }
@@ -406,13 +502,16 @@ function lookmovieFetchEpisodeAccess(slug, season, episode, callback) {
                     showStorage = lookmovieParseStorageBlock(pageHtml, 'show_storage');
                     seasonsMap = lookmovieParseSeasonsMap(pageHtml);
                     idEpisode = lookmovieResolveEpisodeId(seasonsMap, season, episode);
-                    if (!idEpisode) {
+                    // Do NOT fall back to page-default id_episode (usually S1E1) — that
+                    // mis-plays every season/episode when seasons JSON parse fails.
+                    if (!idEpisode && Number(season) === 1 && Number(episode) === 1) {
                         idEpisode = (pageHtml.match(/id_episode:\s*(\d+)/) || pageHtml.match(/currentEpisodeID\s*=\s*(\d+)/) || [])[1] || '';
                     }
                     if (!idEpisode) {
-                        console.log('[RN-Fetch][BLOOKMOVIE-SKIP] episode-id-miss s' + season + 'e' + episode);
+                        console.log('[RN-Fetch][BLOOKMOVIE-SKIP] episode-id-miss s' + season + 'e' + episode + ' map=' + (seasonsMap ? Object.keys(seasonsMap).join(',') : 'null'));
                         return [2, false];
                     }
+                    console.log('[RN-Fetch][BLOOKMOVIE-EP] s' + season + 'e' + episode + ' id=' + idEpisode);
                     accessUrl = DOMAIN + '/api/v1/security/episode-access?id_episode=' + encodeURIComponent(idEpisode);
                     if (showStorage && showStorage.hash) {
                         accessUrl += '&hash=' + encodeURIComponent(showStorage.hash);
@@ -447,7 +546,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
     return __generator(this, function (_a) {
         switch (_a.label) {
             case 0:
-                console.log('[RN-Fetch][BLOOKMOVIE-VERSION] v3-rn-display-1080');
+                console.log('[RN-Fetch][BLOOKMOVIE-VERSION] v4-seasons-unescape');
                 _a.label = 1;
             case 1:
                 _a.trys.push([1, 7, , 8]);
