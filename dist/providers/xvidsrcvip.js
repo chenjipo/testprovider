@@ -1053,8 +1053,8 @@ function xvidsrcvipGetState() {
     return root.__xvipState;
 }
 var XVIP_DOMAIN_CANDIDATES = [
-    'https://vidrock.ru',
     'https://vidrock.net',
+    'https://vidrock.to',
 ];
 function xvidsrcvipBuildApiUrl(movieInfo, domain) {
     var base = domain || XVIP_DOMAIN_CANDIDATES[0];
@@ -1496,7 +1496,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'XVidsrcVip';
                 DOMAIN = XVIP_DOMAIN_CANDIDATES[0];
                 headers = xvidsrcvipBuildDomainHeaders(DOMAIN);
-                console.log('[RN-Fetch][XVIP-VERSION] v19-api-resilience');
+                console.log('[RN-Fetch][XVIP-VERSION] v20-domain-net-to');
                 xvipRunKey = xvidsrcvipRunKey(movieInfo);
                 xvidsrcvipBeginRun(xvipRunKey);
                 fetchGen = String(Date.now()) + '-' + String(Math.floor(Math.random() * 100000));
