@@ -1397,85 +1397,6 @@ function xvidsrcvipResolvePlayUrl(rawUrl) {
 function xvidsrcvipNeedsQualityFetch(playUrl) {
     return playUrl.indexOf('vdrk.site') !== -1 || playUrl.indexOf('/playlist/') !== -1;
 }
-// Prefer compact master playlists (Odyssey-style). Huge VOD media lists (Atlas/ngcloud)
-// + concurrent IYesMovies WebView correlates with App jni_android FATAL on some titles.
-var XVIP_HOST_PREFER = {
-    Nova: 0,
-    Astra: 1,
-    Orion: 2,
-    Luna: 3,
-    Lyra: 4,
-    Elara: 5,
-    Vega: 6,
-    Aether: 7,
-};
-var XVIP_MAX_DELIVER = 1;
-function xvidsrcvipHostPreferRank(key) {
-    if (Object.prototype.hasOwnProperty.call(XVIP_HOST_PREFER, key)) {
-        return XVIP_HOST_PREFER[key];
-    }
-    return 50;
-}
-function xvidsrcvipIsLightMasterPlaylist(text) {
-    var body = String(text || '');
-    var infCount = 0;
-    if (body.indexOf('#EXTM3U') < 0) {
-        return false;
-    }
-    if (body.indexOf('#EXT-X-STREAM-INF') >= 0) {
-        return body.length < 16384;
-    }
-    infCount = (body.match(/#EXTINF/g) || []).length;
-    if (body.length > 16384 || infCount > 40) {
-        return false;
-    }
-    return true;
-}
-function xvidsrcvipProbeLightPlaylist(playUrl, headers) {
-    return fetch(playUrl, { headers: headers, method: 'GET' }).then(function (response) {
-        return response.text().then(function (text) {
-            var ok = !!response.ok && xvidsrcvipIsLightMasterPlaylist(text);
-            if (!ok) {
-                console.log('[RN-Fetch][XVIP-PROBE-SKIP] host=' + String(playUrl).split('/')[2] + ' status=' + response.status + ' len=' + String(text || '').length);
-            }
-            return ok;
-        });
-    }).catch(function (err) {
-        console.log('[RN-Fetch][XVIP-PROBE-ERR] ' + String(err && err.message ? err.message : err));
-        return false;
-    });
-}
-function xvidsrcvipYieldForIyesWebview(maxMs) {
-    return new Promise(function (resolve) {
-        var startedAt = Date.now();
-        var sawIyes = false;
-        var tick = function () {
-            var deferred = libs.__vodDeferredWebviews && libs.__vodDeferredWebviews.IYesMovies;
-            var active = !!libs.__iyesWvActive;
-            var delivered = libs.__vodSyncDeliveredProviders && libs.__vodSyncDeliveredProviders.IYesMovies;
-            if (deferred || active) {
-                sawIyes = true;
-            }
-            if (delivered || (sawIyes && !deferred && !active)) {
-                console.log('[RN-Fetch][XVIP-YIELD] iyes-clear saw=' + (sawIyes ? 1 : 0) + ' ms=' + (Date.now() - startedAt));
-                resolve('clear');
-                return;
-            }
-            if (!sawIyes && (Date.now() - startedAt) >= 3500) {
-                console.log('[RN-Fetch][XVIP-YIELD] no-iyes ms=' + (Date.now() - startedAt));
-                resolve('no-iyes');
-                return;
-            }
-            if ((Date.now() - startedAt) >= maxMs) {
-                console.log('[RN-Fetch][XVIP-YIELD] timeout ms=' + (Date.now() - startedAt));
-                resolve('timeout');
-                return;
-            }
-            setTimeout(tick, 350);
-        };
-        tick();
-    });
-}
 function xvidsrcvipFetchJsonQuality(playUrl, headers) {
     return fetch(playUrl, { headers: headers, method: 'GET' }).then(function (response) {
         var contentType = response.headers && response.headers.get ? response.headers.get('content-type') : '';
@@ -1575,7 +1496,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 PROVIDER = 'XVidsrcVip';
                 DOMAIN = XVIP_DOMAIN_CANDIDATES[0];
                 headers = xvidsrcvipBuildDomainHeaders(DOMAIN);
-                console.log('[RN-Fetch][XVIP-VERSION] v21-yield-iyes-one');
+                console.log('[RN-Fetch][XVIP-VERSION] v20-domain-net-to');
                 xvipRunKey = xvidsrcvipRunKey(movieInfo);
                 xvidsrcvipBeginRun(xvipRunKey);
                 fetchGen = String(Date.now()) + '-' + String(Math.floor(Math.random() * 100000));
@@ -1613,27 +1534,20 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                     console.log('[RN-Fetch][XVIP-SKIP] sources-empty');
                     return [2];
                 }
+                xvipKeyList.sort(function (leftKey, rightKey) {
+                                    var leftType = json[leftKey] && json[leftKey].type === 'hls' ? 0 : 1;
+                                    var rightType = json[rightKey] && json[rightKey].type === 'hls' ? 0 : 1;
+                                    return leftType - rightType;
+                                });
                 xvipKeyList = xvipKeyList.filter(function (key) {
                     return json[key] && json[key].type === 'hls';
-                });
-                xvipKeyList.sort(function (leftKey, rightKey) {
-                    var leftRank = xvidsrcvipHostPreferRank(leftKey);
-                    var rightRank = xvidsrcvipHostPreferRank(rightKey);
-                    if (leftRank !== rightRank) {
-                        return leftRank - rightRank;
-                    }
-                    return 0;
-                });
-                xvipKeyList = xvipKeyList.slice(0, 4);
+                }).slice(0, 3);
                 if (!xvipKeyList.length) {
                     console.log('[RN-Fetch][XVIP-SKIP] hls-sources-empty');
                     return [2];
                 }
-                console.log('[RN-Fetch][XVIP-PICK] total=' + xvipKeyList.length + ' keys=' + xvipKeyList.join(',') + ' maxDeliver=' + XVIP_MAX_DELIVER);
-                return [4, xvidsrcvipYieldForIyesWebview(14000)];
-            case 3:
-                console.log('[RN-Fetch][XVIP-YIELD-DONE] ' + String(_g.sent()));
-                _i = 0;
+                console.log('[RN-Fetch][XVIP-PICK] total=' + xvipKeyList.length + ' keys=' + xvipKeyList.join(','));
+                                _i = 0;
                 _g.label = 5;
             case 5:
                 if (!(_i < xvipKeyList.length)) return [3, 17];
@@ -1646,23 +1560,11 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 if (!source.url) {
                     return [3, 15];
                 }
-                return [4, xvidsrcvipResolvePlayUrl(source.url).then(function (decodedUrl) {
-                    if (!decodedUrl) {
-                        return { playUrl: '', light: false };
-                    }
-                    return xvidsrcvipProbeLightPlaylist(decodedUrl, headers).then(function (light) {
-                        return { playUrl: decodedUrl, light: !!light };
-                    });
-                })];
+                return [4, xvidsrcvipResolvePlayUrl(source.url)];
             case 7:
-                qualityData = _g.sent();
-                playUrl = qualityData && qualityData.playUrl ? qualityData.playUrl : '';
+                playUrl = _g.sent();
                 if (!playUrl) {
                     console.log('[RN-Fetch][XVIP-SKIP] playurl-empty host=' + item);
-                    return [3, 15];
-                }
-                if (!(qualityData && qualityData.light)) {
-                    console.log('[RN-Fetch][XVIP-SKIP] host=' + item + ' reason=heavy-or-media-playlist');
                     return [3, 15];
                 }
                 if (!xvidsrcvipNeedsQualityFetch(playUrl)) return [3, 9];
@@ -1678,9 +1580,7 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                         return [3, 15];
                     }
                     deliverOptions = { type: 'm3u8' };
-                    if (xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, deliverOptions, xvipRunKey, fetchGen)) {
-                        _i = xvipKeyList.length;
-                    }
+                    xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, deliverOptions, xvipRunKey, fetchGen);
                 }
                 return [3, 15];
             case 9:
@@ -1718,19 +1618,15 @@ source.getResource = function (movieInfo, config, callback) { return __awaiter(_
                 }
                 directQuality = xvidsrcvipSortByQuality(directQuality);
                 libs.log({ directQuality: directQuality }, PROVIDER, "ORDERED DIRECT QUALITY");
-                if (xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, {
+                xvidsrcvipTryDeliver(directQuality[0].file, PROVIDER, item, 'Hls', callback, rank, [], directQuality, headers, {
                     "type": "m3u8"
-                }, xvipRunKey, fetchGen)) {
-                    _i = xvipKeyList.length;
-                }
+                }, xvipRunKey, fetchGen);
                 return [3, 15];
             case 13:
                 deliverOptions = (source.type === 'hls' || playUrl.indexOf('.m3u8') != -1) ? {
                     type: "m3u8"
                 } : {};
-                if (xvidsrcvipTryDeliver(playUrl, PROVIDER, item, 'Hls', callback, rank, [], [{ file: playUrl, quality: 1080 }], headers, deliverOptions, xvipRunKey, fetchGen)) {
-                    _i = xvipKeyList.length;
-                }
+                xvidsrcvipTryDeliver(playUrl, PROVIDER, item, 'Hls', callback, rank, [], [{ file: playUrl, quality: 1080 }], headers, deliverOptions, xvipRunKey, fetchGen);
                 return [3, 15];
             case 14:
                 errorRequest_1 = _g.sent();
